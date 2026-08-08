@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { requireSession } from "@/lib/api-auth";
+import { requireUser } from "@/lib/api-auth";
 import { createListing, listListings } from "@/lib/supabase/queries";
 
 const createSchema = z.object({
@@ -8,11 +8,11 @@ const createSchema = z.object({
 });
 
 export async function GET() {
-  const unauthorized = await requireSession();
-  if (unauthorized) return unauthorized;
+  const auth = await requireUser();
+  if (auth.error) return auth.error;
 
   try {
-    const listings = await listListings();
+    const listings = await listListings(auth.user.id);
     return NextResponse.json({ listings });
   } catch (err) {
     console.error("list listings error:", err);
@@ -24,8 +24,8 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const unauthorized = await requireSession();
-  if (unauthorized) return unauthorized;
+  const auth = await requireUser();
+  if (auth.error) return auth.error;
 
   try {
     const json = await request.json();
@@ -37,7 +37,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const listing = await createListing(parsed.data.platform);
+    const listing = await createListing(parsed.data.platform, auth.user.id);
     return NextResponse.json({ listing }, { status: 201 });
   } catch (err) {
     console.error("create listing error:", err);

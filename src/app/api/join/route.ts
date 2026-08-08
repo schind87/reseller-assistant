@@ -23,7 +23,8 @@ export async function POST(request: Request) {
       );
     }
 
-    await createSessionCookie();
+    // Temporary phone photo access for this listing (no full account login required)
+    await createSessionCookie(result.listingId);
 
     return NextResponse.json({
       ok: true,

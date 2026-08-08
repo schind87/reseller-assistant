@@ -1,14 +1,12 @@
 import { redirect } from "next/navigation";
-import { getSessionFromCookies, isUnlocked } from "@/lib/session";
+import { getAuthUser } from "@/lib/api-auth";
 
 export default async function HomePage() {
   try {
-    const session = await getSessionFromCookies();
-    if (isUnlocked(session)) {
-      redirect("/app");
-    }
+    const user = await getAuthUser();
+    if (user) redirect("/app");
   } catch {
-    // SESSION_SECRET missing in local setup — send to unlock
+    // missing env — fall through to unlock
   }
   redirect("/unlock");
 }

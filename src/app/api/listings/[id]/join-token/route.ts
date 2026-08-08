@@ -1,10 +1,9 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { requireSession } from "@/lib/api-auth";
+import { authorizeListingAccess } from "@/lib/listing-access";
 import {
   appUrl,
   createJoinToken,
-  getListing,
   requestOrigin,
 } from "@/lib/supabase/queries";
 
@@ -15,16 +14,12 @@ const bodySchema = z.object({
 type RouteContext = { params: Promise<{ id: string }> };
 
 export async function POST(request: Request, context: RouteContext) {
-  const unauthorized = await requireSession();
-  if (unauthorized) return unauthorized;
-
   const { id } = await context.params;
+  const access = await authorizeListingAccess(id, { writeRequiresOwner: true });
+  if (access.error) return access.error;
 
   try {
-    const listing = await getListing(id);
-    if (!listing) {
-      return NextResponse.json({ error: "Listing not found" }, { status: 404 });
-    }
+    const listing = access.listing;
 
     const json = await request.json().catch(() => ({}));
     const parsed = bodySchema.safeParse(json);

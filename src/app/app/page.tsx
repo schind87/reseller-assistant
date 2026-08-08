@@ -1,22 +1,18 @@
+import { redirect } from "next/navigation";
 import { AppHome } from "@/components/AppHome";
-import { getSessionFromCookies, isUnlocked } from "@/lib/session";
+import { getAuthUser } from "@/lib/api-auth";
 import { listListings } from "@/lib/supabase/queries";
 import type { Listing } from "@/lib/types";
-import { redirect } from "next/navigation";
 
 export default async function AppHomePage() {
-  try {
-    const session = await getSessionFromCookies();
-    if (!isUnlocked(session)) {
-      redirect("/unlock");
-    }
-  } catch {
+  const user = await getAuthUser();
+  if (!user) {
     redirect("/unlock");
   }
 
   let listings: Listing[] = [];
   try {
-    listings = await listListings();
+    listings = await listListings(user.id);
   } catch (err) {
     console.error("listListings failed:", err);
   }

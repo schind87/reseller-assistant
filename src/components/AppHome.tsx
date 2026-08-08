@@ -59,7 +59,7 @@ export function AppHome({ initialListings }: AppHomeProps) {
           onClick={() => void logout()}
           className="text-base font-semibold text-[var(--muted)]"
         >
-          Lock
+          Sign out
         </button>
       </header>
 

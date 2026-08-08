@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { v4 as uuidv4 } from "uuid";
-import { requireSession } from "@/lib/api-auth";
+import { authorizeListingAccess } from "@/lib/listing-access";
 import { draftListing } from "@/lib/ai/draft";
 import { fetchImageBytes, removeBackground } from "@/lib/ai/background";
 import { identifyFromPhotos } from "@/lib/ai/identify";
@@ -16,10 +16,9 @@ import {
 type RouteContext = { params: Promise<{ id: string }> };
 
 export async function POST(_request: Request, context: RouteContext) {
-  const unauthorized = await requireSession();
-  if (unauthorized) return unauthorized;
-
   const { id } = await context.params;
+  const access = await authorizeListingAccess(id, { writeRequiresOwner: true });
+  if (access.error) return access.error;
 
   try {
     const result = await getListingWithPhotos(id);

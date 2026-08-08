@@ -2,26 +2,28 @@ import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
 import type { NextRequest } from "next/server";
 
-export const SESSION_COOKIE = "ra_session";
-const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 7; // 7 days
+/** Temporary QR join cookie — not the primary login. */
+export const SESSION_COOKIE = "ra_join";
+const SESSION_MAX_AGE_SECONDS = 60 * 60 * 12; // 12 hours for phone photo session
 
 export type SessionPayload = {
   unlocked: true;
+  listingId?: string;
 };
 
 function getSecretKey(): Uint8Array {
-  const secret = process.env.SESSION_SECRET;
-  if (!secret) {
-    throw new Error("SESSION_SECRET is not set");
-  }
+  const secret =
+    process.env.SESSION_SECRET ||
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+    "dev-only-insecure-secret";
   return new TextEncoder().encode(secret);
 }
 
-export async function signSessionToken(): Promise<string> {
-  return new SignJWT({ unlocked: true } satisfies SessionPayload)
+export async function signJoinToken(listingId?: string): Promise<string> {
+  return new SignJWT({ unlocked: true, listingId } satisfies SessionPayload)
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
-    .setExpirationTime("7d")
+    .setExpirationTime("12h")
     .sign(getSecretKey());
 }
 
@@ -31,7 +33,11 @@ export async function verifySessionToken(
   try {
     const { payload } = await jwtVerify(token, getSecretKey());
     if (payload.unlocked === true) {
-      return { unlocked: true };
+      return {
+        unlocked: true,
+        listingId:
+          typeof payload.listingId === "string" ? payload.listingId : undefined,
+      };
     }
     return null;
   } catch {
@@ -39,8 +45,8 @@ export async function verifySessionToken(
   }
 }
 
-export async function createSessionCookie(): Promise<void> {
-  const token = await signSessionToken();
+export async function createSessionCookie(listingId?: string): Promise<void> {
+  const token = await signJoinToken(listingId);
   const cookieStore = await cookies();
   cookieStore.set(SESSION_COOKIE, token, {
     httpOnly: true,

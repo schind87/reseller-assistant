@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { requireSession } from "@/lib/api-auth";
+import { authorizeListingAccess } from "@/lib/listing-access";
 import {
   getListingWithPhotos,
   getSignedPhotoUrl,
@@ -50,10 +50,9 @@ const patchSchema = z.object({
 type RouteContext = { params: Promise<{ id: string }> };
 
 export async function GET(_request: Request, context: RouteContext) {
-  const unauthorized = await requireSession();
-  if (unauthorized) return unauthorized;
-
   const { id } = await context.params;
+  const access = await authorizeListingAccess(id);
+  if (access.error) return access.error;
 
   try {
     const result = await getListingWithPhotos(id);
@@ -82,10 +81,9 @@ export async function GET(_request: Request, context: RouteContext) {
 }
 
 export async function PATCH(request: Request, context: RouteContext) {
-  const unauthorized = await requireSession();
-  if (unauthorized) return unauthorized;
-
   const { id } = await context.params;
+  const access = await authorizeListingAccess(id, { writeRequiresOwner: true });
+  if (access.error) return access.error;
 
   try {
     const json = await request.json();

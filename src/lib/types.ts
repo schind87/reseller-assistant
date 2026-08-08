@@ -44,6 +44,7 @@ export type StructuredFields = {
 export type Listing = {
   id: string;
   workspace_id: string;
+  user_id: string | null;
   platform: Platform;
   status: ListingStatus;
   join_code: string;

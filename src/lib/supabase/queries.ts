@@ -57,11 +57,12 @@ export async function getWorkspace(): Promise<Workspace> {
   return created as Workspace;
 }
 
-export async function listListings(): Promise<Listing[]> {
+export async function listListings(userId: string): Promise<Listing[]> {
   const supabase = createAdminClient();
   const { data, error } = await supabase
     .from("listings")
     .select("*")
+    .eq("user_id", userId)
     .order("updated_at", { ascending: false });
 
   if (error) throw new Error(`listListings: ${error.message}`);
@@ -103,7 +104,10 @@ export async function getListingWithPhotos(id: string): Promise<{
   };
 }
 
-export async function createListing(platform: Platform): Promise<Listing> {
+export async function createListing(
+  platform: Platform,
+  userId: string
+): Promise<Listing> {
   const workspace = await getWorkspace();
   const supabase = createAdminClient();
 
@@ -114,6 +118,7 @@ export async function createListing(platform: Platform): Promise<Listing> {
       .from("listings")
       .insert({
         workspace_id: workspace.id,
+        user_id: userId,
         platform,
         status: "drafting_photos",
         join_code,
