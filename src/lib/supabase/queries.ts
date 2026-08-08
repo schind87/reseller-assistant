@@ -15,6 +15,7 @@ import {
   type Platform,
   type StructuredFields,
   type Workspace,
+  isPostingPhotoRole,
 } from "@/lib/types";
 
 const JOIN_CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -323,7 +324,9 @@ export async function addPhoto(params: {
 
 export async function updatePhoto(
   photoId: string,
-  patch: Partial<Pick<ListingPhoto, "processed_path" | "storage_path">>
+  patch: Partial<
+    Pick<ListingPhoto, "processed_path" | "storage_path" | "role" | "sort_order">
+  >
 ): Promise<ListingPhoto> {
   const supabase = createAdminClient();
   const { data, error } = await supabase
@@ -353,6 +356,29 @@ export async function getListingPhoto(
   return (data as ListingPhoto | null) ?? null;
 }
 
+/** Keep the original private photo and add a listing-role copy that shoppers can see. */
+export async function duplicatePhotoAsListingRole(
+  listingId: string,
+  photoId: string,
+  role: PhotoRole
+): Promise<ListingPhoto> {
+  if (!isPostingPhotoRole(role)) {
+    throw new Error("Choose a listing photo type (cover, front, back, detail, or flaw).");
+  }
+
+  const photo = await getListingPhoto(listingId, photoId);
+  if (!photo) {
+    throw new Error("Photo not found");
+  }
+
+  return addPhoto({
+    listingId,
+    role,
+    storagePath: photo.storage_path,
+    processedPath: photo.processed_path,
+  });
+}
+
 export async function deleteListingPhoto(
   listingId: string,
   photoId: string
@@ -367,15 +393,6 @@ export async function deleteListingPhoto(
     (path): path is string => Boolean(path)
   );
 
-  if (paths.length > 0) {
-    const { error: storageError } = await supabase.storage
-      .from("listing-photos")
-      .remove(paths);
-    if (storageError) {
-      console.error("deleteListingPhoto storage:", storageError.message);
-    }
-  }
-
   const { error } = await supabase
     .from("listing_photos")
     .delete()
@@ -383,6 +400,30 @@ export async function deleteListingPhoto(
     .eq("listing_id", listingId);
 
   if (error) throw new Error(`deleteListingPhoto: ${error.message}`);
+
+  const { data: remaining, error: remainingError } = await supabase
+    .from("listing_photos")
+    .select("storage_path, processed_path")
+    .eq("listing_id", listingId);
+
+  if (remainingError) {
+    console.error("deleteListingPhoto remaining:", remainingError.message);
+  } else {
+    const orphans = paths.filter(
+      (path) =>
+        !(remaining ?? []).some(
+          (row) => row.storage_path === path || row.processed_path === path
+        )
+    );
+    if (orphans.length > 0) {
+      const { error: storageError } = await supabase.storage
+        .from("listing-photos")
+        .remove(orphans);
+      if (storageError) {
+        console.error("deleteListingPhoto storage:", storageError.message);
+      }
+    }
+  }
 
   const listing = await getListing(listingId);
   if (

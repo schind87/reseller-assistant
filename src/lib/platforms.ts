@@ -42,16 +42,16 @@ const SHARED_PHOTO_STEPS: PhotoStepDef[] = [
     role: "id_tag",
     title: "Identification tags",
     instruction:
-      "Photo every tag on the garment — brand, size, care, style or SKU numbers, and any other labels. Take as many as you need. These are for identification only and will not be posted.",
+      "Photo every tag on the garment — brand, size, care, style or SKU numbers, and any other labels. Take as many as you need. These are for identification by default; you can also add any of them to the listing later.",
     optional: true,
     purpose: "identify",
     allowMultiple: true,
   },
   {
     role: "inventory",
-    title: "Inventory photo",
+    title: "Stocking photo",
     instruction:
-      "Optional: photo how this piece looks in your storage so you can find it later. This stays private and will not be posted.",
+      "Optional: photo how this piece looks where you stock it (closet, bin, rack) so you can find it later. Private by default — you can also use it in the listing if you want.",
     optional: true,
     purpose: "inventory",
     allowMultiple: false,
@@ -250,7 +250,7 @@ export function photoRoleLabel(role: PhotoRole): string {
     case "id_tag":
       return "Brand/care tag";
     case "inventory":
-      return "Storage";
+      return "Stocking";
     case "cover":
       return "Cover";
     case "front":

@@ -205,8 +205,8 @@ export default function PostPage() {
         </ol>
         <p className="text-base text-[var(--muted)]">
           If attach fails, download the ZIP and choose those files in the
-          marketplace picker (cover is <code>01-cover</code>). Identification
-          and inventory photos are excluded.
+          marketplace picker (cover is <code>01-cover</code>). Tag and stocking
+          photos are excluded unless you also added them to the listing.
         </p>
         <a
           href={`/api/listings/${listing.id}/photos/zip`}

@@ -18,7 +18,7 @@ export type PhotoRole =
   | "detail"
   | "flaw";
 
-/** Photos used only for AI/ID or personal inventory — never posted. */
+/** Photos for AI/ID or stocking — private by default (not auto-posted). */
 export const NON_POSTING_PHOTO_ROLES: readonly PhotoRole[] = [
   "brand_tag",
   "care_tag",

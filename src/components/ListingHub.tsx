@@ -91,6 +91,8 @@ export function ListingHub({ listingId }: ListingHubProps) {
   const [uploading, setUploading] = useState(false);
   const [deletingPhotoId, setDeletingPhotoId] = useState<string | null>(null);
   const [pickListingRole, setPickListingRole] = useState(false);
+  const [promotePhotoId, setPromotePhotoId] = useState<string | null>(null);
+  const [promotingPhoto, setPromotingPhoto] = useState(false);
 
   const [schema, setSchema] = useState<PlatformListingSchema | null>(null);
   const [title, setTitle] = useState("");
@@ -292,6 +294,7 @@ export function ListingHub({ listingId }: ListingHubProps) {
           typeof json.error === "string" ? json.error : "Could not delete photo"
         );
       }
+      if (promotePhotoId === photoId) setPromotePhotoId(null);
       setData((prev) =>
         prev
           ? {
@@ -306,6 +309,40 @@ export function ListingHub({ listingId }: ListingHubProps) {
       setError(err instanceof Error ? err.message : "Could not delete photo");
     } finally {
       setDeletingPhotoId(null);
+    }
+  }
+
+  async function usePhotoInListing(photoId: string, role: PhotoRole) {
+    setPromotingPhoto(true);
+    setError(null);
+    try {
+      const res = await fetch(
+        `/api/listings/${listingId}/photos/${photoId}/use-in-listing`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ role }),
+        }
+      );
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(
+          typeof json.error === "string"
+            ? json.error
+            : "Could not add photo to listing"
+        );
+      }
+      setPromotePhotoId(null);
+      setStatusMessage(
+        `Also added as ${photoRoleLabel(role)} for shoppers to see.`
+      );
+      await load({ syncDraft: false });
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Could not add photo to listing"
+      );
+    } finally {
+      setPromotingPhoto(false);
     }
   }
 
@@ -378,7 +415,7 @@ export function ListingHub({ listingId }: ListingHubProps) {
           addTarget.purpose === "identify"
             ? "Brand/care tag — for AI only, not posted"
             : addTarget.purpose === "inventory"
-              ? "Storage location — private, not posted"
+              ? "Stocking photo — private by default"
               : `Listing · ${photoRoleLabel(addTarget.role)}`
         }
         onCancel={() => {
@@ -472,33 +509,80 @@ export function ListingHub({ listingId }: ListingHubProps) {
 
         <PhotoGroup
           title="Brand & care tags"
-          badge="For AI only · never posted"
-          description="Close-ups of brand, size, care, and style/SKU tags so the AI can read the garment. Shoppers will not see these."
+          badge="For AI · private by default"
+          description="Close-ups of brand, size, care, and style/SKU tags so the AI can read the garment. Private by default — tap Use in listing on any shot you also want shoppers to see."
           photos={identifyPhotos}
           empty="No tag photos yet — add every label you can read."
           addLabel="Add tag photo"
           onAdd={() => setAddTarget({ role: "id_tag", purpose: "identify" })}
           onDelete={(photoId) => void deletePhoto(photoId)}
+          onUseInListing={(photoId) => setPromotePhotoId(photoId)}
+          promotePhotoId={promotePhotoId}
           deletingPhotoId={deletingPhotoId}
-          disabled={uploading || Boolean(deletingPhotoId)}
+          disabled={
+            uploading || Boolean(deletingPhotoId) || promotingPhoto
+          }
           tone="private"
         />
 
         <PhotoGroup
-          title="Where it’s stored"
-          badge="Private inventory · never posted"
-          description="Optional photo of this piece in your closet, bin, or rack so you can find it later. Not used on Mercari or Poshmark."
+          title="Stocking photo"
+          badge="Private stocking · not posted by default"
+          description="Optional photo of this piece where you stock it (closet, bin, or rack) so you can find it later. Private by default — use in the listing if you want."
           photos={inventoryPhotos}
-          empty="No storage photo yet — optional if you already know where it is."
-          addLabel="Add storage photo"
+          empty="No stocking photo yet — optional if you already know where it is."
+          addLabel="Add stocking photo"
           onAdd={() =>
             setAddTarget({ role: "inventory", purpose: "inventory" })
           }
           onDelete={(photoId) => void deletePhoto(photoId)}
+          onUseInListing={(photoId) => setPromotePhotoId(photoId)}
+          promotePhotoId={promotePhotoId}
           deletingPhotoId={deletingPhotoId}
-          disabled={uploading || Boolean(deletingPhotoId)}
+          disabled={
+            uploading || Boolean(deletingPhotoId) || promotingPhoto
+          }
           tone="private"
         />
+
+        {promotePhotoId ? (
+          <div className="rounded-2xl border border-[var(--border)] bg-white p-4">
+            <p className="mb-3 text-base font-semibold text-[var(--foreground)]">
+              Use this photo in the listing as…
+            </p>
+            <p className="mb-3 text-sm text-[var(--muted)]">
+              Keeps the original private photo and adds a copy for shoppers.
+            </p>
+            <div className="grid gap-2 sm:grid-cols-2 md:grid-cols-3">
+              {LISTING_ROLES.map((role) => (
+                <button
+                  key={role}
+                  type="button"
+                  disabled={promotingPhoto}
+                  onClick={() =>
+                    void usePhotoInListing(promotePhotoId, role)
+                  }
+                  className="touch-target rounded-xl border border-[var(--border)] px-4 py-3 text-left text-base font-semibold hover:bg-[var(--surface-muted)] disabled:opacity-50"
+                >
+                  {photoRoleLabel(role)}
+                  {!photos.some((p) => p.role === role) && role !== "flaw" ? (
+                    <span className="mt-1 block text-sm font-normal text-[var(--muted)]">
+                      Needed
+                    </span>
+                  ) : null}
+                </button>
+              ))}
+            </div>
+            <button
+              type="button"
+              disabled={promotingPhoto}
+              className="mt-3 text-base font-semibold text-[var(--muted)] disabled:opacity-50"
+              onClick={() => setPromotePhotoId(null)}
+            >
+              Cancel
+            </button>
+          </div>
+        ) : null}
 
         <div className="space-y-3">
           <PhotoGroup
@@ -646,6 +730,8 @@ function PhotoGroup({
   addLabel,
   onAdd,
   onDelete,
+  onUseInListing,
+  promotePhotoId,
   deletingPhotoId,
   disabled,
   tone = "listing",
@@ -658,6 +744,8 @@ function PhotoGroup({
   addLabel: string;
   onAdd: () => void;
   onDelete: (photoId: string) => void;
+  onUseInListing?: (photoId: string) => void;
+  promotePhotoId?: string | null;
   deletingPhotoId?: string | null;
   disabled?: boolean;
   tone?: "private" | "listing";
@@ -708,10 +796,15 @@ function PhotoGroup({
         <ul className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
           {photos.map((photo) => {
             const deleting = deletingPhotoId === photo.id;
+            const promoting = promotePhotoId === photo.id;
             return (
               <li
                 key={photo.id}
-                className="relative overflow-hidden rounded-xl ring-1 ring-[var(--border)]"
+                className={`relative overflow-hidden rounded-xl ring-1 ${
+                  promoting
+                    ? "ring-2 ring-[var(--accent)]"
+                    : "ring-[var(--border)]"
+                }`}
               >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
@@ -721,20 +814,32 @@ function PhotoGroup({
                   alt={photoRoleLabel(photo.role)}
                   className="aspect-square w-full object-cover"
                 />
-                <div className="flex items-center justify-between gap-1 bg-white px-2 py-1">
+                <div className="space-y-1 bg-white px-2 py-1.5">
                   <p className="min-w-0 truncate text-sm text-[var(--muted)]">
                     {photoRoleLabel(photo.role)}
                     {isNonPostingPhotoRole(photo.role) ? " · private" : ""}
                   </p>
-                  <button
-                    type="button"
-                    disabled={disabled}
-                    onClick={() => onDelete(photo.id)}
-                    className="shrink-0 rounded-md px-2 py-1 text-sm font-semibold text-[var(--danger)] hover:bg-red-50 disabled:opacity-50"
-                    aria-label={`Delete ${photoRoleLabel(photo.role)} photo`}
-                  >
-                    {deleting ? "…" : "Delete"}
-                  </button>
+                  <div className="flex flex-wrap items-center gap-1">
+                    {onUseInListing ? (
+                      <button
+                        type="button"
+                        disabled={disabled}
+                        onClick={() => onUseInListing(photo.id)}
+                        className="rounded-md px-2 py-1 text-sm font-semibold text-[var(--accent)] hover:bg-[var(--accent-soft)] disabled:opacity-50"
+                      >
+                        {promoting ? "Choosing…" : "Use in listing"}
+                      </button>
+                    ) : null}
+                    <button
+                      type="button"
+                      disabled={disabled}
+                      onClick={() => onDelete(photo.id)}
+                      className="rounded-md px-2 py-1 text-sm font-semibold text-[var(--danger)] hover:bg-red-50 disabled:opacity-50"
+                      aria-label={`Delete ${photoRoleLabel(photo.role)} photo`}
+                    >
+                      {deleting ? "…" : "Delete"}
+                    </button>
+                  </div>
                 </div>
               </li>
             );

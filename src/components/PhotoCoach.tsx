@@ -141,9 +141,9 @@ export function PhotoCoach({ listing, initialPhotos }: PhotoCoachProps) {
         showAspectGuide={step.purpose === "listing"}
         guideNote={
           step.purpose === "identify"
-            ? "Identification tag — will not be posted"
+            ? "Identification tag — private by default"
             : step.purpose === "inventory"
-              ? "Inventory only — will not be posted"
+              ? "Stocking photo — private by default"
               : undefined
         }
         onCancel={() => setCameraOpen(false)}
@@ -192,9 +192,9 @@ export function PhotoCoach({ listing, initialPhotos }: PhotoCoachProps) {
 
   const purposeBanner =
     step.purpose === "identify"
-      ? "Identification photos — not posted"
+      ? "Identification photos — private by default"
       : step.purpose === "inventory"
-        ? "Inventory photo — not posted"
+        ? "Stocking photo — private by default"
         : `Listing photo for ${PLATFORM_LABELS[platform]} · ${aspect.label}`;
 
   return (
