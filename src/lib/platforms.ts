@@ -51,51 +51,52 @@ const SHARED_PHOTO_STEPS: PhotoStepDef[] = [
     role: "inventory",
     title: "Stocking photo",
     instruction:
-      "Optional: photo how this piece looks where you stock it (closet, bin, rack) so you can find it later. Private by default — you can also use it in the listing if you want.",
+      "Optional: photo how this piece looks where you stock it (closet, bin, rack) so you can find it later. Add as many angles as help you find it. Private by default — you can also use any shot in the listing if you want.",
     optional: true,
     purpose: "inventory",
-    allowMultiple: false,
+    allowMultiple: true,
   },
   {
     role: "cover",
     title: "Cover photo",
     instruction:
-      "Full garment, front-facing, well lit. This is the main photo shoppers see first.",
+      "Full garment, front-facing, well lit. This is the main photo shoppers see first. You can add more than one cover-style shot if you want options.",
     optional: false,
     purpose: "listing",
-    allowMultiple: false,
+    allowMultiple: true,
   },
   {
     role: "front",
     title: "Front",
     instruction:
-      "Clear front view of the whole garment on a simple background.",
+      "Clear front view of the whole garment on a simple background. Add as many front angles as you need.",
     optional: false,
     purpose: "listing",
-    allowMultiple: false,
+    allowMultiple: true,
   },
   {
     role: "back",
     title: "Back",
-    instruction: "Show the back of the garment so shoppers see the full piece.",
+    instruction:
+      "Show the back of the garment so shoppers see the full piece. Add more back shots if helpful.",
     optional: false,
     purpose: "listing",
-    allowMultiple: false,
+    allowMultiple: true,
   },
   {
     role: "detail",
     title: "Details",
     instruction:
-      "Close-up of fabric texture, buttons, zippers, embroidery, or style features.",
+      "Close-ups of fabric texture, buttons, zippers, embroidery, or style features. Take as many detail shots as you need.",
     optional: false,
     purpose: "listing",
-    allowMultiple: false,
+    allowMultiple: true,
   },
   {
     role: "flaw",
     title: "Flaws",
     instruction:
-      "Photo any stains, holes, pilling, or wear. Skip if the piece is clean.",
+      "Photo any stains, holes, pilling, or wear. Take one shot per issue, or skip if the piece is clean.",
     optional: true,
     purpose: "listing",
     allowMultiple: true,
@@ -107,7 +108,7 @@ const MERCARI_PHOTO_STEPS: PhotoStepDef[] = SHARED_PHOTO_STEPS.map((step) => {
     return {
       ...step,
       instruction:
-        "Main listing photo — full garment, bright light, fill the square frame. Mercari allows up to 12 photos; start with a clean cover shot.",
+        "Main listing photo — full garment, bright light, fill the square frame. Mercari allows up to 12 photos total; you can add more than one cover-style shot.",
     };
   }
   return step;
@@ -119,7 +120,7 @@ const POSHMARK_PHOTO_STEPS: PhotoStepDef[] = SHARED_PHOTO_STEPS.map((step) => {
       ...step,
       title: "Cover shot",
       instruction:
-        "Poshmark shoppers judge the cover first. Flat lay or on a hanger, fill the square frame, bright and uncluttered.",
+        "Poshmark shoppers judge the cover first. Flat lay or on a hanger, fill the square frame, bright and uncluttered. Add more cover-style shots if you want options.",
     };
   }
   return step;

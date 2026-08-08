@@ -66,6 +66,17 @@ function nextListingRole(photos: ListingPhotoWithUrl[]): PhotoRole {
   return "detail";
 }
 
+function roleCountLabel(
+  photos: ListingPhotoWithUrl[],
+  role: PhotoRole
+): string | null {
+  const count = photos.filter((p) => p.role === role).length;
+  if (count === 0) {
+    return role === "flaw" ? "Optional" : "Needed";
+  }
+  return `${count} added · add another`;
+}
+
 function applyListingToDraft(listing: Listing) {
   return {
     title: listing.title ?? "",
@@ -528,9 +539,9 @@ export function ListingHub({ listingId }: ListingHubProps) {
         <PhotoGroup
           title="Stocking photo"
           badge="Private stocking · not posted by default"
-          description="Optional photo of this piece where you stock it (closet, bin, or rack) so you can find it later. Private by default — use in the listing if you want."
+          description="Optional photo of this piece where you stock it (closet, bin, or rack) so you can find it later. Add as many as you need. Private by default — use in the listing if you want."
           photos={inventoryPhotos}
-          empty="No stocking photo yet — optional if you already know where it is."
+          empty="No stocking photos yet — optional if you already know where it is."
           addLabel="Add stocking photo"
           onAdd={() =>
             setAddTarget({ role: "inventory", purpose: "inventory" })
@@ -565,11 +576,9 @@ export function ListingHub({ listingId }: ListingHubProps) {
                   className="touch-target rounded-xl border border-[var(--border)] px-4 py-3 text-left text-base font-semibold hover:bg-[var(--surface-muted)] disabled:opacity-50"
                 >
                   {photoRoleLabel(role)}
-                  {!photos.some((p) => p.role === role) && role !== "flaw" ? (
-                    <span className="mt-1 block text-sm font-normal text-[var(--muted)]">
-                      Needed
-                    </span>
-                  ) : null}
+                  <span className="mt-1 block text-sm font-normal text-[var(--muted)]">
+                    {roleCountLabel(photos, role)}
+                  </span>
                 </button>
               ))}
             </div>
@@ -588,7 +597,7 @@ export function ListingHub({ listingId }: ListingHubProps) {
           <PhotoGroup
             title="Photos shoppers will see"
             badge="Listing photos · posted"
-            description="Cover, front, back, details, and flaws for the marketplace listing. These are the only photos that get uploaded when you post."
+            description="Cover, front, back, details, and flaws for the marketplace listing. You can add multiple photos of each type. These are the only photos that get uploaded when you post."
             photos={listingPhotos}
             empty="No listing photos yet — start with a clean cover shot."
             addLabel={`Add ${photoRoleLabel(nextListingRole(photos)).toLowerCase()} photo`}
@@ -603,6 +612,9 @@ export function ListingHub({ listingId }: ListingHubProps) {
               <p className="mb-3 text-base font-semibold text-[var(--foreground)]">
                 Which listing photo?
               </p>
+              <p className="mb-3 text-sm text-[var(--muted)]">
+                Pick a type — you can add as many of each as you want.
+              </p>
               <div className="grid gap-2 sm:grid-cols-2 md:grid-cols-3">
                 {LISTING_ROLES.map((role) => (
                   <button
@@ -616,11 +628,9 @@ export function ListingHub({ listingId }: ListingHubProps) {
                     className="touch-target rounded-xl border border-[var(--border)] px-4 py-3 text-left text-base font-semibold hover:bg-[var(--surface-muted)]"
                   >
                     {photoRoleLabel(role)}
-                    {!photos.some((p) => p.role === role) && role !== "flaw" ? (
-                      <span className="mt-1 block text-sm font-normal text-[var(--muted)]">
-                        Needed
-                      </span>
-                    ) : null}
+                    <span className="mt-1 block text-sm font-normal text-[var(--muted)]">
+                      {roleCountLabel(photos, role)}
+                    </span>
                   </button>
                 ))}
               </div>

@@ -280,7 +280,13 @@ export function PhotoCoach({ listing, initialPhotos }: PhotoCoachProps) {
 
         {step.allowMultiple && currentRolePhotos.length > 0 ? (
           <BigButton onClick={goNext}>
-            Done with {step.purpose === "identify" ? "tags" : "these"} — next
+            Done with{" "}
+            {step.purpose === "identify"
+              ? "tags"
+              : step.purpose === "inventory"
+                ? "stocking photos"
+                : photoRoleLabel(step.role).toLowerCase()}{" "}
+            — next
           </BigButton>
         ) : null}
 

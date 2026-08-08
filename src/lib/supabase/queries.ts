@@ -306,6 +306,17 @@ export async function addPhoto(params: {
   processedPath?: string | null;
 }): Promise<ListingPhoto> {
   const supabase = createAdminClient();
+  const { count, error: countError } = await supabase
+    .from("listing_photos")
+    .select("id", { count: "exact", head: true })
+    .eq("listing_id", params.listingId)
+    .eq("role", params.role);
+
+  if (countError) throw new Error(`addPhoto count: ${countError.message}`);
+
+  const base = (ROLE_SORT[params.role] ?? 99) * 1000;
+  const sortOrder = base + (count ?? 0);
+
   const { data, error } = await supabase
     .from("listing_photos")
     .insert({
@@ -313,7 +324,7 @@ export async function addPhoto(params: {
       role: params.role,
       storage_path: params.storagePath,
       processed_path: params.processedPath ?? null,
-      sort_order: ROLE_SORT[params.role] ?? 99,
+      sort_order: sortOrder,
     })
     .select("*")
     .single();
