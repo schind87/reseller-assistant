@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Reseller Assistant</title>
+    <link rel="stylesheet" href="sidepanel.css" />
+  </head>
+  <body>
+    <header class="header">
+      <h1>Reseller Assistant</h1>
+      <p class="tagline">Fill Mercari &amp; Poshmark listings step by step</p>
+    </header>
+
+    <section id="pair-section" class="card" hidden>
+      <h2>Pair with your listing</h2>
+      <p class="help">
+        Enter the 6-digit join code from the web app, or paste the token you copied.
+      </p>
+
+      <label for="app-url">App URL</label>
+      <input
+        id="app-url"
+        type="url"
+        value="https://reseller.mvfeed.us"
+        autocomplete="off"
+        spellcheck="false"
+      />
+
+      <label for="join-code">6-digit join code</label>
+      <input
+        id="join-code"
+        type="text"
+        inputmode="numeric"
+        maxlength="6"
+        placeholder="123456"
+        autocomplete="off"
+        spellcheck="false"
+      />
+
+      <p class="or-divider">or</p>
+
+      <label for="token">Paste token</label>
+      <textarea
+        id="token"
+        rows="3"
+        placeholder="Paste join token here"
+        autocomplete="off"
+        spellcheck="false"
+      ></textarea>
+
+      <label for="listing-id">Listing ID (required with token)</label>
+      <input
+        id="listing-id"
+        type="text"
+        placeholder="Listing ID from the web app"
+        autocomplete="off"
+        spellcheck="false"
+      />
+
+      <button id="pair-btn" class="btn btn-primary" type="button">Pair &amp; load listing</button>
+      <p id="pair-status" class="status" role="status" aria-live="polite"></p>
+    </section>
+
+    <section id="listing-section" class="card" hidden>
+      <div class="listing-header">
+        <h2 id="listing-title">Listing</h2>
+        <button id="unpair-btn" class="btn btn-ghost" type="button">Unpair</button>
+      </div>
+
+      <dl class="listing-meta">
+        <div>
+          <dt>Brand</dt>
+          <dd id="listing-brand">—</dd>
+        </div>
+        <div>
+          <dt>Description</dt>
+          <dd id="listing-description" class="description-preview">—</dd>
+        </div>
+      </dl>
+
+      <div class="warning" role="alert">
+        <strong>You press Publish yourself</strong>
+        <span>This extension never clicks Publish. Review everything, then publish on the site.</span>
+      </div>
+
+      <h3 class="steps-heading">Steps coach</h3>
+      <ol id="steps-list" class="steps"></ol>
+
+      <div class="actions">
+        <button id="fill-title-btn" class="btn btn-primary" type="button">Fill title</button>
+        <button id="fill-description-btn" class="btn btn-primary" type="button">
+          Fill description
+        </button>
+        <button id="fill-all-btn" class="btn btn-secondary" type="button">
+          Fill all text fields
+        </button>
+        <button id="copy-photos-btn" class="btn btn-secondary" type="button">
+          Copy photo download links
+        </button>
+        <button id="next-step-btn" class="btn btn-accent" type="button">Next step</button>
+      </div>
+
+      <p id="action-status" class="status" role="status" aria-live="polite"></p>
+    </section>
+
+    <script src="sidepanel.js"></script>
+  </body>
+</html>
