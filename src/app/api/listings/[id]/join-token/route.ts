@@ -5,6 +5,7 @@ import {
   appUrl,
   createJoinToken,
   getListing,
+  requestOrigin,
 } from "@/lib/supabase/queries";
 
 const bodySchema = z.object({
@@ -32,10 +33,11 @@ export async function POST(request: Request, context: RouteContext) {
     }
 
     const join = await createJoinToken(id, parsed.data.purpose, 120);
+    const origin = requestOrigin(request);
     const url =
       parsed.data.purpose === "extension"
-        ? appUrl(`/join/${join.token}?purpose=extension`)
-        : appUrl(`/join/${join.token}`);
+        ? appUrl(`/join/${join.token}?purpose=extension`, origin)
+        : appUrl(`/join/${join.token}`, origin);
 
     return NextResponse.json({
       token: join.token,

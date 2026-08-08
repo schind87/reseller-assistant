@@ -49,7 +49,19 @@ Open [http://localhost:3000](http://localhost:3000) → unlock with `HOUSEHOLD_P
 
 ## Domain
 
-Production is served at **https://reseller.mvfeed.us** (same pattern as your other `*.mvfeed.us` apps). QR join links and extension pairing use `NEXT_PUBLIC_APP_URL`.
+Production custom domain: **https://reseller.mvfeed.us** (same pattern as `starloom.mvfeed.us` / `tasks.mvfeed.us`).
+
+Until DNS propagates, use **https://reseller-assistant.vercel.app**. QR join links use the hostname you are currently on.
+
+### Cloudflare DNS (required for reseller.mvfeed.us)
+
+In Cloudflare for `mvfeed.us`, add a **CNAME** (DNS only / grey cloud):
+
+| Type | Name | Target |
+| --- | --- | --- |
+| CNAME | `reseller` | `cname.vercel-dns.com` |
+
+Match the setup used for `starloom.mvfeed.us`.
 
 ## Chrome extension
 

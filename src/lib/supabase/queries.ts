@@ -353,11 +353,22 @@ export async function markPosted(id: string): Promise<Listing> {
   });
 }
 
-export function appUrl(path = ""): string {
-  const base = (process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000").replace(
-    /\/$/,
-    ""
-  );
+export function appUrl(path = "", origin?: string | null): string {
+  const base = (
+    origin ||
+    process.env.NEXT_PUBLIC_APP_URL ||
+    "http://localhost:3000"
+  ).replace(/\/$/, "");
   if (!path) return base;
   return `${base}${path.startsWith("/") ? path : `/${path}`}`;
+}
+
+/** Prefer the browser Origin header so QR links work on vercel.app before custom DNS. */
+export function requestOrigin(request: Request): string | null {
+  const origin = request.headers.get("origin");
+  if (origin) return origin;
+  const host = request.headers.get("x-forwarded-host") || request.headers.get("host");
+  if (!host) return null;
+  const proto = request.headers.get("x-forwarded-proto") || "https";
+  return `${proto}://${host}`;
 }
