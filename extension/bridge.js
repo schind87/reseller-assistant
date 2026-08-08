@@ -50,6 +50,15 @@
     if (event.origin !== window.location.origin) return;
     const data = event.data;
     if (!data || data.source !== SOURCE) return;
+
+    if (data.type === "ping-extension") {
+      window.postMessage(
+        { source: ACK_SOURCE, type: "bridge-ready" },
+        window.location.origin
+      );
+      return;
+    }
+
     if (data.type !== "pair-extension") return;
     void applyPairing(data).catch((error) => {
       console.error("Reseller Assistant bridge pair failed:", error);

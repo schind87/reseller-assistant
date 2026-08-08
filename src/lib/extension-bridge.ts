@@ -1,5 +1,6 @@
 export const EXTENSION_WEB_SOURCE = "reseller-assistant-web";
 export const EXTENSION_ACK_SOURCE = "reseller-assistant-extension";
+export const EXTENSION_PRESENT_KEY = "ra-extension-present";
 
 export type ExtensionPairPayload = {
   token: string;
@@ -26,6 +27,39 @@ export function requestExtensionPair(payload: ExtensionPairPayload): void {
   );
 }
 
+/** Ask the content-script bridge to announce itself. */
+export function pingExtensionBridge(): void {
+  if (typeof window === "undefined") return;
+  window.postMessage(
+    { source: EXTENSION_WEB_SOURCE, type: "ping-extension" },
+    window.location.origin
+  );
+}
+
+export function rememberExtensionPresent(present: boolean): void {
+  if (typeof window === "undefined") return;
+  try {
+    if (present) {
+      window.sessionStorage.setItem(EXTENSION_PRESENT_KEY, "1");
+    } else {
+      window.sessionStorage.removeItem(EXTENSION_PRESENT_KEY);
+    }
+  } catch {
+    // ignore storage failures
+  }
+}
+
+export function readCachedExtensionPresent(): boolean | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const value = window.sessionStorage.getItem(EXTENSION_PRESENT_KEY);
+    if (value === "1") return true;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 /** Wait briefly for the extension bridge to acknowledge pairing. */
 export function waitForExtensionPairAck(
   timeoutMs = 1500
@@ -47,6 +81,7 @@ export function waitForExtensionPairAck(
       if (data.type !== "pair-ack") return;
       window.clearTimeout(timer);
       window.removeEventListener("message", onMessage);
+      rememberExtensionPresent(true);
       resolve({
         ok: Boolean(data.ok),
         error: typeof data.error === "string" ? data.error : undefined,
@@ -54,5 +89,43 @@ export function waitForExtensionPairAck(
     }
 
     window.addEventListener("message", onMessage);
+  });
+}
+
+/** Detect whether the Reseller Assistant Chrome extension bridge is present. */
+export function detectExtensionPresent(
+  timeoutMs = 700
+): Promise<boolean> {
+  if (typeof window === "undefined") {
+    return Promise.resolve(false);
+  }
+
+  const cached = readCachedExtensionPresent();
+  if (cached === true) return Promise.resolve(true);
+
+  return new Promise((resolve) => {
+    let settled = false;
+
+    function finish(present: boolean) {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timer);
+      window.removeEventListener("message", onMessage);
+      if (present) rememberExtensionPresent(true);
+      resolve(present);
+    }
+
+    function onMessage(event: MessageEvent) {
+      if (event.origin !== window.location.origin) return;
+      const data = event.data;
+      if (!data || data.source !== EXTENSION_ACK_SOURCE) return;
+      if (data.type === "bridge-ready" || data.type === "pair-ack") {
+        finish(true);
+      }
+    }
+
+    window.addEventListener("message", onMessage);
+    pingExtensionBridge();
+    const timer = window.setTimeout(() => finish(false), timeoutMs);
   });
 }

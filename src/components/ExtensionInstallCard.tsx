@@ -1,99 +1,119 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import {
+  detectExtensionPresent,
+  readCachedExtensionPresent,
+} from "@/lib/extension-bridge";
 
 type ExtensionInstallCardProps = {
   compact?: boolean;
 };
 
-export function ExtensionInstallCard({ compact = false }: ExtensionInstallCardProps) {
+/**
+ * Hidden when the Chrome extension is installed.
+ * When missing, shows a collapsed hint instead of a prominent install card.
+ */
+export function ExtensionInstallCard({
+  compact = false,
+}: ExtensionInstallCardProps) {
+  const [status, setStatus] = useState<"checking" | "installed" | "missing">(
+    () => (readCachedExtensionPresent() === true ? "installed" : "checking")
+  );
+  const [expanded, setExpanded] = useState(false);
   const [isLocal, setIsLocal] = useState(false);
 
   useEffect(() => {
     const host = window.location.hostname;
     setIsLocal(host === "localhost" || host === "127.0.0.1");
+
+    let cancelled = false;
+    void detectExtensionPresent().then((present) => {
+      if (!cancelled) setStatus(present ? "installed" : "missing");
+    });
+
+    function onMessage(event: MessageEvent) {
+      if (event.origin !== window.location.origin) return;
+      const data = event.data;
+      if (
+        data?.source === "reseller-assistant-extension" &&
+        (data.type === "bridge-ready" || data.type === "pair-ack")
+      ) {
+        setStatus("installed");
+      }
+    }
+
+    window.addEventListener("message", onMessage);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("message", onMessage);
+    };
   }, []);
 
+  if (status === "checking" || status === "installed") {
+    return null;
+  }
+
   return (
-    <section className="rounded-2xl border border-[var(--border)] bg-white p-5">
-      <h2 className="font-[family-name:var(--font-brand)] text-2xl">
-        Chrome extension
-      </h2>
-      <p className="mt-2 text-base text-[var(--muted)]">
-        {compact
-          ? "Install on your computer to fill Mercari and Poshmark fields from this draft. Opening this page pairs automatically when the extension is loaded."
-          : "Download the helper for your computer. It fills Mercari and Poshmark listing fields from your draft — you still press Publish yourself. The Post checklist pairs the extension automatically when it is installed."}
-      </p>
-      <a
-        href="/api/extension/download"
-        className="mt-4 inline-flex touch-target w-full items-center justify-center rounded-xl border border-transparent bg-[var(--accent)] px-6 py-4 text-lg font-semibold text-white hover:bg-[var(--accent-hover)]"
+    <section className="rounded-xl border border-dashed border-[var(--border)] bg-transparent px-4 py-3">
+      <button
+        type="button"
+        onClick={() => setExpanded((open) => !open)}
+        className="flex w-full items-center justify-between gap-3 text-left"
+        aria-expanded={expanded}
       >
-        Download Chrome extension
-      </a>
-      <ol className="mt-4 list-decimal space-y-2 pl-5 text-base text-[var(--muted)]">
-        {isLocal ? (
-          <>
-            <li>
-              In this repo run{" "}
-              <span className="font-semibold text-[var(--foreground)]">
-                npm run extension:live
-              </span>
-              .
-            </li>
-            <li>
-              Open{" "}
-              <span className="font-semibold text-[var(--foreground)]">
-                chrome://extensions
-              </span>{" "}
-              and turn on Developer mode.
-            </li>
-            <li>
-              Click{" "}
-              <span className="font-semibold text-[var(--foreground)]">
-                Load unpacked
-              </span>{" "}
-              and choose the repo folder{" "}
-              <span className="font-semibold text-[var(--foreground)]">
-                extension-live
-              </span>
-              .
-            </li>
-            <li>
-              After pulling code, run{" "}
-              <span className="font-semibold text-[var(--foreground)]">
-                npm run extension:live
-              </span>{" "}
-              again, then tap{" "}
-              <span className="font-semibold text-[var(--foreground)]">
-                Reload extension
-              </span>{" "}
-              at the bottom of the side panel.
-            </li>
-          </>
-        ) : (
-          <>
-            <li>Unzip the download on your computer.</li>
-            <li>
-              Open{" "}
-              <span className="font-semibold text-[var(--foreground)]">
-                chrome://extensions
-              </span>{" "}
-              and turn on Developer mode.
-            </li>
-            <li>
-              Click{" "}
-              <span className="font-semibold text-[var(--foreground)]">
-                Load unpacked
-              </span>{" "}
-              and choose the unzipped{" "}
-              <span className="font-semibold text-[var(--foreground)]">
-                reseller-assistant-extension
-              </span>{" "}
-              folder.
-            </li>
-          </>
-        )}
-      </ol>
+        <span className="text-sm text-[var(--muted)]">
+          {compact
+            ? "Optional: Chrome helper for Mercari / Poshmark"
+            : "Optional: install the Chrome helper"}
+        </span>
+        <span className="text-sm font-semibold text-[var(--accent)]">
+          {expanded ? "Hide" : "Show"}
+        </span>
+      </button>
+
+      {expanded ? (
+        <div className="mt-3 space-y-3 border-t border-[var(--border)] pt-3">
+          <p className="text-sm text-[var(--muted)]">
+            Fills sell-form fields and can attach listing photos. You still press
+            Publish yourself.
+          </p>
+          <a
+            href="/api/extension/download"
+            className="inline-flex text-sm font-semibold text-[var(--accent)] underline-offset-2 hover:underline"
+          >
+            Download Chrome extension
+          </a>
+          <ol className="list-decimal space-y-1 pl-5 text-sm text-[var(--muted)]">
+            {isLocal ? (
+              <>
+                <li>
+                  Run{" "}
+                  <span className="font-semibold text-[var(--foreground)]">
+                    npm run extension:live
+                  </span>
+                  , then Load unpacked →{" "}
+                  <span className="font-semibold text-[var(--foreground)]">
+                    extension-live
+                  </span>
+                  .
+                </li>
+                <li>
+                  After code changes, sync and tap Reload extension in the side
+                  panel.
+                </li>
+              </>
+            ) : (
+              <>
+                <li>Unzip the download.</li>
+                <li>
+                  chrome://extensions → Developer mode → Load unpacked.
+                </li>
+              </>
+            )}
+          </ol>
+        </div>
+      ) : null}
     </section>
   );
 }
