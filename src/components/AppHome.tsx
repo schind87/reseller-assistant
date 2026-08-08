@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { BigButton } from "@/components/BigButton";
@@ -18,21 +18,47 @@ type AppHomeProps = {
   initialListings: Listing[];
   preferencesCompleted: boolean;
   initialPreferences: ListingPreferences | null;
+  userEmail?: string | null;
 };
 
 export function AppHome({
   initialListings,
   preferencesCompleted,
   initialPreferences,
+  userEmail = null,
 }: AppHomeProps) {
   const router = useRouter();
   const [listings, setListings] = useState(initialListings);
   const [prefsDone, setPrefsDone] = useState(preferencesCompleted);
   const [preferences, setPreferences] = useState(initialPreferences);
   const [editingPrefs, setEditingPrefs] = useState(!preferencesCompleted);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const profileMenuRef = useRef<HTMLDivElement>(null);
   const [busy, setBusy] = useState(false);
   const [choosing, setChoosing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!profileOpen) return;
+
+    function onPointerDown(event: MouseEvent) {
+      const root = profileMenuRef.current;
+      if (root && !root.contains(event.target as Node)) {
+        setProfileOpen(false);
+      }
+    }
+
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") setProfileOpen(false);
+    }
+
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [profileOpen]);
 
   async function startListing(platform: Platform) {
     setBusy(true);
@@ -67,6 +93,7 @@ export function AppHome({
           setPreferences(prefs);
           setPrefsDone(true);
           setEditingPrefs(false);
+          setProfileOpen(false);
         }}
         onCancel={
           prefsDone
@@ -91,40 +118,58 @@ export function AppHome({
             Start here, then use your phone for garment photos.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => void logout()}
-          className="text-base font-semibold text-[var(--muted)]"
-        >
-          Sign out
-        </button>
+        <div className="relative shrink-0" ref={profileMenuRef}>
+          <button
+            type="button"
+            onClick={() => setProfileOpen((open) => !open)}
+            aria-expanded={profileOpen}
+            aria-haspopup="menu"
+            className="rounded-xl border border-[var(--border)] bg-white px-4 py-2 text-base font-semibold text-[var(--foreground)] hover:bg-[var(--surface-muted)]"
+          >
+            Profile
+          </button>
+          {profileOpen ? (
+            <div
+              role="menu"
+              className="absolute right-0 z-20 mt-2 w-72 rounded-2xl border border-[var(--border)] bg-white p-2 shadow-lg"
+            >
+              {userEmail ? (
+                <p className="truncate px-3 py-2 text-sm text-[var(--muted)]">
+                  {userEmail}
+                </p>
+              ) : null}
+              {preferences ? (
+                <p className="px-3 pb-2 text-sm text-[var(--foreground)]">
+                  {composeSmokePetNotes(preferences)}
+                </p>
+              ) : null}
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  setProfileOpen(false);
+                  setEditingPrefs(true);
+                }}
+                className="touch-target w-full rounded-xl px-3 py-3 text-left text-base font-semibold text-[var(--accent)] hover:bg-[var(--accent-soft)]"
+              >
+                Change seller preferences
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => void logout()}
+                className="touch-target w-full rounded-xl px-3 py-3 text-left text-base font-semibold text-[var(--muted)] hover:bg-[var(--surface-muted)]"
+              >
+                Sign out
+              </button>
+            </div>
+          ) : null}
+        </div>
       </header>
 
       <PinSetupCard />
 
       <ExtensionInstallCard />
-
-      {preferences ? (
-        <section className="rounded-2xl border border-[var(--border)] bg-white p-5">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <h2 className="font-[family-name:var(--font-brand)] text-2xl">
-                Seller profile
-              </h2>
-              <p className="mt-2 text-base text-[var(--muted)]">
-                {composeSmokePetNotes(preferences)}
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => setEditingPrefs(true)}
-              className="text-base font-semibold text-[var(--accent)]"
-            >
-              Edit
-            </button>
-          </div>
-        </section>
-      ) : null}
 
       {error ? (
         <p className="rounded-xl bg-red-50 px-4 py-3 text-base text-red-800">

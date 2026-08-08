@@ -25,6 +25,7 @@ export default async function AppHomePage() {
       initialListings={listings}
       preferencesCompleted={Boolean(profile?.listing_prefs_completed_at)}
       initialPreferences={profile?.listing_preferences ?? null}
+      userEmail={user.email}
     />
   );
 }
