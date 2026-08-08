@@ -9,11 +9,7 @@ export async function GET() {
       return NextResponse.json({
         unlocked: true,
         signedIn: true,
-        user: {
-          id: user.id,
-          email: user.email,
-          phone: user.phone,
-        },
+        user,
       });
     }
 
@@ -21,7 +17,7 @@ export async function GET() {
     return NextResponse.json({
       unlocked: isUnlocked(join),
       signedIn: false,
-      joinOnly: isUnlocked(join),
+      joinOnly: isUnlocked(join) && join?.kind === "join",
     });
   } catch (err) {
     console.error("auth status error:", err);

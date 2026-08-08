@@ -1,44 +1,15 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { createServerClient } from "@supabase/ssr";
-import { getSessionFromRequest, isUnlocked } from "@/lib/session";
+import {
+  getSessionFromRequest,
+  isUnlocked,
+  isUserSession,
+} from "@/lib/session";
 
 /**
- * Next.js 16 proxy: refresh Supabase auth cookies and gate /app/*.
+ * Gate /app/* behind signed-in user session; allow QR join for listing photo paths.
  */
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
-
-  let response = NextResponse.next({
-    request: { headers: request.headers },
-  });
-
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-  let signedIn = false;
-  if (url && key) {
-    const supabase = createServerClient(url, key, {
-      cookies: {
-        getAll() {
-          return request.cookies.getAll();
-        },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value }) => {
-            request.cookies.set(name, value);
-          });
-          response = NextResponse.next({
-            request: { headers: request.headers },
-          });
-          cookiesToSet.forEach(({ name, value, options }) => {
-            response.cookies.set(name, value, options);
-          });
-        },
-      },
-    });
-
-    const { data } = await supabase.auth.getUser();
-    signedIn = Boolean(data.user);
-  }
 
   const isPublic =
     pathname === "/" ||
@@ -50,33 +21,34 @@ export async function proxy(request: NextRequest) {
     pathname === "/api/extension/pair";
 
   if (isPublic) {
-    return response;
+    return NextResponse.next();
   }
 
   if (pathname.match(/^\/api\/listings\/[^/]+\/extension$/)) {
-    return response;
+    return NextResponse.next();
   }
 
-  // Photo coach via QR join cookie
-  const join = await getSessionFromRequest(request);
-  const joinOk = isUnlocked(join);
+  const session = await getSessionFromRequest(request);
+  const signedIn = isUserSession(session);
+  const joinOk = isUnlocked(session) && session?.kind === "join";
+
   if (
     joinOk &&
     (pathname.startsWith("/app/listings/") ||
       pathname.match(/^\/api\/listings\/[^/]+(\/photos)?$/))
   ) {
-    return response;
+    return NextResponse.next();
   }
 
   const needsAuth =
     pathname.startsWith("/app") || pathname.startsWith("/api/");
 
   if (!needsAuth) {
-    return response;
+    return NextResponse.next();
   }
 
   if (signedIn) {
-    return response;
+    return NextResponse.next();
   }
 
   if (pathname.startsWith("/api/")) {

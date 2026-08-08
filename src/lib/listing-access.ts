@@ -44,6 +44,7 @@ export async function authorizeListingAccess(
 
   const join = await getSessionFromCookies();
   if (
+    join?.kind === "join" &&
     isUnlocked(join) &&
     (!join.listingId || join.listingId === listingId)
   ) {

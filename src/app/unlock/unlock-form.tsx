@@ -71,7 +71,7 @@ export function UnlockForm() {
         <p className="mt-3 text-lg text-[var(--muted)]">
           {step === "contact"
             ? "Enter your email or phone number. No password needed."
-            : "Enter the code from your email or text. You can also tap the sign-in link in the message."}
+            : "Type the 6-digit code from your email."}
         </p>
       </div>
 

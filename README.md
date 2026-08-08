@@ -13,9 +13,16 @@ Live app: **https://reseller-assistant.vercel.app** (custom domain **https://res
 - Passwordless sign-in: email or phone one-time code (no password)
 - Optional OpenAI vision/drafting and fal.ai background removal
 
-## Setup
+## Auth email (Resend)
 
-1. Copy env file and fill secrets:
+Sign-in codes for **email** are sent through **Resend** on domain `mvfeed.us`
+(`Reseller Assistant <noreply@mvfeed.us>`).
+
+Required env vars: `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, `SESSION_SECRET`.
+
+Optional (Supabase Auth Send Email hook / Edge Function `auth-send-email`):
+`SEND_EMAIL_HOOK_SECRET` — only needed if you also enable the Supabase Auth hook.
+
 
 ```bash
 cp .env.example .env.local

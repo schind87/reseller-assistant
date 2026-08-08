@@ -1,5 +1,10 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import {
+  generateOtpCode,
+  sendSignInEmail,
+  storeLoginOtp,
+} from "@/lib/auth/otp";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 
 const bodySchema = z.object({
@@ -14,7 +19,6 @@ function normalizeContact(raw: string): { email?: string; phone?: string } {
   const digits = trimmed.replace(/[^\d+]/g, "");
   let phone = digits;
   if (phone && !phone.startsWith("+")) {
-    // Default US country code when user enters a 10-digit number
     if (/^\d{10}$/.test(phone)) phone = `+1${phone}`;
     else if (/^\d+$/.test(phone)) phone = `+${phone}`;
   }
@@ -40,35 +44,27 @@ export async function POST(request: Request) {
       );
     }
 
-    const supabase = await createServerSupabaseClient();
-    const origin =
-      request.headers.get("origin") ||
-      process.env.NEXT_PUBLIC_APP_URL ||
-      "http://localhost:3000";
-
+    // Email via Resend (app-owned OTP)
     if (contact.email) {
-      const { error } = await supabase.auth.signInWithOtp({
-        email: contact.email,
-        options: {
-          shouldCreateUser: true,
-          emailRedirectTo: `${origin}/auth/callback`,
-        },
-      });
-      if (error) {
-        console.error("email otp error:", error);
+      if (!process.env.RESEND_API_KEY) {
         return NextResponse.json(
-          { error: error.message || "Could not send email code" },
-          { status: 400 }
+          { error: "Email sign-in is not configured yet (missing Resend)." },
+          { status: 500 }
         );
       }
+      const code = generateOtpCode();
+      await storeLoginOtp(contact.email, "email", code);
+      await sendSignInEmail(contact.email, code);
       return NextResponse.json({
         ok: true,
         channel: "email",
         destination: contact.email,
-        message: "We sent a sign-in code to your email.",
+        message: "We emailed you a 6-digit sign-in code.",
       });
     }
 
+    // Phone still uses Supabase Auth SMS when configured
+    const supabase = await createServerSupabaseClient();
     const { error } = await supabase.auth.signInWithOtp({
       phone: contact.phone!,
       options: { shouldCreateUser: true },
@@ -79,7 +75,7 @@ export async function POST(request: Request) {
         {
           error:
             error.message ||
-            "Could not send a text code. Try email, or ask to enable phone sign-in.",
+            "Could not send a text code. Try email for now, or enable phone SMS in Supabase.",
         },
         { status: 400 }
       );
@@ -94,7 +90,10 @@ export async function POST(request: Request) {
   } catch (err) {
     console.error("otp start error:", err);
     return NextResponse.json(
-      { error: "Could not start sign-in" },
+      {
+        error:
+          err instanceof Error ? err.message : "Could not start sign-in",
+      },
       { status: 500 }
     );
   }

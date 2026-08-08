@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { consumeLoginOtp, upsertProfile } from "@/lib/auth/otp";
+import { createUserSessionCookie } from "@/lib/session";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 
 const bodySchema = z.object({
@@ -34,41 +36,49 @@ export async function POST(request: Request) {
 
     const contact = normalizeContact(parsed.data.contact);
     const token = parsed.data.token.trim();
-    const supabase = await createServerSupabaseClient();
 
     if (contact.email) {
-      const { data, error } = await supabase.auth.verifyOtp({
-        email: contact.email,
-        token,
-        type: "email",
-      });
-      if (error || !data.session) {
+      const ok = await consumeLoginOtp(contact.email, token);
+      if (!ok) {
         return NextResponse.json(
-          { error: error?.message || "That code did not work. Try again." },
+          { error: "That code did not work. Try again." },
           { status: 401 }
         );
       }
+      const profile = await upsertProfile({ email: contact.email });
+      await createUserSessionCookie({
+        userId: profile.id,
+        email: profile.email,
+        phone: profile.phone,
+      });
       return NextResponse.json({
         ok: true,
-        user: { id: data.user?.id, email: data.user?.email },
+        user: { id: profile.id, email: profile.email },
       });
     }
 
     if (contact.phone) {
+      const supabase = await createServerSupabaseClient();
       const { data, error } = await supabase.auth.verifyOtp({
         phone: contact.phone,
         token,
         type: "sms",
       });
-      if (error || !data.session) {
+      if (error || !data.user) {
         return NextResponse.json(
           { error: error?.message || "That code did not work. Try again." },
           { status: 401 }
         );
       }
+      const profile = await upsertProfile({ phone: contact.phone });
+      await createUserSessionCookie({
+        userId: profile.id,
+        email: profile.email,
+        phone: profile.phone,
+      });
       return NextResponse.json({
         ok: true,
-        user: { id: data.user?.id, phone: data.user?.phone },
+        user: { id: profile.id, phone: profile.phone },
       });
     }
 
