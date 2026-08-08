@@ -308,6 +308,65 @@ export async function updatePhoto(
   return data as ListingPhoto;
 }
 
+export async function getListingPhoto(
+  listingId: string,
+  photoId: string
+): Promise<ListingPhoto | null> {
+  const supabase = createAdminClient();
+  const { data, error } = await supabase
+    .from("listing_photos")
+    .select("*")
+    .eq("id", photoId)
+    .eq("listing_id", listingId)
+    .maybeSingle();
+
+  if (error) throw new Error(`getListingPhoto: ${error.message}`);
+  return (data as ListingPhoto | null) ?? null;
+}
+
+export async function deleteListingPhoto(
+  listingId: string,
+  photoId: string
+): Promise<ListingPhoto> {
+  const photo = await getListingPhoto(listingId, photoId);
+  if (!photo) {
+    throw new Error("Photo not found");
+  }
+
+  const supabase = createAdminClient();
+  const paths = [photo.storage_path, photo.processed_path].filter(
+    (path): path is string => Boolean(path)
+  );
+
+  if (paths.length > 0) {
+    const { error: storageError } = await supabase.storage
+      .from("listing-photos")
+      .remove(paths);
+    if (storageError) {
+      console.error("deleteListingPhoto storage:", storageError.message);
+    }
+  }
+
+  const { error } = await supabase
+    .from("listing_photos")
+    .delete()
+    .eq("id", photoId)
+    .eq("listing_id", listingId);
+
+  if (error) throw new Error(`deleteListingPhoto: ${error.message}`);
+
+  const listing = await getListing(listingId);
+  if (
+    listing?.cover_processed_path &&
+    (photo.role === "cover" ||
+      listing.cover_processed_path === photo.processed_path)
+  ) {
+    await updateListing(listingId, { cover_processed_path: null });
+  }
+
+  return photo;
+}
+
 export async function getSignedPhotoUrl(
   storagePath: string,
   expiresIn = 3600

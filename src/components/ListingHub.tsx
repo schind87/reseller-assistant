@@ -88,6 +88,7 @@ export function ListingHub({ listingId }: ListingHubProps) {
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [addTarget, setAddTarget] = useState<AddPhotoTarget | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [deletingPhotoId, setDeletingPhotoId] = useState<string | null>(null);
   const [pickListingRole, setPickListingRole] = useState(false);
 
   const [schema, setSchema] = useState<PlatformListingSchema | null>(null);
@@ -242,6 +243,40 @@ export function ListingHub({ listingId }: ListingHubProps) {
       setError(err instanceof Error ? err.message : "Could not save");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function deletePhoto(photoId: string) {
+    const confirmed = window.confirm("Delete this photo?");
+    if (!confirmed) return;
+
+    setDeletingPhotoId(photoId);
+    setError(null);
+    try {
+      const res = await fetch(
+        `/api/listings/${listingId}/photos/${photoId}`,
+        { method: "DELETE" }
+      );
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(
+          typeof json.error === "string" ? json.error : "Could not delete photo"
+        );
+      }
+      setData((prev) =>
+        prev
+          ? {
+              ...prev,
+              photos: prev.photos.filter((photo) => photo.id !== photoId),
+            }
+          : prev
+      );
+      setStatusMessage("Photo deleted.");
+      await load({ syncDraft: false });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not delete photo");
+    } finally {
+      setDeletingPhotoId(null);
     }
   }
 
@@ -412,7 +447,9 @@ export function ListingHub({ listingId }: ListingHubProps) {
           empty="No tag photos yet."
           addLabel="Add identification photo"
           onAdd={() => setAddTarget({ role: "id_tag", purpose: "identify" })}
-          disabled={uploading}
+          onDelete={(photoId) => void deletePhoto(photoId)}
+          deletingPhotoId={deletingPhotoId}
+          disabled={uploading || Boolean(deletingPhotoId)}
         />
 
         <PhotoGroup
@@ -423,7 +460,9 @@ export function ListingHub({ listingId }: ListingHubProps) {
           onAdd={() =>
             setAddTarget({ role: "inventory", purpose: "inventory" })
           }
-          disabled={uploading}
+          onDelete={(photoId) => void deletePhoto(photoId)}
+          deletingPhotoId={deletingPhotoId}
+          disabled={uploading || Boolean(deletingPhotoId)}
         />
 
         <div className="space-y-3">
@@ -433,7 +472,9 @@ export function ListingHub({ listingId }: ListingHubProps) {
             empty="No listing photos yet."
             addLabel={`Add ${photoRoleLabel(nextListingRole(photos)).toLowerCase()} photo`}
             onAdd={() => setPickListingRole((open) => !open)}
-            disabled={uploading}
+            onDelete={(photoId) => void deletePhoto(photoId)}
+            deletingPhotoId={deletingPhotoId}
+            disabled={uploading || Boolean(deletingPhotoId)}
           />
           {pickListingRole ? (
             <div className="rounded-2xl border border-[var(--border)] bg-white p-4">
@@ -553,6 +594,8 @@ function PhotoGroup({
   empty,
   addLabel,
   onAdd,
+  onDelete,
+  deletingPhotoId,
   disabled,
 }: {
   title: string;
@@ -560,6 +603,8 @@ function PhotoGroup({
   empty: string;
   addLabel: string;
   onAdd: () => void;
+  onDelete: (photoId: string) => void;
+  deletingPhotoId?: string | null;
   disabled?: boolean;
 }) {
   return (
@@ -581,25 +626,39 @@ function PhotoGroup({
         <p className="text-sm text-[var(--muted)]">{empty}</p>
       ) : (
         <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
-          {photos.map((photo) => (
-            <li
-              key={photo.id}
-              className="overflow-hidden rounded-xl ring-1 ring-[var(--border)]"
-            >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={
-                  photo.processedSignedUrl ?? photo.signedUrl ?? undefined
-                }
-                alt={photoRoleLabel(photo.role)}
-                className="aspect-square w-full object-cover"
-              />
-              <p className="bg-white px-2 py-1 text-center text-sm text-[var(--muted)]">
-                {photoRoleLabel(photo.role)}
-                {isNonPostingPhotoRole(photo.role) ? " · private" : ""}
-              </p>
-            </li>
-          ))}
+          {photos.map((photo) => {
+            const deleting = deletingPhotoId === photo.id;
+            return (
+              <li
+                key={photo.id}
+                className="relative overflow-hidden rounded-xl ring-1 ring-[var(--border)]"
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={
+                    photo.processedSignedUrl ?? photo.signedUrl ?? undefined
+                  }
+                  alt={photoRoleLabel(photo.role)}
+                  className="aspect-square w-full object-cover"
+                />
+                <div className="flex items-center justify-between gap-1 bg-white px-2 py-1">
+                  <p className="min-w-0 truncate text-sm text-[var(--muted)]">
+                    {photoRoleLabel(photo.role)}
+                    {isNonPostingPhotoRole(photo.role) ? " · private" : ""}
+                  </p>
+                  <button
+                    type="button"
+                    disabled={disabled}
+                    onClick={() => onDelete(photo.id)}
+                    className="shrink-0 rounded-md px-2 py-1 text-sm font-semibold text-[var(--danger)] hover:bg-red-50 disabled:opacity-50"
+                    aria-label={`Delete ${photoRoleLabel(photo.role)} photo`}
+                  >
+                    {deleting ? "…" : "Delete"}
+                  </button>
+                </div>
+              </li>
+            );
+          })}
           <li>
             <button
               type="button"
