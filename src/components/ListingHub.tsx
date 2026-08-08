@@ -85,6 +85,7 @@ export function ListingHub({ listingId }: ListingHubProps) {
   const [error, setError] = useState<string | null>(null);
   const [processing, setProcessing] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [deletingListing, setDeletingListing] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [addTarget, setAddTarget] = useState<AddPhotoTarget | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -243,6 +244,34 @@ export function ListingHub({ listingId }: ListingHubProps) {
       setError(err instanceof Error ? err.message : "Could not save");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function deleteThisListing() {
+    const label =
+      data?.listing.title ||
+      `${PLATFORM_LABELS[(data?.listing.platform as Platform) || "mercari"]} draft`;
+    const confirmed = window.confirm(
+      `Delete “${label}”? Photos for this listing will be removed too.`
+    );
+    if (!confirmed) return;
+
+    setDeletingListing(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/listings/${listingId}`, {
+        method: "DELETE",
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(
+          typeof json.error === "string" ? json.error : "Could not delete listing"
+        );
+      }
+      router.replace("/app");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not delete listing");
+      setDeletingListing(false);
     }
   }
 
@@ -594,6 +623,16 @@ export function ListingHub({ listingId }: ListingHubProps) {
           <p className="text-base text-[var(--muted)]">Loading fields…</p>
         )}
       </section>
+
+      <div className="border-t border-[var(--border)] pt-6">
+        <BigButton
+          variant="danger"
+          disabled={deletingListing || saving || processing}
+          onClick={() => void deleteThisListing()}
+        >
+          {deletingListing ? "Deleting…" : "Delete this listing"}
+        </BigButton>
+      </div>
     </div>
   );
 }

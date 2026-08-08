@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { authorizeListingAccess } from "@/lib/listing-access";
 import {
+  deleteListing,
   getListingWithPhotos,
   getSignedPhotoUrl,
   markPosted,
@@ -121,5 +122,24 @@ export async function PATCH(request: Request, context: RouteContext) {
       { error: "Could not update listing" },
       { status: 500 }
     );
+  }
+}
+
+export async function DELETE(_request: Request, context: RouteContext) {
+  const { id } = await context.params;
+  const access = await authorizeListingAccess(id, { writeRequiresOwner: true });
+  if (access.error) return access.error;
+
+  try {
+    await deleteListing(id);
+    return NextResponse.json({ ok: true });
+  } catch (err) {
+    const message =
+      err instanceof Error ? err.message : "Could not delete listing";
+    const status = message === "Listing not found" ? 404 : 500;
+    if (status === 500) {
+      console.error("delete listing error:", err);
+    }
+    return NextResponse.json({ error: message }, { status });
   }
 }

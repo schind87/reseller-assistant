@@ -257,6 +257,35 @@ export async function updateListing(
   return data as Listing;
 }
 
+export async function deleteListing(id: string): Promise<void> {
+  const result = await getListingWithPhotos(id);
+  if (!result) {
+    throw new Error("Listing not found");
+  }
+
+  const supabase = createAdminClient();
+  const storagePaths = result.photos
+    .flatMap((photo) => [photo.storage_path, photo.processed_path])
+    .filter((path): path is string => Boolean(path));
+
+  if (result.listing.cover_processed_path) {
+    storagePaths.push(result.listing.cover_processed_path);
+  }
+
+  const uniquePaths = [...new Set(storagePaths)];
+  if (uniquePaths.length > 0) {
+    const { error: storageError } = await supabase.storage
+      .from("listing-photos")
+      .remove(uniquePaths);
+    if (storageError) {
+      console.error("deleteListing storage:", storageError.message);
+    }
+  }
+
+  const { error } = await supabase.from("listings").delete().eq("id", id);
+  if (error) throw new Error(`deleteListing: ${error.message}`);
+}
+
 const ROLE_SORT: Record<PhotoRole, number> = {
   brand_tag: 0,
   care_tag: 1,

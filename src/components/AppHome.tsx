@@ -34,6 +34,7 @@ export function AppHome({
   const [editingPrefs, setEditingPrefs] = useState(!preferencesCompleted);
   const [showProfile, setShowProfile] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [choosing, setChoosing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -59,6 +60,32 @@ export function AppHome({
   async function logout() {
     await fetch("/api/auth/logout", { method: "POST" });
     router.replace("/unlock");
+  }
+
+  async function deleteListing(listingId: string, label: string) {
+    const confirmed = window.confirm(
+      `Delete “${label}”? Photos for this listing will be removed too.`
+    );
+    if (!confirmed) return;
+
+    setDeletingId(listingId);
+    setError(null);
+    try {
+      const res = await fetch(`/api/listings/${listingId}`, {
+        method: "DELETE",
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(
+          typeof json.error === "string" ? json.error : "Could not delete listing"
+        );
+      }
+      setListings((prev) => prev.filter((listing) => listing.id !== listingId));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not delete listing");
+    } finally {
+      setDeletingId(null);
+    }
   }
 
   if (editingPrefs || !prefsDone) {
@@ -211,23 +238,39 @@ export function AppHome({
           </p>
         ) : (
           <ul className="flex flex-col gap-3">
-            {listings.map((listing) => (
-              <li key={listing.id}>
-                <Link
-                  href={`/app/listings/${listing.id}`}
-                  className="block rounded-2xl border border-[var(--border)] bg-white px-5 py-4 transition-colors hover:bg-[var(--surface-muted)]"
+            {listings.map((listing) => {
+              const label =
+                listing.title ||
+                `${PLATFORM_LABELS[listing.platform]} draft`;
+              return (
+                <li
+                  key={listing.id}
+                  className="flex items-stretch gap-2 rounded-2xl border border-[var(--border)] bg-white"
                 >
-                  <p className="text-lg font-semibold text-[var(--foreground)]">
-                    {listing.title ||
-                      `${PLATFORM_LABELS[listing.platform]} draft`}
-                  </p>
-                  <p className="mt-1 text-base capitalize text-[var(--muted)]">
-                    {PLATFORM_LABELS[listing.platform]} ·{" "}
-                    {listing.status.replaceAll("_", " ")}
-                  </p>
-                </Link>
-              </li>
-            ))}
+                  <Link
+                    href={`/app/listings/${listing.id}`}
+                    className="min-w-0 flex-1 px-5 py-4 transition-colors hover:bg-[var(--surface-muted)]"
+                  >
+                    <p className="text-lg font-semibold text-[var(--foreground)]">
+                      {label}
+                    </p>
+                    <p className="mt-1 text-base capitalize text-[var(--muted)]">
+                      {PLATFORM_LABELS[listing.platform]} ·{" "}
+                      {listing.status.replaceAll("_", " ")}
+                    </p>
+                  </Link>
+                  <button
+                    type="button"
+                    disabled={deletingId === listing.id}
+                    onClick={() => void deleteListing(listing.id, label)}
+                    className="shrink-0 px-4 text-base font-semibold text-[var(--danger)] hover:bg-red-50 disabled:opacity-50"
+                    aria-label={`Delete ${label}`}
+                  >
+                    {deletingId === listing.id ? "…" : "Delete"}
+                  </button>
+                </li>
+              );
+            })}
           </ul>
         )}
       </section>
