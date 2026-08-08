@@ -178,7 +178,7 @@ export function PhotoCoach({ listing, initialPhotos }: PhotoCoachProps) {
           Photos complete
         </h1>
         <p className="text-lg text-[var(--muted)]">
-          Great work. Review the draft on this screen, or take more photos.
+          Great work. Edit the listing fields on the hub, or take more photos.
         </p>
         <BigButton onClick={() => router.push(`/app/listings/${listing.id}`)}>
           Back to listing hub

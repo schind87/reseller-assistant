@@ -68,7 +68,7 @@ export function ListingSchemaForm({
 
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-5">
-      <p className="rounded-xl border border-[var(--border)] bg-white px-4 py-3 text-base text-[var(--muted)]">
+      <p className="rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] px-4 py-3 text-base text-[var(--muted)]">
         Fields mirror the {schema.platform === "mercari" ? "Mercari" : "Poshmark"}{" "}
         sell form
         {schema.source === "extension" && schema.syncedAt

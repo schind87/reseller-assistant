@@ -253,8 +253,8 @@ export default function PostPage() {
         >
           {listing.status === "posted" ? "Already posted" : "Mark as posted"}
         </BigButton>
-        <Link href={`/app/listings/${listing.id}/review`} className="block">
-          <BigButton variant="secondary">Edit draft</BigButton>
+        <Link href={`/app/listings/${listing.id}`} className="block">
+          <BigButton variant="secondary">Edit listing fields</BigButton>
         </Link>
       </div>
     </main>

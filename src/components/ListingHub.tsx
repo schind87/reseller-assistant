@@ -1,23 +1,36 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type FormEvent,
+} from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { BigButton } from "@/components/BigButton";
 import { CameraCapture } from "@/components/CameraCapture";
+import { ListingSchemaForm } from "@/components/ListingSchemaForm";
 import { QrPanel } from "@/components/QrPanel";
+import {
+  getSeedListingSchema,
+  type PlatformListingSchema,
+} from "@/lib/listing-schemas";
 import {
   PLATFORM_LABELS,
   PLATFORM_PHOTO_ASPECT,
   photoRoleLabel,
 } from "@/lib/platforms";
 import type {
-  IdentifiedAttrs,
   Listing,
   ListingPhotoWithUrl,
   PhotoRole,
   Platform,
+  StructuredFields,
 } from "@/lib/types";
 import {
+  emptyStructuredFields,
   isIdentifyPhotoRole,
   isNonPostingPhotoRole,
   isPostingPhotoRole,
@@ -53,27 +66,81 @@ function nextListingRole(photos: ListingPhotoWithUrl[]): PhotoRole {
   return "detail";
 }
 
+function applyListingToDraft(listing: Listing) {
+  return {
+    title: listing.title ?? "",
+    description: listing.description ?? "",
+    price: listing.price != null ? String(listing.price) : "",
+    fields: {
+      ...emptyStructuredFields(),
+      ...listing.structured_fields,
+    } as StructuredFields,
+  };
+}
+
 export function ListingHub({ listingId }: ListingHubProps) {
+  const router = useRouter();
   const [data, setData] = useState<ListingPayload | null>(null);
   const [joinUrl, setJoinUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [processing, setProcessing] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [addTarget, setAddTarget] = useState<AddPhotoTarget | null>(null);
   const [uploading, setUploading] = useState(false);
   const [pickListingRole, setPickListingRole] = useState(false);
 
-  const load = useCallback(async () => {
-    try {
-      const res = await fetch(`/api/listings/${listingId}`);
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error ?? "Could not load listing");
-      setData({ listing: json.listing, photos: json.photos });
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not load listing");
-    }
-  }, [listingId]);
+  const [schema, setSchema] = useState<PlatformListingSchema | null>(null);
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [price, setPrice] = useState("");
+  const [fields, setFields] = useState<StructuredFields>(emptyStructuredFields());
+  const [draftDirty, setDraftDirty] = useState(false);
+  const draftHydrated = useRef(false);
+  const schemaLoadedFor = useRef<string | null>(null);
+
+  const syncDraftFromListing = useCallback((listing: Listing) => {
+    const draft = applyListingToDraft(listing);
+    setTitle(draft.title);
+    setDescription(draft.description);
+    setPrice(draft.price);
+    setFields(draft.fields);
+    setDraftDirty(false);
+    draftHydrated.current = true;
+  }, []);
+
+  const load = useCallback(
+    async (opts?: { syncDraft?: boolean }) => {
+      try {
+        const res = await fetch(`/api/listings/${listingId}`);
+        const json = await res.json();
+        if (!res.ok) throw new Error(json.error ?? "Could not load listing");
+        const listing = json.listing as Listing;
+        const photos = json.photos as ListingPhotoWithUrl[];
+        setData({ listing, photos });
+        setError(null);
+
+        if (opts?.syncDraft || !draftHydrated.current) {
+          syncDraftFromListing(listing);
+        }
+
+        const platform = listing.platform as Platform;
+        if (schemaLoadedFor.current !== platform) {
+          schemaLoadedFor.current = platform;
+          const schemaRes = await fetch(`/api/platforms/${platform}/schema`);
+          const schemaJson = await schemaRes.json();
+          setSchema(
+            schemaRes.ok && schemaJson.schema
+              ? (schemaJson.schema as PlatformListingSchema)
+              : getSeedListingSchema(platform)
+          );
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Could not load listing");
+      }
+    },
+    [listingId, syncDraftFromListing]
+  );
 
   const ensureJoinToken = useCallback(async () => {
     try {
@@ -91,16 +158,21 @@ export function ListingHub({ listingId }: ListingHubProps) {
   }, [listingId]);
 
   useEffect(() => {
+    draftHydrated.current = false;
+    schemaLoadedFor.current = null;
+  }, [listingId]);
+
+  useEffect(() => {
     let cancelled = false;
 
     const boot = window.setTimeout(() => {
       if (cancelled) return;
-      void load();
+      void load({ syncDraft: true });
       void ensureJoinToken();
     }, 0);
 
     const timer = window.setInterval(() => {
-      if (!cancelled) void load();
+      if (!cancelled) void load({ syncDraft: false });
     }, 2000);
 
     return () => {
@@ -134,11 +206,42 @@ export function ListingHub({ listingId }: ListingHubProps) {
       setAddTarget(null);
       setPickListingRole(false);
       setStatusMessage(`Added ${photoRoleLabel(role)} photo.`);
-      await load();
+      await load({ syncDraft: false });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Upload failed");
     } finally {
       setUploading(false);
+    }
+  }
+
+  async function saveDraft(e?: FormEvent) {
+    e?.preventDefault();
+    if (!data) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/listings/${listingId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title,
+          description,
+          price: price === "" ? null : Number(price),
+          structured_fields: fields,
+          status: "ready",
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "Could not save");
+      setData((prev) =>
+        prev ? { ...prev, listing: json.listing as Listing } : prev
+      );
+      setDraftDirty(false);
+      setStatusMessage("Listing fields saved.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not save");
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -161,12 +264,12 @@ export function ListingHub({ listingId }: ListingHubProps) {
           typeof json.error === "string" ? json.error : "Processing failed"
         );
       }
-      await load();
+      await load({ syncDraft: true });
       setStatusMessage(
         json.degraded
           ? json.draftMessage ??
-              "AI finished with a simple template — review and edit the draft."
-          : "AI draft ready — open Review draft to edit."
+              "AI filled a simple template — edit the fields below."
+          : "AI filled the fields below — edit anything that looks off."
       );
     } catch (err) {
       setStatusMessage(null);
@@ -197,7 +300,6 @@ export function ListingHub({ listingId }: ListingHubProps) {
 
   const { listing, photos } = data;
   const platform = listing.platform as Platform;
-  const attrs = listing.identified_attrs as IdentifiedAttrs | null;
   const aspect = PLATFORM_PHOTO_ASPECT[platform];
   const identifyPhotos = photos.filter((p) => isIdentifyPhotoRole(p.role));
   const inventoryPhotos = photos.filter((p) => p.role === "inventory");
@@ -235,8 +337,8 @@ export function ListingHub({ listingId }: ListingHubProps) {
             Listing hub
           </h1>
           <p className="mt-2 text-lg text-[var(--muted)]">
-            Pair your phone with the QR code, add photos here or on the phone,
-            then finish the clothing draft.
+            Add photos, run AI if you want, then edit the {PLATFORM_LABELS[platform]}{" "}
+            fields here before posting.
           </p>
         </div>
         <Link
@@ -273,36 +375,25 @@ export function ListingHub({ listingId }: ListingHubProps) {
           </div>
         )}
 
-        <section className="rounded-2xl border border-[var(--border)] bg-white p-6">
+        <section className="flex flex-col gap-3 rounded-2xl border border-[var(--border)] bg-white p-6">
           <h2 className="font-[family-name:var(--font-brand)] text-2xl">
-            What we know so far
+            Finish with AI
           </h2>
-          {attrs ? (
-            <dl className="mt-4 grid gap-3 text-base sm:grid-cols-2">
-              <Attr label="Brand" value={attrs.brand} />
-              <Attr label="Size" value={attrs.size} />
-              <Attr label="Color" value={attrs.color} />
-              <Attr label="Garment type" value={attrs.category} />
-              <Attr label="Fabric" value={attrs.material} />
-              <Attr label="Condition" value={attrs.condition} />
-              <div className="sm:col-span-2">
-                <dt className="text-sm text-[var(--muted)]">Notes</dt>
-                <dd className="mt-1 text-[var(--foreground)]">
-                  {attrs.notes || "—"}
-                  {typeof attrs.confidence === "number" ? (
-                    <span className="ml-2 text-[var(--muted)]">
-                      ({Math.round(attrs.confidence * 100)}% confidence)
-                    </span>
-                  ) : null}
-                </dd>
-              </div>
-            </dl>
-          ) : (
-            <p className="mt-4 text-base text-[var(--muted)]">
-              Add identification tag photos below to start identifying this
-              garment.
+          <p className="text-base text-[var(--muted)]">
+            Fills the editable fields below from your photos. You can change
+            anything afterward.
+          </p>
+          <BigButton
+            disabled={processing || photos.length === 0}
+            onClick={() => void runProcess()}
+          >
+            {processing ? "Working…" : "Finish with AI"}
+          </BigButton>
+          {photos.length === 0 ? (
+            <p className="text-sm text-[var(--muted)]">
+              Needs at least one photo first.
             </p>
-          )}
+          ) : null}
         </section>
       </div>
 
@@ -320,9 +411,7 @@ export function ListingHub({ listingId }: ListingHubProps) {
           photos={identifyPhotos}
           empty="No tag photos yet."
           addLabel="Add identification photo"
-          onAdd={() =>
-            setAddTarget({ role: "id_tag", purpose: "identify" })
-          }
+          onAdd={() => setAddTarget({ role: "id_tag", purpose: "identify" })}
           disabled={uploading}
         />
 
@@ -382,47 +471,72 @@ export function ListingHub({ listingId }: ListingHubProps) {
             </div>
           ) : null}
         </div>
+
+        <Link href={`/app/listings/${listingId}/photos`} className="block max-w-sm">
+          <BigButton variant="secondary">Guided photo coach</BigButton>
+        </Link>
       </section>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <Link
-          href={`/app/listings/${listingId}/photos`}
-          className="block"
-        >
-          <BigButton>Guided photo coach</BigButton>
-        </Link>
-        <div className="flex flex-col gap-2">
-          <BigButton
-            variant="secondary"
-            disabled={processing}
-            onClick={() => void runProcess()}
-          >
-            {processing ? "Working…" : "Finish with AI"}
-          </BigButton>
-          {photos.length === 0 ? (
-            <p className="text-sm text-[var(--muted)]">
-              Needs at least one photo first.
-            </p>
-          ) : null}
+      <section className="flex flex-col gap-4 rounded-2xl border border-[var(--border)] bg-white p-6">
+        <div>
+          <h2 className="font-[family-name:var(--font-brand)] text-2xl">
+            {PLATFORM_LABELS[platform]} listing fields
+          </h2>
+          <p className="mt-2 text-base text-[var(--muted)]">
+            Edit these directly — same fields you will enter on{" "}
+            {PLATFORM_LABELS[platform]}.
+          </p>
         </div>
-        <Link href={`/app/listings/${listingId}/review`} className="block">
-          <BigButton variant="secondary">Review draft</BigButton>
-        </Link>
-        <Link href={`/app/listings/${listingId}/post`} className="block">
-          <BigButton variant="secondary">Post checklist</BigButton>
-        </Link>
-      </div>
-    </div>
-  );
-}
 
-function Attr({ label, value }: { label: string; value: string | null }) {
-  return (
-    <div>
-      <dt className="text-sm text-[var(--muted)]">{label}</dt>
-      <dd className="mt-1 font-medium text-[var(--foreground)]">
-        {value || "—"}
-      </dd>
+        {schema ? (
+          <ListingSchemaForm
+            schema={schema}
+            title={title}
+            description={description}
+            price={price}
+            fields={fields}
+            onTitleChange={(value) => {
+              setTitle(value);
+              setDraftDirty(true);
+            }}
+            onDescriptionChange={(value) => {
+              setDescription(value);
+              setDraftDirty(true);
+            }}
+            onPriceChange={(value) => {
+              setPrice(value);
+              setDraftDirty(true);
+            }}
+            onFieldsChange={(next) => {
+              setFields(next);
+              setDraftDirty(true);
+            }}
+            onSubmit={(e) => void saveDraft(e)}
+            footer={
+              <div className="flex flex-col gap-3 pt-2 sm:flex-row">
+                <BigButton type="submit" disabled={saving || processing}>
+                  {saving ? "Saving…" : draftDirty ? "Save changes" : "Saved"}
+                </BigButton>
+                <BigButton
+                  type="button"
+                  variant="secondary"
+                  disabled={saving}
+                  onClick={() => {
+                    void (async () => {
+                      if (draftDirty) await saveDraft();
+                      router.push(`/app/listings/${listingId}/post`);
+                    })();
+                  }}
+                >
+                  Post checklist
+                </BigButton>
+              </div>
+            }
+          />
+        ) : (
+          <p className="text-base text-[var(--muted)]">Loading fields…</p>
+        )}
+      </section>
     </div>
   );
 }
