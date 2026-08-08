@@ -400,8 +400,8 @@ export function ListingHub({ listingId }: ListingHubProps) {
         {joinUrl ? (
           <QrPanel
             value={joinUrl}
-            title="Phone camera"
-            hint="Scan to open the clothing photo coach on your phone for this piece."
+            title="Phone photo coach"
+            hint="Scan with your phone to open the guided clothing photo steps. Keep this computer on the listing hub."
             code={listing.join_code}
           />
         ) : (
@@ -522,9 +522,10 @@ export function ListingHub({ listingId }: ListingHubProps) {
           ) : null}
         </div>
 
-        <Link href={`/app/listings/${listingId}/photos`} className="block max-w-sm">
-          <BigButton variant="secondary">Guided photo coach</BigButton>
-        </Link>
+        <p className="text-base text-[var(--muted)]">
+          For the step-by-step photo coach, scan the phone QR above. On this
+          computer, add or delete photos in the sections here.
+        </p>
         <a
           href={`/api/listings/${listingId}/photos/zip`}
           className="block max-w-sm"
