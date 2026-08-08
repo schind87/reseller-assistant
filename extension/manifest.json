@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Reseller Assistant",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Autofill Mercari and Poshmark listing pages from Reseller Assistant.",
   "permissions": ["storage", "activeTab", "sidePanel", "tabs"],
   "host_permissions": [
@@ -12,7 +12,9 @@
     "https://reseller.mvfeed.us/*",
     "https://reseller-assistant.vercel.app/*",
     "https://*.vercel.app/*",
+    "https://*.supabase.co/*",
     "https://*.mercari.com/*",
+    "https://www.mercari.com/*",
     "https://poshmark.com/*",
     "https://*.poshmark.com/*"
   ],
@@ -41,16 +43,10 @@
     },
     {
       "matches": [
-        "https://*.mercari.com/*/sell*",
-        "https://*.mercari.com/*/create*",
-        "https://*.mercari.com/*/list*",
-        "https://*.mercari.com/sell*",
-        "https://poshmark.com/*/create*",
-        "https://poshmark.com/*/list*",
-        "https://poshmark.com/*/sell*",
-        "https://*.poshmark.com/*/create*",
-        "https://*.poshmark.com/*/list*",
-        "https://*.poshmark.com/*/sell*"
+        "https://*.mercari.com/*",
+        "https://www.mercari.com/*",
+        "https://poshmark.com/*",
+        "https://*.poshmark.com/*"
       ],
       "js": ["content.js"],
       "run_at": "document_idle"

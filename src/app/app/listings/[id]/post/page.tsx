@@ -182,6 +182,40 @@ export default function PostPage() {
         <BigButton>Open {PLATFORM_LABELS[platform]} sell page</BigButton>
       </a>
 
+      <section className="flex flex-col gap-3 rounded-2xl border border-[var(--border)] bg-white p-5">
+        <h2 className="font-[family-name:var(--font-brand)] text-2xl">
+          Upload photos
+        </h2>
+        <ol className="list-decimal space-y-2 pl-5 text-base text-[var(--muted)]">
+          <li>
+            Install/open the Reseller Assistant Chrome extension and pair this
+            listing (automatic on this page when loaded).
+          </li>
+          <li>
+            On the {PLATFORM_LABELS[platform]} sell page, open the photo upload
+            step.
+          </li>
+          <li>
+            In the extension side panel, tap{" "}
+            <span className="font-semibold text-[var(--foreground)]">
+              Attach photos to this page
+            </span>
+            .
+          </li>
+        </ol>
+        <p className="text-base text-[var(--muted)]">
+          If attach fails, download the ZIP and choose those files in the
+          marketplace picker (cover is <code>01-cover</code>). Identification
+          and inventory photos are excluded.
+        </p>
+        <a
+          href={`/api/listings/${listing.id}/photos/zip`}
+          className="block"
+        >
+          <BigButton variant="secondary">Download listing photos ZIP</BigButton>
+        </a>
+      </section>
+
       <section className="flex flex-col gap-3">
         <h2 className="font-[family-name:var(--font-brand)] text-2xl">
           Checklist

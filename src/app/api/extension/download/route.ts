@@ -8,6 +8,7 @@ export const runtime = "nodejs";
 const EXTENSION_FILES = [
   "manifest.json",
   "background.js",
+  "bridge.js",
   "content.js",
   "sidepanel.html",
   "sidepanel.css",

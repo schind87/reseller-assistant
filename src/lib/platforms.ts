@@ -163,7 +163,7 @@ export const POSTING_CHECKLIST: Record<Platform, ChecklistStep[]> = {
     {
       id: "photos",
       label: "Add listing photos in order",
-      hint: "Cover first, then front, back, details, and flaws. Skip identification and inventory photos.",
+      hint: "Best: open the sell page with the Chrome extension and tap Attach photos. Fallback: download the photos ZIP below and choose those files on Mercari.",
     },
     {
       id: "title",
@@ -200,12 +200,12 @@ export const POSTING_CHECKLIST: Record<Platform, ChecklistStep[]> = {
     {
       id: "cover",
       label: "Upload the cover photo first",
-      hint: "Poshmark puts the most weight on the cover shot.",
+      hint: "Best: Chrome extension → Attach photos (cover is first). Fallback: use the photos ZIP — file 01-cover.",
     },
     {
       id: "photos",
       label: "Add remaining listing photos",
-      hint: "Front, back, details, then flaws if any. Do not upload identification or inventory photos.",
+      hint: "Extension attaches the full set when the page allows multiple files. Otherwise upload 02-front, 03-back, etc. from the ZIP.",
     },
     {
       id: "title",

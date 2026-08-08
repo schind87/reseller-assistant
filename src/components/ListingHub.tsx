@@ -475,6 +475,12 @@ export function ListingHub({ listingId }: ListingHubProps) {
         <Link href={`/app/listings/${listingId}/photos`} className="block max-w-sm">
           <BigButton variant="secondary">Guided photo coach</BigButton>
         </Link>
+        <a
+          href={`/api/listings/${listingId}/photos/zip`}
+          className="block max-w-sm"
+        >
+          <BigButton variant="secondary">Download listing photos ZIP</BigButton>
+        </a>
       </section>
 
       <section className="flex flex-col gap-4 rounded-2xl border border-[var(--border)] bg-white p-6">

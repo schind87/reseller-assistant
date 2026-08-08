@@ -35,6 +35,7 @@ const els = {
   fillTitleBtn: document.getElementById("fill-title-btn"),
   fillDescriptionBtn: document.getElementById("fill-description-btn"),
   fillAllBtn: document.getElementById("fill-all-btn"),
+  attachPhotosBtn: document.getElementById("attach-photos-btn"),
   syncSchemaBtn: document.getElementById("sync-schema-btn"),
   copyPhotosBtn: document.getElementById("copy-photos-btn"),
   nextStepBtn: document.getElementById("next-step-btn"),
@@ -550,19 +551,122 @@ async function handleSyncSchema() {
   }
 }
 
-async function handleCopyPhotos() {
+async function listingPhotoPayloads() {
   const photos = listing?.photos || listing?.images || listing?.photoUrls || [];
-  const links = Array.isArray(photos)
-    ? photos
-        .map((item) => {
-          if (typeof item === "string") return item;
-          if (item && typeof item === "object") {
-            return item.url || item.src || item.downloadUrl || "";
-          }
-          return "";
-        })
-        .filter(Boolean)
-    : [];
+  if (!Array.isArray(photos) || !photos.length) return [];
+
+  const roleOrder = ["cover", "front", "back", "detail", "flaw"];
+  const normalized = photos
+    .map((item, index) => {
+      if (typeof item === "string") {
+        return { url: item, role: "detail", sortOrder: index };
+      }
+      if (item && typeof item === "object") {
+        return {
+          url: item.url || item.src || item.downloadUrl || item.processedUrl || "",
+          role: item.role || "detail",
+          sortOrder:
+            typeof item.sortOrder === "number"
+              ? item.sortOrder
+              : typeof item.sort_order === "number"
+                ? item.sort_order
+                : index,
+        };
+      }
+      return null;
+    })
+    .filter((item) => item && item.url);
+
+  normalized.sort((a, b) => {
+    const ai = roleOrder.indexOf(a.role);
+    const bi = roleOrder.indexOf(b.role);
+    const aRank = ai === -1 ? 99 : ai;
+    const bRank = bi === -1 ? 99 : bi;
+    if (aRank !== bRank) return aRank - bRank;
+    return a.sortOrder - b.sortOrder;
+  });
+
+  return normalized;
+}
+
+async function blobToBase64(blob) {
+  const buffer = await blob.arrayBuffer();
+  const bytes = new Uint8Array(buffer);
+  let binary = "";
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
+  }
+  return btoa(binary);
+}
+
+async function handleAttachPhotos() {
+  if (!pairing) {
+    setStatus(els.actionStatus, "Pair a listing first.", "error");
+    return;
+  }
+
+  try {
+    setStatus(els.actionStatus, "Downloading listing photos…");
+    const photoMeta = await listingPhotoPayloads();
+    if (!photoMeta.length) {
+      throw new Error("No listing photos on this draft yet.");
+    }
+
+    const encoded = [];
+    for (let i = 0; i < photoMeta.length; i += 1) {
+      const meta = photoMeta[i];
+      setStatus(
+        els.actionStatus,
+        `Downloading photo ${i + 1} of ${photoMeta.length}…`
+      );
+      const res = await fetch(meta.url);
+      if (!res.ok) {
+        throw new Error(`Could not download photo ${i + 1} (${res.status})`);
+      }
+      const blob = await res.blob();
+      const contentType = blob.type || "image/jpeg";
+      const ext = contentType.includes("png")
+        ? "png"
+        : contentType.includes("webp")
+          ? "webp"
+          : "jpg";
+      const role = String(meta.role || "photo").replace(/[^a-z0-9_-]/gi, "");
+      encoded.push({
+        filename: `${String(i + 1).padStart(2, "0")}-${role}.${ext}`,
+        contentType,
+        base64: await blobToBase64(blob),
+      });
+    }
+
+    setStatus(els.actionStatus, "Attaching photos to the sell page…");
+    const result = await sendToActiveTab({
+      type: "attachPhotos",
+      photos: encoded,
+    });
+
+    if (!result?.ok) {
+      throw new Error(result?.error || "Could not attach photos on this page.");
+    }
+
+    let message = `Attached ${result.attached} photo${result.attached === 1 ? "" : "s"} to the sell form.`;
+    if (result.truncated) {
+      message +=
+        " This page only accepts one file at a time — attach the rest manually or use Download photos ZIP from the web app.";
+    }
+    setStatus(els.actionStatus, message, "ok");
+  } catch (error) {
+    setStatus(
+      els.actionStatus,
+      error instanceof Error ? error.message : "Attach failed",
+      "error"
+    );
+  }
+}
+
+async function handleCopyPhotos() {
+  const photoMeta = await listingPhotoPayloads();
+  const links = photoMeta.map((item) => item.url).filter(Boolean);
 
   if (!links.length) {
     setStatus(els.actionStatus, "No photo links on this listing.", "error");
@@ -573,7 +677,7 @@ async function handleCopyPhotos() {
     await navigator.clipboard.writeText(links.join("\n"));
     setStatus(
       els.actionStatus,
-      `Copied ${links.length} photo link${links.length === 1 ? "" : "s"}. Upload them yourself.`,
+      `Copied ${links.length} photo link${links.length === 1 ? "" : "s"}. Prefer Attach photos when the sell page is open.`,
       "ok"
     );
   } catch {
@@ -600,7 +704,7 @@ async function handleNextStep() {
   if (step.key === "photos") {
     setStatus(
       els.actionStatus,
-      "Use Copy photo download links, then upload photos on the site yourself.",
+      "Open the marketplace photo step, then tap Attach photos to this page.",
       "ok"
     );
     return;
@@ -619,6 +723,7 @@ els.unpairBtn.addEventListener("click", clearPairing);
 els.fillTitleBtn.addEventListener("click", handleFillTitle);
 els.fillDescriptionBtn.addEventListener("click", handleFillDescription);
 els.fillAllBtn.addEventListener("click", handleFillAll);
+els.attachPhotosBtn.addEventListener("click", handleAttachPhotos);
 els.syncSchemaBtn.addEventListener("click", handleSyncSchema);
 els.copyPhotosBtn.addEventListener("click", handleCopyPhotos);
 els.nextStepBtn.addEventListener("click", handleNextStep);

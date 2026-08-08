@@ -40,7 +40,20 @@ Pairing is saved in `chrome.storage.local` as `{ appUrl, token, listingId }`.
 
 1. Open a Mercari or Poshmark **sell / create / list** page
 2. Open the Reseller Assistant side panel
-3. Use Fill title / description / all fields, Sync form fields, Copy photo links, Next step
+3. Use:
+   - **Fill title / description / all text fields**
+   - **Attach photos to this page** (downloads your listing photos and drops them into the marketplace file picker)
+   - **Sync form fields**
+   - **Copy photo download links** (fallback)
+   - **Next step** checklist
+
+### Photo upload (recommended)
+
+1. Pair the extension with a listing that has listing photos
+2. Open the marketplace sell form’s photo step
+3. Click **Attach photos to this page**
+
+If the site only accepts one file at a time, attach what you can, then use **Download listing photos ZIP** from the web Post checklist for the rest.
 
 ### Publish warning
 
@@ -53,7 +66,7 @@ Pairing is saved in `chrome.storage.local` as `{ appUrl, token, listingId }`.
 | `manifest.json` | MV3 manifest, permissions, content scripts |
 | `background.js` | Side panel, apply pairing, badge, reload |
 | `bridge.js` | Receives pairing from the web app |
-| `sidepanel.html` / `sidepanel.css` / `sidepanel.js` | Pairing UI + listing coach + reload |
-| `content.js` | Field fill / highlight on marketplace pages |
+| `sidepanel.html` / `sidepanel.css` / `sidepanel.js` | Pairing UI + listing coach + photo attach |
+| `content.js` | Field fill, photo attach, highlight on marketplace pages |
 
 Source of truth is `extension/`. Load Chrome from **`extension-live/`**.
