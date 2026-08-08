@@ -6,12 +6,24 @@ import { BigButton } from "@/components/BigButton";
 import { CameraCapture } from "@/components/CameraCapture";
 import { StepProgress } from "@/components/StepProgress";
 import {
+  canPickDevicePhotoFolder,
+  DEVICE_PHOTO_FOLDER_NAME,
+  getDevicePhotoFolderStatus,
+  pickDevicePhotoFolder,
+  saveCapturedPhotoToDevice,
+} from "@/lib/device-photo-folder";
+import {
   getPhotoSteps,
   PLATFORM_LABELS,
   PLATFORM_PHOTO_ASPECT,
   photoRoleLabel,
 } from "@/lib/platforms";
-import type { Listing, ListingPhotoWithUrl, PhotoRole, Platform } from "@/lib/types";
+import type {
+  Listing,
+  ListingPhotoWithUrl,
+  PhotoRole,
+  Platform,
+} from "@/lib/types";
 
 type PhotoCoachProps = {
   listing: Listing;
@@ -44,7 +56,12 @@ export function PhotoCoach({ listing, initialPhotos }: PhotoCoachProps) {
   const [preview, setPreview] = useState<string | null>(null);
   const [cameraOpen, setCameraOpen] = useState(false);
   const [joinOnly, setJoinOnly] = useState(false);
+  const [deviceFolderReady, setDeviceFolderReady] = useState(false);
+  const [deviceFolderName, setDeviceFolderName] = useState<string | null>(null);
+  const [deviceSaveNote, setDeviceSaveNote] = useState<string | null>(null);
+  const [pickingFolder, setPickingFolder] = useState(false);
   const phoneMode = searchParams.get("phone") === "1" || joinOnly;
+  const folderPickerAvailable = canPickDevicePhotoFolder();
 
   useEffect(() => {
     let cancelled = false;
@@ -61,6 +78,23 @@ export function PhotoCoach({ listing, initialPhotos }: PhotoCoachProps) {
     };
   }, []);
 
+  useEffect(() => {
+    if (!phoneMode) return;
+    let cancelled = false;
+    void getDevicePhotoFolderStatus()
+      .then((status) => {
+        if (cancelled) return;
+        setDeviceFolderReady(status.ready);
+        setDeviceFolderName(status.name);
+      })
+      .catch(() => {
+        /* ignore */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [phoneMode]);
+
   const done = stepIndex >= steps.length;
   const step = done ? null : steps[stepIndex]!;
   const currentRolePhotos = step
@@ -76,10 +110,56 @@ export function PhotoCoach({ listing, initialPhotos }: PhotoCoachProps) {
       })
     : [];
 
-  async function uploadBlob(blob: Blob, role: PhotoRole) {
+  async function chooseDeviceFolder() {
+    setPickingFolder(true);
+    setError(null);
+    try {
+      const name = await pickDevicePhotoFolder();
+      setDeviceFolderReady(true);
+      setDeviceFolderName(name);
+      setDeviceSaveNote(`Photo copies will go in ${name} on this phone.`);
+    } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") {
+        return;
+      }
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Could not set a save folder on this phone"
+      );
+    } finally {
+      setPickingFolder(false);
+    }
+  }
+
+  async function uploadBlob(
+    blob: Blob,
+    role: PhotoRole,
+    opts?: { saveToDevice?: boolean }
+  ) {
     setBusy(true);
     setError(null);
     try {
+      if (opts?.saveToDevice) {
+        try {
+          const mode = await saveCapturedPhotoToDevice(blob, {
+            listingId: listing.id,
+            role,
+            sequence: photos.filter((p) => p.role === role).length + 1,
+          });
+          setDeviceSaveNote(
+            mode === "folder"
+              ? `Saved a copy to ${deviceFolderName || DEVICE_PHOTO_FOLDER_NAME} on this phone.`
+              : `Saved a copy to Downloads (look for ${DEVICE_PHOTO_FOLDER_NAME}-…).`
+          );
+        } catch (saveErr) {
+          console.warn("local photo save failed:", saveErr);
+          setDeviceSaveNote(
+            "Uploaded to the listing, but could not save a local copy on this phone."
+          );
+        }
+      }
+
       const body = new FormData();
       body.append(
         "photo",
@@ -134,6 +214,51 @@ export function PhotoCoach({ listing, initialPhotos }: PhotoCoachProps) {
     setStepIndex(0);
   }
 
+  const deviceSaveBanner =
+    phoneMode ? (
+      <div className="rounded-xl border border-[var(--border)] bg-white px-4 py-3 text-sm leading-relaxed text-[var(--muted)]">
+        <p className="font-semibold text-[var(--foreground)]">
+          Save copies on this phone
+        </p>
+        {deviceFolderReady ? (
+          <p className="mt-1">
+            Camera shots also go into{" "}
+            <span className="font-semibold text-[var(--foreground)]">
+              {deviceFolderName || DEVICE_PHOTO_FOLDER_NAME}
+            </span>
+            .
+          </p>
+        ) : folderPickerAvailable ? (
+          <p className="mt-1">
+            Choose a folder once (we create {DEVICE_PHOTO_FOLDER_NAME} inside
+            it). Until then, copies download to Files/Downloads.
+          </p>
+        ) : (
+          <p className="mt-1">
+            Each camera shot is also downloaded to this phone — look for files
+            named {DEVICE_PHOTO_FOLDER_NAME}-… in Files or Downloads.
+          </p>
+        )}
+        {folderPickerAvailable ? (
+          <button
+            type="button"
+            disabled={pickingFolder}
+            onClick={() => void chooseDeviceFolder()}
+            className="mt-3 text-base font-semibold text-[var(--accent)] disabled:opacity-50"
+          >
+            {pickingFolder
+              ? "Opening folder picker…"
+              : deviceFolderReady
+                ? "Change save folder"
+                : "Choose save folder"}
+          </button>
+        ) : null}
+        {deviceSaveNote ? (
+          <p className="mt-2 text-[var(--foreground)]">{deviceSaveNote}</p>
+        ) : null}
+      </div>
+    ) : null;
+
   if (cameraOpen && step) {
     return (
       <CameraCapture
@@ -147,8 +272,12 @@ export function PhotoCoach({ listing, initialPhotos }: PhotoCoachProps) {
               : undefined
         }
         onCancel={() => setCameraOpen(false)}
-        onCapture={(blob) => void uploadBlob(blob, step.role)}
-        onFallbackFile={(file) => void uploadBlob(file, step.role)}
+        onCapture={(blob) =>
+          void uploadBlob(blob, step.role, { saveToDevice: phoneMode })
+        }
+        onFallbackFile={(file) =>
+          void uploadBlob(file, step.role, { saveToDevice: false })
+        }
       />
     );
   }
@@ -167,6 +296,7 @@ export function PhotoCoach({ listing, initialPhotos }: PhotoCoachProps) {
           <p className="text-base text-[var(--muted)]">
             {photos.length} photo{photos.length === 1 ? "" : "s"} uploaded.
           </p>
+          {deviceSaveBanner}
           <BigButton onClick={takeMorePhotos}>Take more photos</BigButton>
         </div>
       );
@@ -214,6 +344,8 @@ export function PhotoCoach({ listing, initialPhotos }: PhotoCoachProps) {
       >
         {purposeBanner}
       </div>
+
+      {deviceSaveBanner}
 
       <div>
         <p className="mb-1 text-sm font-semibold uppercase tracking-wide text-[var(--accent)]">
@@ -295,11 +427,7 @@ export function PhotoCoach({ listing, initialPhotos }: PhotoCoachProps) {
         ) : null}
 
         {step.optional ? (
-          <BigButton
-            variant="secondary"
-            disabled={busy}
-            onClick={goNext}
-          >
+          <BigButton variant="secondary" disabled={busy} onClick={goNext}>
             {currentRolePhotos.length > 0
               ? "Continue"
               : step.purpose === "identify"
