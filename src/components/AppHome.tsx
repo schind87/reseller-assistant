@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { BigButton } from "@/components/BigButton";
@@ -32,33 +32,10 @@ export function AppHome({
   const [prefsDone, setPrefsDone] = useState(preferencesCompleted);
   const [preferences, setPreferences] = useState(initialPreferences);
   const [editingPrefs, setEditingPrefs] = useState(!preferencesCompleted);
-  const [profileOpen, setProfileOpen] = useState(false);
-  const profileMenuRef = useRef<HTMLDivElement>(null);
+  const [showProfile, setShowProfile] = useState(false);
   const [busy, setBusy] = useState(false);
   const [choosing, setChoosing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!profileOpen) return;
-
-    function onPointerDown(event: MouseEvent) {
-      const root = profileMenuRef.current;
-      if (root && !root.contains(event.target as Node)) {
-        setProfileOpen(false);
-      }
-    }
-
-    function onKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") setProfileOpen(false);
-    }
-
-    document.addEventListener("mousedown", onPointerDown);
-    document.addEventListener("keydown", onKeyDown);
-    return () => {
-      document.removeEventListener("mousedown", onPointerDown);
-      document.removeEventListener("keydown", onKeyDown);
-    };
-  }, [profileOpen]);
 
   async function startListing(platform: Platform) {
     setBusy(true);
@@ -90,19 +67,76 @@ export function AppHome({
         initial={preferences}
         editing={prefsDone}
         onSaved={(prefs) => {
+          const wasEditing = prefsDone;
           setPreferences(prefs);
           setPrefsDone(true);
           setEditingPrefs(false);
-          setProfileOpen(false);
+          setShowProfile(wasEditing);
         }}
         onCancel={
           prefsDone
             ? () => {
                 setEditingPrefs(false);
+                setShowProfile(true);
               }
             : undefined
         }
       />
+    );
+  }
+
+  if (showProfile) {
+    return (
+      <main className="mx-auto flex w-full max-w-2xl flex-col gap-8 px-4 py-10">
+        <header className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-sm font-semibold uppercase tracking-wide text-[var(--accent)]">
+              Account
+            </p>
+            <h1 className="mt-1 font-[family-name:var(--font-brand)] text-4xl text-[var(--foreground)]">
+              Profile
+            </h1>
+            {userEmail ? (
+              <p className="mt-2 text-lg text-[var(--muted)]">{userEmail}</p>
+            ) : null}
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowProfile(false)}
+            className="text-base font-semibold text-[var(--accent)]"
+          >
+            ← Back
+          </button>
+        </header>
+
+        <section className="rounded-2xl border border-[var(--border)] bg-white p-5">
+          <h2 className="font-[family-name:var(--font-brand)] text-2xl">
+            Seller preferences
+          </h2>
+          <p className="mt-2 text-base text-[var(--muted)]">
+            {preferences
+              ? composeSmokePetNotes(preferences)
+              : "No seller preferences saved yet."}
+          </p>
+          <div className="mt-4">
+            <BigButton
+              variant="secondary"
+              onClick={() => {
+                setShowProfile(false);
+                setEditingPrefs(true);
+              }}
+            >
+              Change seller preferences
+            </BigButton>
+          </div>
+        </section>
+
+        <PinSetupCard />
+
+        <BigButton variant="ghost" onClick={() => void logout()}>
+          Sign out
+        </BigButton>
+      </main>
     );
   }
 
@@ -118,56 +152,14 @@ export function AppHome({
             Start here, then use your phone for garment photos.
           </p>
         </div>
-        <div className="relative shrink-0" ref={profileMenuRef}>
-          <button
-            type="button"
-            onClick={() => setProfileOpen((open) => !open)}
-            aria-expanded={profileOpen}
-            aria-haspopup="menu"
-            className="rounded-xl border border-[var(--border)] bg-white px-4 py-2 text-base font-semibold text-[var(--foreground)] hover:bg-[var(--surface-muted)]"
-          >
-            Profile
-          </button>
-          {profileOpen ? (
-            <div
-              role="menu"
-              className="absolute right-0 z-20 mt-2 w-72 rounded-2xl border border-[var(--border)] bg-white p-2 shadow-lg"
-            >
-              {userEmail ? (
-                <p className="truncate px-3 py-2 text-sm text-[var(--muted)]">
-                  {userEmail}
-                </p>
-              ) : null}
-              {preferences ? (
-                <p className="px-3 pb-2 text-sm text-[var(--foreground)]">
-                  {composeSmokePetNotes(preferences)}
-                </p>
-              ) : null}
-              <button
-                type="button"
-                role="menuitem"
-                onClick={() => {
-                  setProfileOpen(false);
-                  setEditingPrefs(true);
-                }}
-                className="touch-target w-full rounded-xl px-3 py-3 text-left text-base font-semibold text-[var(--accent)] hover:bg-[var(--accent-soft)]"
-              >
-                Change seller preferences
-              </button>
-              <button
-                type="button"
-                role="menuitem"
-                onClick={() => void logout()}
-                className="touch-target w-full rounded-xl px-3 py-3 text-left text-base font-semibold text-[var(--muted)] hover:bg-[var(--surface-muted)]"
-              >
-                Sign out
-              </button>
-            </div>
-          ) : null}
-        </div>
+        <button
+          type="button"
+          onClick={() => setShowProfile(true)}
+          className="shrink-0 rounded-xl border border-[var(--border)] bg-white px-4 py-2 text-base font-semibold text-[var(--foreground)] hover:bg-[var(--surface-muted)]"
+        >
+          Profile
+        </button>
       </header>
-
-      <PinSetupCard />
 
       <ExtensionInstallCard />
 

@@ -20,7 +20,6 @@ export function PinSetupCard() {
         const json = await res.json();
         if (!cancelled && res.ok) {
           setHasPin(Boolean(json.hasPin));
-          if (!json.hasPin) setOpen(true);
         }
       } catch {
         // ignore
