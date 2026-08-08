@@ -2,24 +2,52 @@ import { NextResponse } from "next/server";
 import {
   createJoinToken,
   findListingByJoinCode,
+  findValidJoinToken,
+  getListingWithPhotos,
 } from "@/lib/supabase/queries";
 
 /**
- * Exchange a listing join_code for an extension Bearer token + listingId.
- * Public endpoint (gated by knowing the short code).
+ * Exchange a listing join_code or join token for an extension Bearer token + listingId.
+ * Public endpoint (gated by knowing the short code or join token).
  */
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const joinCode = (searchParams.get("joinCode") ?? "").trim();
+  const token = (searchParams.get("token") ?? "").trim();
 
-  if (!joinCode || joinCode.length < 4) {
+  if (!joinCode && !token) {
     return NextResponse.json(
-      { error: "Provide a valid joinCode" },
+      { error: "Provide a joinCode or token" },
       { status: 400 }
     );
   }
 
   try {
+    if (token) {
+      const existing = await findValidJoinToken(token);
+      if (!existing) {
+        return NextResponse.json(
+          { error: "Join link is invalid or expired" },
+          { status: 404 }
+        );
+      }
+
+      const result = await getListingWithPhotos(existing.listing_id);
+      return NextResponse.json({
+        token: existing.token,
+        listingId: existing.listing_id,
+        platform: result?.listing.platform ?? null,
+        joinCode: result?.listing.join_code ?? null,
+      });
+    }
+
+    if (!joinCode || joinCode.length < 4) {
+      return NextResponse.json(
+        { error: "Provide a valid joinCode" },
+        { status: 400 }
+      );
+    }
+
     const listing = await findListingByJoinCode(joinCode);
     if (!listing) {
       return NextResponse.json(

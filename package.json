@@ -3,10 +3,11 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "node scripts/sync-extension-live.mjs && next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "extension:live": "node scripts/sync-extension-live.mjs"
   },
   "dependencies": {
     "@ai-sdk/openai": "^3.0.91",

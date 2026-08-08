@@ -1,66 +1,59 @@
 # Reseller Assistant Chrome Extension
 
-Manifest V3 side-panel helper that autofills **Mercari** and **Poshmark** listing pages from [reseller.mvfeed.us](https://reseller.mvfeed.us).
+Manifest V3 side-panel helper that autofills **Mercari** and **Poshmark** listing pages from Reseller Assistant.
 
-## Install (unpacked)
+## Install (unpacked) — recommended for development
 
-1. Open Chrome and go to `chrome://extensions`
-2. Turn on **Developer mode** (top right)
-3. Click **Load unpacked**
-4. Select this folder: `extension/` (the one that contains `manifest.json`)
-5. Pin **Reseller Assistant** if you want quick access
+1. From the repo root, run:
 
-Click the extension icon to open the side panel.
+```bash
+npm run extension:live
+```
 
-## Pair with a listing
+2. Open Chrome → `chrome://extensions`
+3. Turn on **Developer mode**
+4. Click **Load unpacked**
+5. Select **`extension-live/`** in this repo (always mirrored from `extension/`)
 
-On [https://reseller.mvfeed.us](https://reseller.mvfeed.us), open a listing and start the extension join flow (QR or 6-digit code / token).
+`npm run dev` also refreshes `extension-live` before starting Next.js.
 
-In the side panel:
+After pulling code changes: run `npm run extension:live`, then click **Reload extension** at the bottom of the side panel.
 
-1. Confirm **App URL** (default `https://reseller.mvfeed.us`)
-2. Either:
-   - Enter the **6-digit join code**, or
-   - **Paste the token** and the **Listing ID**
-3. Click **Pair & load listing**
+## Pairing (automatic)
 
-Pairing is saved in `chrome.storage.local` as `{ appUrl, token, listingId }` so you do not need to re-enter it every time.
+With the extension loaded:
+
+1. Open a listing **Post checklist** in the web app — the page pushes the pairing to the extension and opens the side panel when possible.
+2. Or open / scan the extension QR / join link (`?purpose=extension`).
+3. Or paste a 6-digit code or join URL into the side panel (auto-pairs as you paste).
+
+Pairing is saved in `chrome.storage.local` as `{ appUrl, token, listingId }`.
 
 ### How pairing talks to the app
 
 - Join code: `GET {appUrl}/api/extension/pair?joinCode=XXXXXX` → `{ token, listingId }`
+- Join token: `GET {appUrl}/api/extension/pair?token=...` → `{ token, listingId }`
 - Listing payload: `GET {appUrl}/api/listings/{listingId}/extension` with header `Authorization: Bearer {token}`
+- Web → extension bridge: `window.postMessage` handled by `bridge.js` on app origins
 
 ## Using the coach
 
 1. Open a Mercari or Poshmark **sell / create / list** page
 2. Open the Reseller Assistant side panel
-3. Use:
-   - **Fill title**
-   - **Fill description**
-   - **Fill all text fields**
-   - **Copy photo download links** (upload photos yourself on the marketplace)
-   - **Next step** to move through the coach checklist
+3. Use Fill title / description / all fields, Sync form fields, Copy photo links, Next step
 
 ### Publish warning
 
-**You press Publish yourself.** This extension never clicks Publish. Review title, description, price, and photos on the marketplace page, then publish manually.
-
-## Supported pages
-
-Content script matches Mercari and Poshmark URLs that look like sell/create/list flows, for example:
-
-- `https://*.mercari.com/.../sell*`
-- `https://poshmark.com/.../create*`
-- similar `list` / `sell` paths on `*.poshmark.com`
-
-If fill buttons say the content script was not found, navigate to a sell/create page and try again.
+**You press Publish yourself.** This extension never clicks Publish.
 
 ## Files
 
 | File | Role |
 | --- | --- |
 | `manifest.json` | MV3 manifest, permissions, content scripts |
-| `background.js` | Opens side panel on toolbar click |
-| `sidepanel.html` / `sidepanel.css` / `sidepanel.js` | Pairing UI + listing coach |
+| `background.js` | Side panel, apply pairing, badge, reload |
+| `bridge.js` | Receives pairing from the web app |
+| `sidepanel.html` / `sidepanel.css` / `sidepanel.js` | Pairing UI + listing coach + reload |
 | `content.js` | Field fill / highlight on marketplace pages |
+
+Source of truth is `extension/`. Load Chrome from **`extension-live/`**.

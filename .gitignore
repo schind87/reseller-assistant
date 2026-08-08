@@ -37,6 +37,11 @@ yarn-error.log*
 # vercel
 .vercel
 
+# generated Chrome Load unpacked target (source of truth: /extension)
+/extension-live/**
+!/extension-live/README.md
+
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

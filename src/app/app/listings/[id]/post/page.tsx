@@ -13,6 +13,10 @@ import {
   type PlatformListingSchema,
 } from "@/lib/listing-schemas";
 import {
+  requestExtensionPair,
+  waitForExtensionPairAck,
+} from "@/lib/extension-bridge";
+import {
   PLATFORM_LABELS,
   POSTING_CHECKLIST,
   SELL_PAGE_URLS,
@@ -44,6 +48,7 @@ export default function PostPage() {
   const [listing, setListing] = useState<Listing | null>(null);
   const [schema, setSchema] = useState<PlatformListingSchema | null>(null);
   const [extensionUrl, setExtensionUrl] = useState<string | null>(null);
+  const [extensionStatus, setExtensionStatus] = useState<string | null>(null);
   const [checked, setChecked] = useState<Record<string, boolean>>({});
   const [error, setError] = useState<string | null>(null);
   const [doneMessage, setDoneMessage] = useState<string | null>(null);
@@ -77,6 +82,21 @@ export default function PostPage() {
         const tokenJson = await tokenRes.json();
         if (tokenRes.ok) {
           setExtensionUrl(tokenJson.url);
+          if (tokenJson.token) {
+            setExtensionStatus("Connecting Chrome extension…");
+            requestExtensionPair({
+              token: String(tokenJson.token),
+              listingId: String(params.id),
+              joinCode: l.join_code,
+              openSidePanel: true,
+            });
+            const ack = await waitForExtensionPairAck(2000);
+            setExtensionStatus(
+              ack.ok
+                ? "Chrome extension connected for this listing."
+                : "Extension not detected yet — load unpacked from extension-live, or use the pairing code below."
+            );
+          }
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : "Could not load listing");
@@ -209,11 +229,17 @@ export default function PostPage() {
         <CopyField label="Pairing code" value={listing.join_code} />
       </section>
 
+      {extensionStatus ? (
+        <p className="rounded-xl bg-[var(--accent-soft)] px-4 py-3 text-base text-[var(--accent)]">
+          {extensionStatus}
+        </p>
+      ) : null}
+
       {extensionUrl ? (
         <QrPanel
           value={extensionUrl}
           title="Pair browser extension"
-          hint="Scan or paste the pairing code into the Reseller Assistant Chrome extension. Use Sync form fields on the sell page to keep this app up to date."
+          hint="If the extension is installed, this page pairs automatically. Otherwise scan/open the link or enter the pairing code in the side panel."
           code={listing.join_code}
         />
       ) : null}
