@@ -174,14 +174,20 @@ export function CameraCapture({
         <BigButton disabled={!ready || Boolean(error)} onClick={captureFrame}>
           Capture photo
         </BigButton>
-        <BigButton variant="secondary" onClick={() => fileRef.current?.click()}>
+        <BigButton
+          variant="secondary"
+          onClick={() => {
+            // Do not set capture= on this input — that forces the camera on
+            // iOS/Android and skips the photo library.
+            fileRef.current?.click();
+          }}
+        >
           Choose from library
         </BigButton>
         <input
           ref={fileRef}
           type="file"
           accept="image/*"
-          capture="environment"
           className="hidden"
           onChange={(e) => {
             const file = e.target.files?.[0];
