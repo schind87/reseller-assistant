@@ -2,6 +2,7 @@ import { randomBytes } from "crypto";
 import { v4 as uuidv4 } from "uuid";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
+  emptyIdentifiedAttrs,
   emptyStructuredFields,
   type IdentifiedAttrs,
   type JoinTokenPurpose,
@@ -121,7 +122,7 @@ export async function createListing(platform: Platform): Promise<Listing> {
         description: null,
         price: null,
         structured_fields: emptyStructuredFields(),
-        identified_attrs: null,
+        identified_attrs: emptyIdentifiedAttrs("Not identified yet."),
         cover_processed_path: null,
       })
       .select("*")
