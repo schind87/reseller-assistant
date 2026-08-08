@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { BigButton } from "@/components/BigButton";
+import { PinSetupCard } from "@/components/PinSetupCard";
 import { PLATFORM_LABELS } from "@/lib/platforms";
 import type { Listing, Platform } from "@/lib/types";
 
@@ -62,6 +63,8 @@ export function AppHome({ initialListings }: AppHomeProps) {
           Sign out
         </button>
       </header>
+
+      <PinSetupCard />
 
       {error ? (
         <p className="rounded-xl bg-red-50 px-4 py-3 text-base text-red-800">

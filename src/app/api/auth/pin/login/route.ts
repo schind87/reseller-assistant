@@ -1,16 +1,11 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import {
-  consumeLoginOtp,
-  normalizeEmail,
-  upsertProfileByEmail,
-} from "@/lib/auth/otp";
+import { normalizeEmail, verifyProfilePin } from "@/lib/auth/otp";
 import { createUserSessionCookie } from "@/lib/session";
 
 const bodySchema = z.object({
-  email: z.string().optional(),
-  contact: z.string().optional(),
-  token: z.string().min(4).max(12),
+  email: z.string().min(3),
+  pin: z.string().min(4).max(8),
 });
 
 export async function POST(request: Request) {
@@ -19,30 +14,38 @@ export async function POST(request: Request) {
     const parsed = bodySchema.safeParse(json);
     if (!parsed.success) {
       return NextResponse.json(
-        { error: "Enter your email and the code" },
+        { error: "Enter your email and PIN" },
         { status: 400 }
       );
     }
 
-    const raw = parsed.data.email || parsed.data.contact || "";
-    if (!raw.includes("@")) {
+    const email = normalizeEmail(parsed.data.email);
+    if (!email.includes("@")) {
       return NextResponse.json(
         { error: "Enter a valid email address" },
         { status: 400 }
       );
     }
-    const email = normalizeEmail(raw);
-    const token = parsed.data.token.trim();
 
-    const ok = await consumeLoginOtp(email, token);
-    if (!ok) {
+    const pin = parsed.data.pin.trim();
+    if (!/^\d{4,8}$/.test(pin)) {
       return NextResponse.json(
-        { error: "That code did not work. Try again." },
+        { error: "PIN must be 4 to 8 digits" },
+        { status: 400 }
+      );
+    }
+
+    const profile = await verifyProfilePin(email, pin);
+    if (!profile) {
+      return NextResponse.json(
+        {
+          error:
+            "Email or PIN did not match. Use “Send me a code” if you have not set a PIN yet.",
+        },
         { status: 401 }
       );
     }
 
-    const profile = await upsertProfileByEmail(email);
     await createUserSessionCookie({
       userId: profile.id,
       email: profile.email,
@@ -51,12 +54,11 @@ export async function POST(request: Request) {
     return NextResponse.json({
       ok: true,
       user: { id: profile.id, email: profile.email },
-      hasPin: Boolean(profile.pin_hash),
     });
   } catch (err) {
-    console.error("otp verify error:", err);
+    console.error("pin login error:", err);
     return NextResponse.json(
-      { error: "Could not verify code" },
+      { error: "Could not sign in with PIN" },
       { status: 500 }
     );
   }

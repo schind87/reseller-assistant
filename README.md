@@ -10,7 +10,7 @@ Live app: **https://reseller-assistant.vercel.app** (custom domain **https://res
 
 - Next.js 16 (App Router) + TypeScript + Tailwind 4
 - Supabase (Postgres + Storage + Auth)
-- Passwordless sign-in: email or phone one-time code (no password)
+- Passwordless sign-in: email one-time code (Resend), or your own PIN
 - Optional OpenAI vision/drafting and fal.ai background removal
 
 ## Auth email (Resend)
@@ -24,14 +24,7 @@ Optional (Supabase Auth Send Email hook / Edge Function `auth-send-email`):
 `SEND_EMAIL_HOOK_SECRET` — only needed if you also enable the Supabase Auth hook.
 
 
-```bash
-cp .env.example .env.local
-```
-
-2. In Supabase Auth settings:
-   - Enable **Email** provider (OTP / magic link)
-   - Optionally enable **Phone** (requires Twilio or another SMS provider)
-   - Add redirect URLs: `https://reseller-assistant.vercel.app/auth/callback`, `https://reseller.mvfeed.us/auth/callback`, `http://localhost:3000/auth/callback`
+2. Copy env file and fill secrets (`.env.example` → `.env.local`).
 
 3. Install and run:
 
@@ -40,7 +33,7 @@ npm install
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) → enter your email or phone → enter the code.
+Open [http://localhost:3000](http://localhost:3000) → email code sign-in (or email + PIN after you set one).
 
 ## Environment
 
@@ -72,7 +65,7 @@ See [`extension/README.md`](extension/README.md).
 
 ## Main flows
 
-1. **Sign in** with email or phone (one-time code)
+1. **Sign in** with email code (or email + your PIN)
 2. **Start listing** → choose Mercari or Poshmark
 3. Scan the **QR** on the laptop hub to open the phone photo coach
 4. Tag-first photos (brand/care optional) → item shots

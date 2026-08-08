@@ -2,25 +2,44 @@ import { createHash, randomInt } from "crypto";
 import { Resend } from "resend";
 import { createAdminClient } from "@/lib/supabase/admin";
 
+export type Profile = {
+  id: string;
+  email: string | null;
+  pin_hash: string | null;
+};
+
 export function hashOtpCode(code: string): string {
   return createHash("sha256").update(code).digest("hex");
+}
+
+export function hashPin(pin: string, userId: string): string {
+  return createHash("sha256")
+    .update(`reseller-assistant-pin:${userId}:${pin}`)
+    .digest("hex");
 }
 
 export function generateOtpCode(): string {
   return String(randomInt(100000, 999999));
 }
 
+export function normalizeEmail(raw: string): string {
+  return raw.trim().toLowerCase();
+}
+
+export function isValidPin(pin: string): boolean {
+  return /^\d{4,8}$/.test(pin);
+}
+
 export async function storeLoginOtp(
-  contact: string,
-  channel: "email" | "phone",
+  email: string,
   code: string,
   ttlMinutes = 10
 ): Promise<void> {
   const supabase = createAdminClient();
   const expires = new Date(Date.now() + ttlMinutes * 60 * 1000).toISOString();
   const { error } = await supabase.from("login_otps").insert({
-    contact,
-    channel,
+    contact: email,
+    channel: "email",
     code_hash: hashOtpCode(code),
     expires_at: expires,
   });
@@ -28,14 +47,14 @@ export async function storeLoginOtp(
 }
 
 export async function consumeLoginOtp(
-  contact: string,
+  email: string,
   code: string
 ): Promise<boolean> {
   const supabase = createAdminClient();
   const { data, error } = await supabase
     .from("login_otps")
     .select("*")
-    .eq("contact", contact)
+    .eq("contact", email)
     .is("consumed_at", null)
     .gt("expires_at", new Date().toISOString())
     .order("created_at", { ascending: false })
@@ -53,65 +72,90 @@ export async function consumeLoginOtp(
   return true;
 }
 
-export async function upsertProfile(opts: {
-  email?: string;
-  phone?: string;
-}): Promise<{ id: string; email: string | null; phone: string | null }> {
+export async function upsertProfileByEmail(email: string): Promise<Profile> {
   const supabase = createAdminClient();
+  const { data: existing } = await supabase
+    .from("profiles")
+    .select("id, email, pin_hash")
+    .eq("email", email)
+    .maybeSingle();
 
-  if (opts.email) {
-    const { data: existing } = await supabase
-      .from("profiles")
-      .select("*")
-      .eq("email", opts.email)
-      .maybeSingle();
-    if (existing) {
-      return {
-        id: existing.id as string,
-        email: existing.email as string | null,
-        phone: existing.phone as string | null,
-      };
-    }
-    const { data, error } = await supabase
-      .from("profiles")
-      .insert({ email: opts.email })
-      .select("*")
-      .single();
-    if (error) throw new Error(`upsertProfile email: ${error.message}`);
+  if (existing) {
     return {
-      id: data.id as string,
-      email: data.email as string | null,
-      phone: data.phone as string | null,
+      id: existing.id as string,
+      email: existing.email as string | null,
+      pin_hash: existing.pin_hash as string | null,
     };
   }
 
-  if (opts.phone) {
-    const { data: existing } = await supabase
-      .from("profiles")
-      .select("*")
-      .eq("phone", opts.phone)
-      .maybeSingle();
-    if (existing) {
-      return {
-        id: existing.id as string,
-        email: existing.email as string | null,
-        phone: existing.phone as string | null,
-      };
-    }
-    const { data, error } = await supabase
-      .from("profiles")
-      .insert({ phone: opts.phone })
-      .select("*")
-      .single();
-    if (error) throw new Error(`upsertProfile phone: ${error.message}`);
-    return {
-      id: data.id as string,
-      email: data.email as string | null,
-      phone: data.phone as string | null,
-    };
-  }
+  const { data, error } = await supabase
+    .from("profiles")
+    .insert({ email })
+    .select("id, email, pin_hash")
+    .single();
+  if (error) throw new Error(`upsertProfileByEmail: ${error.message}`);
+  return {
+    id: data.id as string,
+    email: data.email as string | null,
+    pin_hash: data.pin_hash as string | null,
+  };
+}
 
-  throw new Error("email or phone required");
+export async function getProfileByEmail(email: string): Promise<Profile | null> {
+  const supabase = createAdminClient();
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("id, email, pin_hash")
+    .eq("email", email)
+    .maybeSingle();
+  if (error) throw new Error(`getProfileByEmail: ${error.message}`);
+  if (!data) return null;
+  return {
+    id: data.id as string,
+    email: data.email as string | null,
+    pin_hash: data.pin_hash as string | null,
+  };
+}
+
+export async function getProfileById(id: string): Promise<Profile | null> {
+  const supabase = createAdminClient();
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("id, email, pin_hash")
+    .eq("id", id)
+    .maybeSingle();
+  if (error) throw new Error(`getProfileById: ${error.message}`);
+  if (!data) return null;
+  return {
+    id: data.id as string,
+    email: data.email as string | null,
+    pin_hash: data.pin_hash as string | null,
+  };
+}
+
+export async function setProfilePin(
+  userId: string,
+  pin: string
+): Promise<void> {
+  if (!isValidPin(pin)) {
+    throw new Error("PIN must be 4 to 8 digits");
+  }
+  const supabase = createAdminClient();
+  const { error } = await supabase
+    .from("profiles")
+    .update({ pin_hash: hashPin(pin, userId) })
+    .eq("id", userId);
+  if (error) throw new Error(`setProfilePin: ${error.message}`);
+}
+
+export async function verifyProfilePin(
+  email: string,
+  pin: string
+): Promise<Profile | null> {
+  const profile = await getProfileByEmail(email);
+  if (!profile?.pin_hash) return null;
+  if (profile.pin_hash !== hashPin(pin, profile.id)) return null;
+  return profile;
 }
 
 export async function sendSignInEmail(to: string, code: string): Promise<void> {
