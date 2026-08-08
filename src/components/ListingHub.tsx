@@ -347,9 +347,9 @@ export function ListingHub({ listingId }: ListingHubProps) {
         showAspectGuide={addTarget.purpose === "listing"}
         guideNote={
           addTarget.purpose === "identify"
-            ? "Identification tag — will not be posted"
+            ? "Brand/care tag — for AI only, not posted"
             : addTarget.purpose === "inventory"
-              ? "Inventory only — will not be posted"
+              ? "Storage location — private, not posted"
               : `Listing · ${photoRoleLabel(addTarget.role)}`
         }
         onCancel={() => {
@@ -442,39 +442,48 @@ export function ListingHub({ listingId }: ListingHubProps) {
         </p>
 
         <PhotoGroup
-          title="Identification (not posted)"
+          title="Brand & care tags"
+          badge="For AI only · never posted"
+          description="Close-ups of brand, size, care, and style/SKU tags so the AI can read the garment. Shoppers will not see these."
           photos={identifyPhotos}
-          empty="No tag photos yet."
-          addLabel="Add identification photo"
+          empty="No tag photos yet — add every label you can read."
+          addLabel="Add tag photo"
           onAdd={() => setAddTarget({ role: "id_tag", purpose: "identify" })}
           onDelete={(photoId) => void deletePhoto(photoId)}
           deletingPhotoId={deletingPhotoId}
           disabled={uploading || Boolean(deletingPhotoId)}
+          tone="private"
         />
 
         <PhotoGroup
-          title="Inventory (not posted)"
+          title="Where it’s stored"
+          badge="Private inventory · never posted"
+          description="Optional photo of this piece in your closet, bin, or rack so you can find it later. Not used on Mercari or Poshmark."
           photos={inventoryPhotos}
-          empty="No inventory photo yet."
-          addLabel="Add inventory photo"
+          empty="No storage photo yet — optional if you already know where it is."
+          addLabel="Add storage photo"
           onAdd={() =>
             setAddTarget({ role: "inventory", purpose: "inventory" })
           }
           onDelete={(photoId) => void deletePhoto(photoId)}
           deletingPhotoId={deletingPhotoId}
           disabled={uploading || Boolean(deletingPhotoId)}
+          tone="private"
         />
 
         <div className="space-y-3">
           <PhotoGroup
-            title="Listing photos"
+            title="Photos shoppers will see"
+            badge="Listing photos · posted"
+            description="Cover, front, back, details, and flaws for the marketplace listing. These are the only photos that get uploaded when you post."
             photos={listingPhotos}
-            empty="No listing photos yet."
+            empty="No listing photos yet — start with a clean cover shot."
             addLabel={`Add ${photoRoleLabel(nextListingRole(photos)).toLowerCase()} photo`}
             onAdd={() => setPickListingRole((open) => !open)}
             onDelete={(photoId) => void deletePhoto(photoId)}
             deletingPhotoId={deletingPhotoId}
             disabled={uploading || Boolean(deletingPhotoId)}
+            tone="listing"
           />
           {pickListingRole ? (
             <div className="rounded-2xl border border-[var(--border)] bg-white p-4">
@@ -590,6 +599,8 @@ export function ListingHub({ listingId }: ListingHubProps) {
 
 function PhotoGroup({
   title,
+  badge,
+  description,
   photos,
   empty,
   addLabel,
@@ -597,8 +608,11 @@ function PhotoGroup({
   onDelete,
   deletingPhotoId,
   disabled,
+  tone = "listing",
 }: {
   title: string;
+  badge?: string;
+  description?: string;
   photos: ListingPhotoWithUrl[];
   empty: string;
   addLabel: string;
@@ -606,18 +620,44 @@ function PhotoGroup({
   onDelete: (photoId: string) => void;
   deletingPhotoId?: string | null;
   disabled?: boolean;
+  tone?: "private" | "listing";
 }) {
+  const badgeClass =
+    tone === "private"
+      ? "bg-amber-50 text-amber-950"
+      : "bg-[var(--accent-soft)] text-[var(--accent)]";
+
   return (
-    <div>
-      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-        <h3 className="text-base font-semibold text-[var(--foreground)]">
-          {title}
-        </h3>
+    <div
+      className={`rounded-2xl border p-4 ${
+        tone === "private"
+          ? "border-amber-200/80 bg-amber-50/40"
+          : "border-[var(--border)] bg-white"
+      }`}
+    >
+      <div className="mb-2 flex flex-wrap items-start justify-between gap-2">
+        <div className="min-w-0 flex-1 space-y-1">
+          <h3 className="text-lg font-semibold text-[var(--foreground)]">
+            {title}
+          </h3>
+          {badge ? (
+            <p
+              className={`inline-block rounded-md px-2 py-1 text-xs font-semibold uppercase tracking-wide ${badgeClass}`}
+            >
+              {badge}
+            </p>
+          ) : null}
+          {description ? (
+            <p className="text-sm leading-relaxed text-[var(--muted)]">
+              {description}
+            </p>
+          ) : null}
+        </div>
         <button
           type="button"
           disabled={disabled}
           onClick={onAdd}
-          className="rounded-lg border border-[var(--accent)] bg-white px-3 py-2 text-sm font-semibold text-[var(--accent)] hover:bg-[var(--accent-soft)] disabled:opacity-50"
+          className="shrink-0 rounded-lg border border-[var(--accent)] bg-white px-3 py-2 text-sm font-semibold text-[var(--accent)] hover:bg-[var(--accent-soft)] disabled:opacity-50"
         >
           {addLabel}
         </button>
@@ -625,7 +665,7 @@ function PhotoGroup({
       {photos.length === 0 ? (
         <p className="text-sm text-[var(--muted)]">{empty}</p>
       ) : (
-        <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
+        <ul className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
           {photos.map((photo) => {
             const deleting = deletingPhotoId === photo.id;
             return (

@@ -248,9 +248,9 @@ export function photoRoleLabel(role: PhotoRole): string {
     case "brand_tag":
     case "care_tag":
     case "id_tag":
-      return "ID tag";
+      return "Brand/care tag";
     case "inventory":
-      return "Inventory";
+      return "Storage";
     case "cover":
       return "Cover";
     case "front":
