@@ -24,10 +24,21 @@ export function PhotoCoach({ listing, initialPhotos }: PhotoCoachProps) {
   const platform = listing.platform as Platform;
   const steps = getPhotoSteps(platform);
   const aspect = PLATFORM_PHOTO_ASPECT[platform];
+  const sectionParam = searchParams.get("section");
+  const startStep = (() => {
+    if (sectionParam === "identify") return 0;
+    if (sectionParam === "inventory") {
+      const idx = steps.findIndex((s) => s.purpose === "inventory");
+      return idx >= 0 ? idx : 0;
+    }
+    if (sectionParam === "listing") {
+      const idx = steps.findIndex((s) => s.purpose === "listing");
+      return idx >= 0 ? idx : 0;
+    }
+    return Math.min(Math.max(listing.photo_step, 0), steps.length);
+  })();
   const [photos, setPhotos] = useState(initialPhotos);
-  const [stepIndex, setStepIndex] = useState(() =>
-    Math.min(Math.max(listing.photo_step, 0), steps.length)
-  );
+  const [stepIndex, setStepIndex] = useState(startStep);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState<string | null>(null);

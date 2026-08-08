@@ -3,15 +3,18 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { BigButton } from "@/components/BigButton";
+import { CameraCapture } from "@/components/CameraCapture";
 import { QrPanel } from "@/components/QrPanel";
 import {
   PLATFORM_LABELS,
+  PLATFORM_PHOTO_ASPECT,
   photoRoleLabel,
 } from "@/lib/platforms";
 import type {
   IdentifiedAttrs,
   Listing,
   ListingPhotoWithUrl,
+  PhotoRole,
   Platform,
 } from "@/lib/types";
 import {
@@ -29,12 +32,36 @@ type ListingPayload = {
   photos: ListingPhotoWithUrl[];
 };
 
+type AddPhotoTarget = {
+  role: PhotoRole;
+  purpose: "identify" | "inventory" | "listing";
+};
+
+const LISTING_ROLES: PhotoRole[] = [
+  "cover",
+  "front",
+  "back",
+  "detail",
+  "flaw",
+];
+
+function nextListingRole(photos: ListingPhotoWithUrl[]): PhotoRole {
+  for (const role of LISTING_ROLES) {
+    if (role === "flaw") continue;
+    if (!photos.some((p) => p.role === role)) return role;
+  }
+  return "detail";
+}
+
 export function ListingHub({ listingId }: ListingHubProps) {
   const [data, setData] = useState<ListingPayload | null>(null);
   const [joinUrl, setJoinUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [processing, setProcessing] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [addTarget, setAddTarget] = useState<AddPhotoTarget | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [pickListingRole, setPickListingRole] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -82,6 +109,38 @@ export function ListingHub({ listingId }: ListingHubProps) {
       window.clearInterval(timer);
     };
   }, [load, ensureJoinToken]);
+
+  async function uploadPhoto(blob: Blob, role: PhotoRole) {
+    setUploading(true);
+    setError(null);
+    try {
+      const body = new FormData();
+      body.append(
+        "photo",
+        new File([blob], `${role}.jpg`, { type: blob.type || "image/jpeg" })
+      );
+      body.append("role", role);
+
+      const res = await fetch(`/api/listings/${listingId}/photos`, {
+        method: "POST",
+        body,
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(
+          typeof json.error === "string" ? json.error : "Upload failed"
+        );
+      }
+      setAddTarget(null);
+      setPickListingRole(false);
+      setStatusMessage(`Added ${photoRoleLabel(role)} photo.`);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Upload failed");
+    } finally {
+      setUploading(false);
+    }
+  }
 
   async function runProcess() {
     if (!data?.photos.length) {
@@ -139,6 +198,31 @@ export function ListingHub({ listingId }: ListingHubProps) {
   const { listing, photos } = data;
   const platform = listing.platform as Platform;
   const attrs = listing.identified_attrs as IdentifiedAttrs | null;
+  const aspect = PLATFORM_PHOTO_ASPECT[platform];
+  const identifyPhotos = photos.filter((p) => isIdentifyPhotoRole(p.role));
+  const inventoryPhotos = photos.filter((p) => p.role === "inventory");
+  const listingPhotos = photos.filter((p) => isPostingPhotoRole(p.role));
+
+  if (addTarget) {
+    return (
+      <CameraCapture
+        aspect={aspect}
+        showAspectGuide={addTarget.purpose === "listing"}
+        guideNote={
+          addTarget.purpose === "identify"
+            ? "Identification tag — will not be posted"
+            : addTarget.purpose === "inventory"
+              ? "Inventory only — will not be posted"
+              : `Listing · ${photoRoleLabel(addTarget.role)}`
+        }
+        onCancel={() => {
+          if (!uploading) setAddTarget(null);
+        }}
+        onCapture={(blob) => void uploadPhoto(blob, addTarget.role)}
+        onFallbackFile={(file) => void uploadPhoto(file, addTarget.role)}
+      />
+    );
+  }
 
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-8 px-4 py-8">
@@ -151,7 +235,7 @@ export function ListingHub({ listingId }: ListingHubProps) {
             Listing hub
           </h1>
           <p className="mt-2 text-lg text-[var(--muted)]">
-            Pair your phone with the QR code, watch garment photos arrive here,
+            Pair your phone with the QR code, add photos here or on the phone,
             then finish the clothing draft.
           </p>
         </div>
@@ -215,8 +299,8 @@ export function ListingHub({ listingId }: ListingHubProps) {
             </dl>
           ) : (
             <p className="mt-4 text-base text-[var(--muted)]">
-              Add a brand or care tag photo on the phone to start identifying
-              this garment.
+              Add identification tag photos below to start identifying this
+              garment.
             </p>
           )}
         </section>
@@ -226,35 +310,86 @@ export function ListingHub({ listingId }: ListingHubProps) {
         <h2 className="font-[family-name:var(--font-brand)] text-2xl">
           Photos ({photos.length})
         </h2>
-        {photos.length === 0 ? (
-          <p className="text-base text-[var(--muted)]">
-            No garment photos yet. Scan the QR code and take the first shot on
-            your phone.
-          </p>
-        ) : (
-          <>
-            <PhotoGroup
-              title="Identification (not posted)"
-              photos={photos.filter((p) => isIdentifyPhotoRole(p.role))}
-              empty="No tag photos yet."
-            />
-            <PhotoGroup
-              title="Inventory (not posted)"
-              photos={photos.filter((p) => p.role === "inventory")}
-              empty="No inventory photo yet."
-            />
-            <PhotoGroup
-              title="Listing photos"
-              photos={photos.filter((p) => isPostingPhotoRole(p.role))}
-              empty="No listing photos yet."
-            />
-          </>
-        )}
+        <p className="text-base text-[var(--muted)]">
+          Add photos in each section on this computer, or use the QR code for
+          your phone.
+        </p>
+
+        <PhotoGroup
+          title="Identification (not posted)"
+          photos={identifyPhotos}
+          empty="No tag photos yet."
+          addLabel="Add identification photo"
+          onAdd={() =>
+            setAddTarget({ role: "id_tag", purpose: "identify" })
+          }
+          disabled={uploading}
+        />
+
+        <PhotoGroup
+          title="Inventory (not posted)"
+          photos={inventoryPhotos}
+          empty="No inventory photo yet."
+          addLabel="Add inventory photo"
+          onAdd={() =>
+            setAddTarget({ role: "inventory", purpose: "inventory" })
+          }
+          disabled={uploading}
+        />
+
+        <div className="space-y-3">
+          <PhotoGroup
+            title="Listing photos"
+            photos={listingPhotos}
+            empty="No listing photos yet."
+            addLabel={`Add ${photoRoleLabel(nextListingRole(photos)).toLowerCase()} photo`}
+            onAdd={() => setPickListingRole((open) => !open)}
+            disabled={uploading}
+          />
+          {pickListingRole ? (
+            <div className="rounded-2xl border border-[var(--border)] bg-white p-4">
+              <p className="mb-3 text-base font-semibold text-[var(--foreground)]">
+                Which listing photo?
+              </p>
+              <div className="grid gap-2 sm:grid-cols-2 md:grid-cols-3">
+                {LISTING_ROLES.map((role) => (
+                  <button
+                    key={role}
+                    type="button"
+                    disabled={uploading}
+                    onClick={() => {
+                      setPickListingRole(false);
+                      setAddTarget({ role, purpose: "listing" });
+                    }}
+                    className="touch-target rounded-xl border border-[var(--border)] px-4 py-3 text-left text-base font-semibold hover:bg-[var(--surface-muted)]"
+                  >
+                    {photoRoleLabel(role)}
+                    {!photos.some((p) => p.role === role) && role !== "flaw" ? (
+                      <span className="mt-1 block text-sm font-normal text-[var(--muted)]">
+                        Needed
+                      </span>
+                    ) : null}
+                  </button>
+                ))}
+              </div>
+              <button
+                type="button"
+                className="mt-3 text-base font-semibold text-[var(--muted)]"
+                onClick={() => setPickListingRole(false)}
+              >
+                Cancel
+              </button>
+            </div>
+          ) : null}
+        </div>
       </section>
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <Link href={`/app/listings/${listingId}/photos`} className="block">
-          <BigButton>Take photos</BigButton>
+        <Link
+          href={`/app/listings/${listingId}/photos`}
+          className="block"
+        >
+          <BigButton>Guided photo coach</BigButton>
         </Link>
         <div className="flex flex-col gap-2">
           <BigButton
@@ -296,16 +431,32 @@ function PhotoGroup({
   title,
   photos,
   empty,
+  addLabel,
+  onAdd,
+  disabled,
 }: {
   title: string;
   photos: ListingPhotoWithUrl[];
   empty: string;
+  addLabel: string;
+  onAdd: () => void;
+  disabled?: boolean;
 }) {
   return (
     <div>
-      <h3 className="mb-2 text-base font-semibold text-[var(--foreground)]">
-        {title}
-      </h3>
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <h3 className="text-base font-semibold text-[var(--foreground)]">
+          {title}
+        </h3>
+        <button
+          type="button"
+          disabled={disabled}
+          onClick={onAdd}
+          className="rounded-lg border border-[var(--accent)] bg-white px-3 py-2 text-sm font-semibold text-[var(--accent)] hover:bg-[var(--accent-soft)] disabled:opacity-50"
+        >
+          {addLabel}
+        </button>
+      </div>
       {photos.length === 0 ? (
         <p className="text-sm text-[var(--muted)]">{empty}</p>
       ) : (
@@ -329,8 +480,28 @@ function PhotoGroup({
               </p>
             </li>
           ))}
+          <li>
+            <button
+              type="button"
+              disabled={disabled}
+              onClick={onAdd}
+              className="flex aspect-square w-full flex-col items-center justify-center rounded-xl border-2 border-dashed border-[var(--border)] bg-[var(--surface-muted)] text-base font-semibold text-[var(--accent)] hover:border-[var(--accent)] disabled:opacity-50"
+            >
+              + Add
+            </button>
+          </li>
         </ul>
       )}
+      {photos.length === 0 ? (
+        <button
+          type="button"
+          disabled={disabled}
+          onClick={onAdd}
+          className="mt-3 flex min-h-28 w-full flex-col items-center justify-center rounded-xl border-2 border-dashed border-[var(--border)] bg-white text-base font-semibold text-[var(--accent)] hover:border-[var(--accent)] disabled:opacity-50"
+        >
+          + {addLabel}
+        </button>
+      ) : null}
     </div>
   );
 }
