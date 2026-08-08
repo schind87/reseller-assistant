@@ -18,7 +18,8 @@ export async function proxy(request: NextRequest) {
     pathname.startsWith("/auth/") ||
     pathname.startsWith("/api/auth/") ||
     pathname === "/api/join" ||
-    pathname === "/api/extension/pair";
+    pathname === "/api/extension/pair" ||
+    pathname === "/api/extension/download";
 
   if (isPublic) {
     return NextResponse.next();
@@ -28,16 +29,36 @@ export async function proxy(request: NextRequest) {
     return NextResponse.next();
   }
 
+  if (
+    pathname.startsWith("/api/platforms/") ||
+    pathname === "/api/platforms/schema/discover"
+  ) {
+    return NextResponse.next();
+  }
+
   const session = await getSessionFromRequest(request);
   const signedIn = isUserSession(session);
   const joinOk = isUnlocked(session) && session?.kind === "join";
 
-  if (
-    joinOk &&
-    (pathname.startsWith("/app/listings/") ||
-      pathname.match(/^\/api\/listings\/[^/]+(\/photos)?$/))
-  ) {
-    return NextResponse.next();
+  // Phone QR sessions may only use the photo coach + its APIs (not the laptop hub).
+  if (joinOk && !signedIn) {
+    const photosPage = pathname.match(/^\/app\/listings\/([^/]+)\/photos\/?$/);
+    const listingApi = pathname.match(
+      /^\/api\/listings\/([^/]+)(\/photos)?\/?$/
+    );
+    if (photosPage || listingApi) {
+      return NextResponse.next();
+    }
+
+    const listingApp = pathname.match(/^\/app\/listings\/([^/]+)(\/.*)?$/);
+    if (listingApp) {
+      const listingId = listingApp[1];
+      const photosUrl = new URL(
+        `/app/listings/${listingId}/photos?phone=1`,
+        request.url
+      );
+      return NextResponse.redirect(photosUrl);
+    }
   }
 
   const needsAuth =

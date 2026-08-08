@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { PhotoCoach } from "@/components/PhotoCoach";
 import type { Listing, ListingPhotoWithUrl } from "@/lib/types";
 
-export default function PhotosPage() {
+function PhotosPageInner() {
   const params = useParams<{ id: string }>();
   const [listing, setListing] = useState<Listing | null>(null);
   const [photos, setPhotos] = useState<ListingPhotoWithUrl[]>([]);
@@ -43,4 +43,18 @@ export default function PhotosPage() {
   }
 
   return <PhotoCoach listing={listing} initialPhotos={photos} />;
+}
+
+export default function PhotosPage() {
+  return (
+    <Suspense
+      fallback={
+        <main className="mx-auto max-w-lg px-4 py-10 text-lg text-[var(--muted)]">
+          Loading photo coach…
+        </main>
+      }
+    >
+      <PhotosPageInner />
+    </Suspense>
+  );
 }

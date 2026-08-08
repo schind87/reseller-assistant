@@ -4,12 +4,20 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { BigButton } from "@/components/BigButton";
 import { QrPanel } from "@/components/QrPanel";
-import { PLATFORM_LABELS } from "@/lib/platforms";
+import {
+  PLATFORM_LABELS,
+  photoRoleLabel,
+} from "@/lib/platforms";
 import type {
   IdentifiedAttrs,
   Listing,
   ListingPhotoWithUrl,
   Platform,
+} from "@/lib/types";
+import {
+  isIdentifyPhotoRole,
+  isNonPostingPhotoRole,
+  isPostingPhotoRole,
 } from "@/lib/types";
 
 type ListingHubProps = {
@@ -26,6 +34,7 @@ export function ListingHub({ listingId }: ListingHubProps) {
   const [joinUrl, setJoinUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [processing, setProcessing] = useState(false);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -75,16 +84,33 @@ export function ListingHub({ listingId }: ListingHubProps) {
   }, [load, ensureJoinToken]);
 
   async function runProcess() {
+    if (!data?.photos.length) {
+      setError("Add at least one photo before running AI.");
+      return;
+    }
+
     setProcessing(true);
     setError(null);
+    setStatusMessage("Running AI on your photos — this can take up to a minute…");
     try {
       const res = await fetch(`/api/listings/${listingId}/process`, {
         method: "POST",
       });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error ?? "Processing failed");
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(
+          typeof json.error === "string" ? json.error : "Processing failed"
+        );
+      }
       await load();
+      setStatusMessage(
+        json.degraded
+          ? json.draftMessage ??
+              "AI finished with a simple template — review and edit the draft."
+          : "AI draft ready — open Review draft to edit."
+      );
     } catch (err) {
+      setStatusMessage(null);
       setError(err instanceof Error ? err.message : "Processing failed");
     } finally {
       setProcessing(false);
@@ -125,8 +151,8 @@ export function ListingHub({ listingId }: ListingHubProps) {
             Listing hub
           </h1>
           <p className="mt-2 text-lg text-[var(--muted)]">
-            Pair your phone with the QR code, watch photos arrive here, then
-            finish the draft.
+            Pair your phone with the QR code, watch garment photos arrive here,
+            then finish the clothing draft.
           </p>
         </div>
         <Link
@@ -143,12 +169,18 @@ export function ListingHub({ listingId }: ListingHubProps) {
         </p>
       ) : null}
 
+      {statusMessage ? (
+        <p className="rounded-xl bg-[var(--accent-soft)] px-4 py-3 text-base text-[var(--accent)]">
+          {statusMessage}
+        </p>
+      ) : null}
+
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
         {joinUrl ? (
           <QrPanel
             value={joinUrl}
             title="Phone camera"
-            hint="Scan to open the photo coach on your phone for this listing."
+            hint="Scan to open the clothing photo coach on your phone for this piece."
             code={listing.join_code}
           />
         ) : (
@@ -166,8 +198,8 @@ export function ListingHub({ listingId }: ListingHubProps) {
               <Attr label="Brand" value={attrs.brand} />
               <Attr label="Size" value={attrs.size} />
               <Attr label="Color" value={attrs.color} />
-              <Attr label="Category" value={attrs.category} />
-              <Attr label="Material" value={attrs.material} />
+              <Attr label="Garment type" value={attrs.category} />
+              <Attr label="Fabric" value={attrs.material} />
               <Attr label="Condition" value={attrs.condition} />
               <div className="sm:col-span-2">
                 <dt className="text-sm text-[var(--muted)]">Notes</dt>
@@ -184,42 +216,39 @@ export function ListingHub({ listingId }: ListingHubProps) {
           ) : (
             <p className="mt-4 text-base text-[var(--muted)]">
               Add a brand or care tag photo on the phone to start identifying
-              this item.
+              this garment.
             </p>
           )}
         </section>
       </div>
 
-      <section>
-        <h2 className="mb-4 font-[family-name:var(--font-brand)] text-2xl">
+      <section className="flex flex-col gap-6">
+        <h2 className="font-[family-name:var(--font-brand)] text-2xl">
           Photos ({photos.length})
         </h2>
         {photos.length === 0 ? (
           <p className="text-base text-[var(--muted)]">
-            No photos yet. Scan the QR code and take the first shot on your
-            phone.
+            No garment photos yet. Scan the QR code and take the first shot on
+            your phone.
           </p>
         ) : (
-          <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
-            {photos.map((photo) => (
-              <li
-                key={photo.id}
-                className="overflow-hidden rounded-xl ring-1 ring-[var(--border)]"
-              >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={
-                    photo.processedSignedUrl ?? photo.signedUrl ?? undefined
-                  }
-                  alt={photo.role}
-                  className="aspect-square w-full object-cover"
-                />
-                <p className="bg-white px-2 py-1 text-center text-sm capitalize text-[var(--muted)]">
-                  {photo.role.replaceAll("_", " ")}
-                </p>
-              </li>
-            ))}
-          </ul>
+          <>
+            <PhotoGroup
+              title="Identification (not posted)"
+              photos={photos.filter((p) => isIdentifyPhotoRole(p.role))}
+              empty="No tag photos yet."
+            />
+            <PhotoGroup
+              title="Inventory (not posted)"
+              photos={photos.filter((p) => p.role === "inventory")}
+              empty="No inventory photo yet."
+            />
+            <PhotoGroup
+              title="Listing photos"
+              photos={photos.filter((p) => isPostingPhotoRole(p.role))}
+              empty="No listing photos yet."
+            />
+          </>
         )}
       </section>
 
@@ -227,13 +256,20 @@ export function ListingHub({ listingId }: ListingHubProps) {
         <Link href={`/app/listings/${listingId}/photos`} className="block">
           <BigButton>Take photos</BigButton>
         </Link>
-        <BigButton
-          variant="secondary"
-          disabled={processing || photos.length === 0}
-          onClick={() => void runProcess()}
-        >
-          {processing ? "Working…" : "Finish with AI"}
-        </BigButton>
+        <div className="flex flex-col gap-2">
+          <BigButton
+            variant="secondary"
+            disabled={processing}
+            onClick={() => void runProcess()}
+          >
+            {processing ? "Working…" : "Finish with AI"}
+          </BigButton>
+          {photos.length === 0 ? (
+            <p className="text-sm text-[var(--muted)]">
+              Needs at least one photo first.
+            </p>
+          ) : null}
+        </div>
         <Link href={`/app/listings/${listingId}/review`} className="block">
           <BigButton variant="secondary">Review draft</BigButton>
         </Link>
@@ -252,6 +288,49 @@ function Attr({ label, value }: { label: string; value: string | null }) {
       <dd className="mt-1 font-medium text-[var(--foreground)]">
         {value || "—"}
       </dd>
+    </div>
+  );
+}
+
+function PhotoGroup({
+  title,
+  photos,
+  empty,
+}: {
+  title: string;
+  photos: ListingPhotoWithUrl[];
+  empty: string;
+}) {
+  return (
+    <div>
+      <h3 className="mb-2 text-base font-semibold text-[var(--foreground)]">
+        {title}
+      </h3>
+      {photos.length === 0 ? (
+        <p className="text-sm text-[var(--muted)]">{empty}</p>
+      ) : (
+        <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
+          {photos.map((photo) => (
+            <li
+              key={photo.id}
+              className="overflow-hidden rounded-xl ring-1 ring-[var(--border)]"
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={
+                  photo.processedSignedUrl ?? photo.signedUrl ?? undefined
+                }
+                alt={photoRoleLabel(photo.role)}
+                className="aspect-square w-full object-cover"
+              />
+              <p className="bg-white px-2 py-1 text-center text-sm text-[var(--muted)]">
+                {photoRoleLabel(photo.role)}
+                {isNonPostingPhotoRole(photo.role) ? " · private" : ""}
+              </p>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }

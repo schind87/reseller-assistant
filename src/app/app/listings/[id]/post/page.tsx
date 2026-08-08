@@ -5,17 +5,44 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { BigButton } from "@/components/BigButton";
 import { CopyField } from "@/components/CopyField";
+import { ExtensionInstallCard } from "@/components/ExtensionInstallCard";
 import { QrPanel } from "@/components/QrPanel";
+import {
+  getSeedListingSchema,
+  structuredKey,
+  type PlatformListingSchema,
+} from "@/lib/listing-schemas";
 import {
   PLATFORM_LABELS,
   POSTING_CHECKLIST,
   SELL_PAGE_URLS,
 } from "@/lib/platforms";
-import type { Listing, Platform } from "@/lib/types";
+import type { Listing, Platform, StructuredFields } from "@/lib/types";
+
+function valueForField(
+  listing: Listing,
+  fieldId: string,
+  source: PlatformListingSchema["fields"][number]["source"]
+): string {
+  if (source === "title") return listing.title ?? "";
+  if (source === "description") return listing.description ?? "";
+  if (source === "price") {
+    return listing.price != null ? String(listing.price) : "";
+  }
+  const key = structuredKey(source);
+  if (!key) return "";
+  const structured = (listing.structured_fields ?? {}) as StructuredFields &
+    Record<string, unknown>;
+  const value = structured[key];
+  if (Array.isArray(value)) return value.join(", ");
+  if (value == null) return "";
+  return String(value);
+}
 
 export default function PostPage() {
   const params = useParams<{ id: string }>();
   const [listing, setListing] = useState<Listing | null>(null);
+  const [schema, setSchema] = useState<PlatformListingSchema | null>(null);
   const [extensionUrl, setExtensionUrl] = useState<string | null>(null);
   const [checked, setChecked] = useState<Record<string, boolean>>({});
   const [error, setError] = useState<string | null>(null);
@@ -27,7 +54,17 @@ export default function PostPage() {
         const res = await fetch(`/api/listings/${params.id}`);
         const json = await res.json();
         if (!res.ok) throw new Error(json.error ?? "Could not load listing");
-        setListing(json.listing);
+        const l = json.listing as Listing;
+        setListing(l);
+
+        const platform = l.platform as Platform;
+        const schemaRes = await fetch(`/api/platforms/${platform}/schema`);
+        const schemaJson = await schemaRes.json();
+        setSchema(
+          schemaRes.ok && schemaJson.schema
+            ? (schemaJson.schema as PlatformListingSchema)
+            : getSeedListingSchema(platform)
+        );
 
         const tokenRes = await fetch(
           `/api/listings/${params.id}/join-token`,
@@ -75,7 +112,7 @@ export default function PostPage() {
     );
   }
 
-  if (!listing) {
+  if (!listing || !schema) {
     return (
       <main className="mx-auto max-w-2xl px-4 py-10 text-lg text-[var(--muted)]">
         Loading posting checklist…
@@ -85,6 +122,7 @@ export default function PostPage() {
 
   const platform = listing.platform as Platform;
   const checklist = POSTING_CHECKLIST[platform];
+  const copyFields = schema.fields.filter((field) => field.copyable);
 
   return (
     <main className="mx-auto flex w-full max-w-2xl flex-col gap-8 px-4 py-8">
@@ -99,8 +137,8 @@ export default function PostPage() {
           Post on {PLATFORM_LABELS[platform]}
         </h1>
         <p className="mt-2 text-lg text-[var(--muted)]">
-          Work through the checklist. Copy fields into the site, or pair the
-          browser extension.
+          Copy each {PLATFORM_LABELS[platform]} field in order — same labels as
+          the sell form.
         </p>
       </header>
 
@@ -116,7 +154,7 @@ export default function PostPage() {
       ) : null}
 
       <a
-        href={SELL_PAGE_URLS[platform]}
+        href={schema.sellPageUrl || SELL_PAGE_URLS[platform]}
         target="_blank"
         rel="noopener noreferrer"
         className="block"
@@ -155,34 +193,19 @@ export default function PostPage() {
 
       <section className="flex flex-col gap-3">
         <h2 className="font-[family-name:var(--font-brand)] text-2xl">
-          Copy these
+          Copy these ({PLATFORM_LABELS[platform]} fields)
         </h2>
-        <CopyField label="Title" value={listing.title ?? ""} />
-        <CopyField
-          label="Description"
-          value={listing.description ?? ""}
-          multiline
-        />
-        <CopyField
-          label="Price"
-          value={listing.price != null ? String(listing.price) : ""}
-        />
-        <CopyField
-          label="Brand"
-          value={listing.structured_fields?.brand ?? ""}
-        />
-        <CopyField
-          label="Size"
-          value={listing.structured_fields?.size ?? ""}
-        />
-        <CopyField
-          label="Color"
-          value={listing.structured_fields?.color ?? ""}
-        />
-        <CopyField
-          label="Condition"
-          value={listing.structured_fields?.condition ?? ""}
-        />
+        {copyFields.map((field) => {
+          const value = valueForField(listing, field.id, field.source);
+          return (
+            <CopyField
+              key={field.id}
+              label={field.label}
+              value={value}
+              multiline={field.input === "textarea"}
+            />
+          );
+        })}
         <CopyField label="Pairing code" value={listing.join_code} />
       </section>
 
@@ -190,10 +213,12 @@ export default function PostPage() {
         <QrPanel
           value={extensionUrl}
           title="Pair browser extension"
-          hint="Scan or paste the pairing code into the Reseller Assistant Chrome extension."
+          hint="Scan or paste the pairing code into the Reseller Assistant Chrome extension. Use Sync form fields on the sell page to keep this app up to date."
           code={listing.join_code}
         />
       ) : null}
+
+      <ExtensionInstallCard compact />
 
       <div className="flex flex-col gap-3">
         <BigButton

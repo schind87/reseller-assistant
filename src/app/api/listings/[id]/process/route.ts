@@ -12,6 +12,15 @@ import {
   updateListing,
   updatePhoto,
 } from "@/lib/supabase/queries";
+import { getProfileById } from "@/lib/auth/otp";
+import {
+  composeSellerContext,
+  composeSmokePetNotes,
+  defaultListingPreferences,
+} from "@/lib/seller-preferences";
+import { isIdentifyPhotoRole, isPostingPhotoRole } from "@/lib/types";
+
+export const maxDuration = 120;
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -24,6 +33,13 @@ export async function POST(_request: Request, context: RouteContext) {
     const result = await getListingWithPhotos(id);
     if (!result) {
       return NextResponse.json({ error: "Listing not found" }, { status: 404 });
+    }
+
+    if (result.photos.length === 0) {
+      return NextResponse.json(
+        { error: "Add at least one photo before running AI." },
+        { status: 400 }
+      );
     }
 
     await updateListing(id, { status: "processing" });
@@ -39,22 +55,40 @@ export async function POST(_request: Request, context: RouteContext) {
       Boolean(p.url)
     );
 
-    const preferTagUrls = signedUrls
-      .filter(
-        (p) => p.photo.role === "brand_tag" || p.photo.role === "care_tag"
-      )
+    const identifyUrls = signedUrls
+      .filter((p) => isIdentifyPhotoRole(p.photo.role))
       .map((p) => p.url);
-    const allUrls = signedUrls.map((p) => p.url);
-    const identifyUrls = preferTagUrls.length > 0 ? preferTagUrls : allUrls;
+    const listingUrls = signedUrls
+      .filter((p) => isPostingPhotoRole(p.photo.role))
+      .map((p) => p.url);
+    const draftImageUrls =
+      listingUrls.length > 0
+        ? listingUrls
+        : identifyUrls.length > 0
+          ? identifyUrls
+          : signedUrls.map((p) => p.url);
 
-    const identified = await identifyFromPhotos(identifyUrls);
+    const identified = await identifyFromPhotos(
+      identifyUrls.length > 0 ? identifyUrls : draftImageUrls
+    );
 
     const workspace = await getWorkspace();
+    const profile = result.listing.user_id
+      ? await getProfileById(result.listing.user_id).catch(() => null)
+      : null;
+    const prefs =
+      profile?.listing_preferences ?? defaultListingPreferences();
+    const smokePetNotes =
+      composeSmokePetNotes(prefs) ||
+      workspace.default_smoke_pet_notes ||
+      null;
+
     const draft = await draftListing({
       platform: result.listing.platform,
       identified,
-      imageUrls: allUrls,
-      smokePetNotes: workspace.default_smoke_pet_notes,
+      imageUrls: draftImageUrls,
+      smokePetNotes,
+      sellerContext: composeSellerContext(prefs),
     });
 
     let coverProcessedPath: string | null = result.listing.cover_processed_path;
@@ -112,7 +146,12 @@ export async function POST(_request: Request, context: RouteContext) {
       /* ignore */
     }
     return NextResponse.json(
-      { error: "Could not process listing" },
+      {
+        error:
+          err instanceof Error && err.message
+            ? err.message
+            : "Could not process listing",
+      },
       { status: 500 }
     );
   }

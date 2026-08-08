@@ -11,7 +11,7 @@ Live app: **https://reseller-assistant.vercel.app** (custom domain **https://res
 - Next.js 16 (App Router) + TypeScript + Tailwind 4
 - Supabase (Postgres + Storage + Auth)
 - Passwordless sign-in: email one-time code (Resend), or your own PIN
-- Optional OpenAI vision/drafting and fal.ai background removal
+- Optional OpenRouter (or OpenAI) vision/drafting and fal.ai background removal
 
 ## Auth email (Resend)
 
@@ -44,7 +44,10 @@ Open [http://localhost:3000](http://localhost:3000) → email code sign-in (or e
 | `SUPABASE_SERVICE_ROLE_KEY` | no* | Prefer service role in production |
 | `SESSION_SECRET` | yes | Signs temporary QR phone-join cookies |
 | `NEXT_PUBLIC_APP_URL` | yes | Canonical URL for redirects |
-| `OPENAI_API_KEY` | no | Without it, identify/draft use editable templates |
+| `OPENROUTER_API_KEY` | no | Preferred AI key (Gemini identify + GPT draft via OpenRouter) |
+| `OPENROUTER_IDENTIFY_MODEL` | no | Default `google/gemini-2.5-pro` |
+| `OPENROUTER_DRAFT_MODEL` | no | Default `openai/gpt-4o` |
+| `OPENAI_API_KEY` | no | Fallback if OpenRouter is unset |
 | `FAL_KEY` | no | Without it, background removal is skipped |
 
 ## Domain

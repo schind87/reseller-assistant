@@ -31,7 +31,17 @@ create table if not exists listing_photos (
   id uuid primary key default gen_random_uuid(),
   listing_id uuid not null references listings (id) on delete cascade,
   role text not null
-    check (role in ('brand_tag', 'care_tag', 'cover', 'front', 'back', 'detail', 'flaw')),
+    check (role in (
+      'brand_tag',
+      'care_tag',
+      'id_tag',
+      'inventory',
+      'cover',
+      'front',
+      'back',
+      'detail',
+      'flaw'
+    )),
   storage_path text not null,
   processed_path text,
   sort_order int not null default 0,

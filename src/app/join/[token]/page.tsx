@@ -26,7 +26,9 @@ export default function JoinTokenPage() {
           throw new Error(json.error ?? "Could not join");
         }
         if (cancelled) return;
-        router.replace(`/app/listings/${json.listingId}/photos`);
+        router.replace(
+          `/app/listings/${json.listingId}/photos?phone=1`
+        );
       } catch (err) {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : "Could not join");

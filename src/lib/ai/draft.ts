@@ -1,6 +1,10 @@
 import { generateObject } from "ai";
-import { openai } from "@ai-sdk/openai";
 import { z } from "zod";
+import {
+  getAiModel,
+  hasAiProvider,
+  missingAiProviderMessage,
+} from "@/lib/ai/provider";
 import { FIELD_LIMITS, PLATFORM_LABELS } from "@/lib/platforms";
 import {
   emptyStructuredFields,
@@ -16,14 +20,18 @@ const draftSchema = z.object({
   structured_fields: z.object({
     brand: z.string().nullable(),
     category: z.string().nullable(),
+    subcategory: z.string().nullable(),
     size: z.string().nullable(),
     color: z.string().nullable(),
+    colorSecondary: z.string().nullable(),
     condition: z.string().nullable(),
     originalPrice: z.number().nullable(),
     styleTags: z.array(z.string()),
     measurements: z.string().nullable(),
     fabric: z.string().nullable(),
     smokePetNotes: z.string().nullable(),
+    packageWeight: z.string().nullable(),
+    shippingPayer: z.string().nullable(),
   }),
 });
 
@@ -38,10 +46,11 @@ export type DraftResult = {
 
 function fallbackDraft(
   platform: Platform,
-  identified: IdentifiedAttrs | null
+  identified: IdentifiedAttrs | null,
+  smokePetNotes?: string | null
 ): DraftResult {
   const brand = identified?.brand ?? "Brand";
-  const category = identified?.category ?? "item";
+  const category = identified?.category ?? "clothing";
   const size = identified?.size ? ` Size ${identified.size}` : "";
   const color = identified?.color ? ` ${identified.color}` : "";
   const limits = FIELD_LIMITS[platform];
@@ -57,13 +66,15 @@ function fallbackDraft(
   fields.color = identified?.color ?? null;
   fields.condition = identified?.condition ?? null;
   fields.fabric = identified?.material ?? null;
-  fields.smokePetNotes = "From a smoke-free home. Please ask if you have pet allergies.";
+  fields.smokePetNotes =
+    smokePetNotes ??
+    "From a smoke-free home. Please ask if you have pet allergies.";
 
   const description = [
-    `Selling this ${category.toLowerCase()}.`,
+    `Selling this ${category.toLowerCase()} garment.`,
     identified?.notes ? identified.notes : "",
     fields.smokePetNotes,
-    "Please review all details before listing.",
+    "Please review all clothing details before listing.",
   ]
     .filter(Boolean)
     .join("\n\n")
@@ -75,9 +86,9 @@ function fallbackDraft(
     price: null,
     structured_fields: fields,
     degraded: true,
-    message: process.env.OPENAI_API_KEY
+    message: hasAiProvider()
       ? "Draft generation failed — using a simple template. Edit before posting."
-      : "AI drafting skipped — OPENAI_API_KEY is not set. Edit the template before posting.",
+      : `${missingAiProviderMessage()} Edit the template before posting.`,
   };
 }
 
@@ -86,12 +97,19 @@ export async function draftListing(params: {
   identified: IdentifiedAttrs | null;
   imageUrls?: string[];
   smokePetNotes?: string | null;
+  sellerContext?: string | null;
 }): Promise<DraftResult> {
-  const { platform, identified, imageUrls = [], smokePetNotes } = params;
+  const {
+    platform,
+    identified,
+    imageUrls = [],
+    smokePetNotes,
+    sellerContext,
+  } = params;
   const limits = FIELD_LIMITS[platform];
 
-  if (!process.env.OPENAI_API_KEY) {
-    return fallbackDraft(platform, identified);
+  if (!hasAiProvider()) {
+    return fallbackDraft(platform, identified, smokePetNotes);
   }
 
   const platformTips =
@@ -107,8 +125,13 @@ export async function draftListing(params: {
       {
         type: "text",
         text: `Write a high-quality ${PLATFORM_LABELS[platform]} clothing listing draft.
+This app lists apparel only (tops, bottoms, dresses, outerwear, shoes, bags, accessories).
+Use clothing categories and garment language — not generic merchandise wording.
 
 ${platformTips}
+
+Seller / household preferences (honor these in description and tone):
+${sellerContext ?? "None provided."}
 
 Known attributes (may be incomplete — do not invent brand/size when confidence is low):
 ${JSON.stringify(identified ?? {}, null, 2)}
@@ -117,8 +140,10 @@ Default smoke/pet note to use if none better is known: ${
           smokePetNotes ??
           "From a smoke-free home. Please ask if you have pet allergies."
         }
+Put that smoke/pet note into structured_fields.smokePetNotes and weave it naturally into the description.
 
 Return title, description, suggested price (null if unsure), and structured_fields.
+Prefer flat measurements (bust/chest, waist, length, inseam) when relevant.
 Keep title within ${limits.titleMax} characters and description within ${limits.descriptionMax}.`,
       },
       ...imageUrls.slice(0, 4).map((url) => ({
@@ -128,7 +153,7 @@ Keep title within ${limits.titleMax} characters and description within ${limits.
     ];
 
     const { object } = await generateObject({
-      model: openai("gpt-4o"),
+      model: getAiModel("draft"),
       schema: draftSchema,
       messages: [{ role: "user", content }],
     });
@@ -150,19 +175,24 @@ Keep title within ${limits.titleMax} characters and description within ${limits.
       structured_fields: {
         brand: object.structured_fields.brand,
         category: object.structured_fields.category,
+        subcategory: object.structured_fields.subcategory,
         size: object.structured_fields.size,
         color: object.structured_fields.color,
+        colorSecondary: object.structured_fields.colorSecondary,
         condition: object.structured_fields.condition,
         originalPrice: object.structured_fields.originalPrice,
         styleTags: object.structured_fields.styleTags ?? [],
         measurements: object.structured_fields.measurements,
         fabric: object.structured_fields.fabric,
-        smokePetNotes: object.structured_fields.smokePetNotes,
+        smokePetNotes:
+          object.structured_fields.smokePetNotes ?? smokePetNotes ?? null,
+        packageWeight: object.structured_fields.packageWeight,
+        shippingPayer: object.structured_fields.shippingPayer,
       },
       degraded: false,
     };
   } catch (err) {
     console.error("draftListing failed:", err);
-    return fallbackDraft(platform, identified);
+    return fallbackDraft(platform, identified, smokePetNotes);
   }
 }

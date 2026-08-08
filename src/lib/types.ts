@@ -10,11 +10,39 @@ export type ListingStatus =
 export type PhotoRole =
   | "brand_tag"
   | "care_tag"
+  | "id_tag"
+  | "inventory"
   | "cover"
   | "front"
   | "back"
   | "detail"
   | "flaw";
+
+/** Photos used only for AI/ID or personal inventory — never posted. */
+export const NON_POSTING_PHOTO_ROLES: readonly PhotoRole[] = [
+  "brand_tag",
+  "care_tag",
+  "id_tag",
+  "inventory",
+] as const;
+
+export const IDENTIFY_PHOTO_ROLES: readonly PhotoRole[] = [
+  "brand_tag",
+  "care_tag",
+  "id_tag",
+] as const;
+
+export function isIdentifyPhotoRole(role: PhotoRole): boolean {
+  return (IDENTIFY_PHOTO_ROLES as readonly string[]).includes(role);
+}
+
+export function isNonPostingPhotoRole(role: PhotoRole): boolean {
+  return (NON_POSTING_PHOTO_ROLES as readonly string[]).includes(role);
+}
+
+export function isPostingPhotoRole(role: PhotoRole): boolean {
+  return !isNonPostingPhotoRole(role);
+}
 
 export type IdentifiedAttrs = {
   brand: string | null;
@@ -31,14 +59,18 @@ export type IdentifiedAttrs = {
 export type StructuredFields = {
   brand: string | null;
   category: string | null;
+  subcategory: string | null;
   size: string | null;
   color: string | null;
+  colorSecondary: string | null;
   condition: string | null;
   originalPrice: number | null;
   styleTags: string[];
   measurements: string | null;
   fabric: string | null;
   smokePetNotes: string | null;
+  packageWeight: string | null;
+  shippingPayer: string | null;
 };
 
 export type Listing = {
@@ -114,13 +146,17 @@ export function emptyStructuredFields(): StructuredFields {
   return {
     brand: null,
     category: null,
+    subcategory: null,
     size: null,
     color: null,
+    colorSecondary: null,
     condition: null,
     originalPrice: null,
     styleTags: [],
     measurements: null,
     fabric: null,
     smokePetNotes: null,
+    packageWeight: null,
+    shippingPayer: null,
   };
 }

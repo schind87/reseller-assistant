@@ -95,6 +95,9 @@ export function UnlockForm() {
         <h1 className="mt-2 font-[family-name:var(--font-brand)] text-4xl text-[var(--foreground)]">
           Reseller Assistant
         </h1>
+        <p className="mt-1 text-base text-[var(--muted)]">
+          Guided clothing listings for Mercari and Poshmark.
+        </p>
         <p className="mt-3 text-lg text-[var(--muted)]">
           {mode === "pin"
             ? "Sign in with your email and the PIN you chose."

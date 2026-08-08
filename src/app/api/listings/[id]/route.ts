@@ -21,14 +21,18 @@ const patchSchema = z.object({
     .object({
       brand: z.string().nullable(),
       category: z.string().nullable(),
+      subcategory: z.string().nullable(),
       size: z.string().nullable(),
       color: z.string().nullable(),
+      colorSecondary: z.string().nullable(),
       condition: z.string().nullable(),
       originalPrice: z.number().nullable(),
       styleTags: z.array(z.string()),
       measurements: z.string().nullable(),
       fabric: z.string().nullable(),
       smokePetNotes: z.string().nullable(),
+      packageWeight: z.string().nullable(),
+      shippingPayer: z.string().nullable(),
     })
     .optional(),
   identified_attrs: z
@@ -82,7 +86,7 @@ export async function GET(_request: Request, context: RouteContext) {
 
 export async function PATCH(request: Request, context: RouteContext) {
   const { id } = await context.params;
-  const access = await authorizeListingAccess(id, { writeRequiresOwner: true });
+  const access = await authorizeListingAccess(id);
   if (access.error) return access.error;
 
   try {
@@ -90,6 +94,20 @@ export async function PATCH(request: Request, context: RouteContext) {
     const parsed = patchSchema.safeParse(json);
     if (!parsed.success) {
       return NextResponse.json({ error: "Invalid update" }, { status: 400 });
+    }
+
+    const ownerWrite =
+      access.userId != null &&
+      (!access.listing.user_id || access.listing.user_id === access.userId);
+
+    if (!ownerWrite) {
+      const keys = Object.keys(parsed.data);
+      const onlyPhotoStep =
+        parsed.data.photo_step !== undefined &&
+        keys.every((key) => key === "photo_step");
+      if (!onlyPhotoStep) {
+        return NextResponse.json({ error: "Not your listing" }, { status: 403 });
+      }
     }
 
     const listing =

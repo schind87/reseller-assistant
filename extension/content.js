@@ -2,10 +2,19 @@ const FIELD_KEYWORDS = {
   title: ["title", "item name", "listing title", "name your item", "what are you selling"],
   description: ["description", "describe", "details", "item description", "tell buyers"],
   brand: ["brand", "designer", "make"],
+  category: ["category", "item category", "select a category"],
+  subcategory: ["subcategory", "sub category", "sub-category"],
   size: ["size"],
-  color: ["color", "colour"],
-  condition: ["condition"],
-  price: ["price", "listing price", "ask price", "set a price"],
+  color: ["color", "colour", "primary color"],
+  colorSecondary: ["secondary color", "second color", "color 2"],
+  condition: ["condition", "nwt", "nwot"],
+  price: ["price", "listing price", "ask price", "set a price", "asking price"],
+  originalPrice: ["original price", "retail price", "original"],
+  styleTags: ["style tags", "style tag", "tags"],
+  packageWeight: ["weight", "package weight", "shipping weight", "item weight"],
+  shippingPayer: ["who pays", "shipping fee", "payer", "shipping paid"],
+  fabric: ["fabric", "material", "composition"],
+  measurements: ["measurement", "measurements"],
 };
 
 const HIGHLIGHT_STYLE_ID = "reseller-assistant-highlight-style";
@@ -250,6 +259,69 @@ function handleHighlightNext(payload) {
   return { ok: true, filled: false };
 }
 
+function guessInputType(el, label) {
+  if (el.tagName === "TEXTAREA") return "textarea";
+  if (el.tagName === "SELECT") return "select";
+  const type = (el.getAttribute("type") || "text").toLowerCase();
+  if (type === "number" || /price|weight/.test(label)) return "number";
+  if (/tag/.test(label)) return "tags";
+  return "text";
+}
+
+function discoverFormFields() {
+  const seen = new Set();
+  const fields = [];
+
+  for (const el of candidates()) {
+    const label = labelTextFor(el) || metaTextFor(el);
+    if (!label || label.length < 2) continue;
+    const shortLabel = label.slice(0, 80);
+    const key = `${el.tagName}:${shortLabel}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+
+    const id = shortLabel
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "_")
+      .replace(/^_|_$/g, "")
+      .slice(0, 40);
+
+    const options =
+      el instanceof HTMLSelectElement
+        ? Array.from(el.options)
+            .map((opt) => (opt.textContent || "").trim())
+            .filter((text) => text && !/^select/i.test(text))
+            .slice(0, 40)
+        : undefined;
+
+    const required =
+      el.hasAttribute("required") ||
+      el.getAttribute("aria-required") === "true" ||
+      /\*/.test(shortLabel);
+
+    fields.push({
+      id: id || `field_${fields.length + 1}`,
+      label: shortLabel.replace(/\*$/, "").trim(),
+      input: guessInputType(el, shortLabel),
+      required,
+      keywords: [shortLabel],
+      options,
+      maxLength: el.maxLength > 0 ? el.maxLength : undefined,
+    });
+  }
+
+  return {
+    ok: true,
+    url: location.href,
+    platform: /poshmark/i.test(location.hostname)
+      ? "poshmark"
+      : /mercari/i.test(location.hostname)
+        ? "mercari"
+        : null,
+    fields,
+  };
+}
+
 function handleMessage(message) {
   if (!message || typeof message !== "object") {
     return { ok: false, filled: false, error: "Invalid message" };
@@ -260,6 +332,8 @@ function handleMessage(message) {
       return handleFillField(message);
     case "highlightNext":
       return handleHighlightNext(message);
+    case "discoverForm":
+      return discoverFormFields();
     default:
       return { ok: false, filled: false, error: `Unknown message type: ${message.type}` };
   }

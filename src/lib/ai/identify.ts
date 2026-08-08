@@ -1,6 +1,10 @@
 import { generateObject } from "ai";
-import { openai } from "@ai-sdk/openai";
 import { z } from "zod";
+import {
+  getAiModel,
+  hasAiProvider,
+  missingAiProviderMessage,
+} from "@/lib/ai/provider";
 import {
   emptyIdentifiedAttrs,
   type IdentifiedAttrs,
@@ -21,21 +25,21 @@ const identifySchema = z.object({
 export async function identifyFromPhotos(
   imageUrls: string[]
 ): Promise<IdentifiedAttrs> {
-  if (!process.env.OPENAI_API_KEY) {
+  if (!hasAiProvider()) {
     return emptyIdentifiedAttrs(
-      "AI identification skipped — OPENAI_API_KEY is not set. Please fill in brand, size, and other details yourself."
+      `${missingAiProviderMessage()} Please fill in brand, size, and other details yourself.`
     );
   }
 
   if (imageUrls.length === 0) {
     return emptyIdentifiedAttrs(
-      "No photos available yet. Add tag or item photos to identify this piece."
+      "No photos available yet. Add tag or garment photos to identify this piece."
     );
   }
 
   try {
     const { object } = await generateObject({
-      model: openai("gpt-4o"),
+      model: getAiModel("identify"),
       schema: identifySchema,
       messages: [
         {
@@ -43,8 +47,11 @@ export async function identifyFromPhotos(
           content: [
             {
               type: "text",
-              text: `You are helping a clothing reseller identify a garment from photos.
+              text: `You are helping a clothing reseller identify apparel from photos of garment tags and the piece itself.
+Scope: clothing and wearable fashion only (tops, bottoms, dresses, outerwear, shoes, bags, accessories).
+You may receive several tag photos — brand, care, size, style/SKU numbers, and other labels. Read all of them.
 Prefer brand and care tags when present. Do not invent a brand or size if you cannot read them.
+Category should be a clothing type (e.g. blouse, jeans, sneakers), not a generic "item".
 Return structured attributes and a confidence from 0 to 1.
 List any fields the seller should double-check in needsConfirm.
 Be concise in notes.`,

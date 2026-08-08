@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireUser } from "@/lib/api-auth";
+import { getProfileById } from "@/lib/auth/otp";
 import { createListing, listListings } from "@/lib/supabase/queries";
 
 const createSchema = z.object({
@@ -28,6 +29,14 @@ export async function POST(request: Request) {
   if (auth.error) return auth.error;
 
   try {
+    const profile = await getProfileById(auth.user.id);
+    if (!profile?.listing_prefs_completed_at) {
+      return NextResponse.json(
+        { error: "Finish your seller profile before starting a listing." },
+        { status: 400 }
+      );
+    }
+
     const json = await request.json();
     const parsed = createSchema.safeParse(json);
     if (!parsed.success) {

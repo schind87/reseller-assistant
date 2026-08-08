@@ -29,6 +29,7 @@ const els = {
   fillTitleBtn: document.getElementById("fill-title-btn"),
   fillDescriptionBtn: document.getElementById("fill-description-btn"),
   fillAllBtn: document.getElementById("fill-all-btn"),
+  syncSchemaBtn: document.getElementById("sync-schema-btn"),
   copyPhotosBtn: document.getElementById("copy-photos-btn"),
   nextStepBtn: document.getElementById("next-step-btn"),
   actionStatus: document.getElementById("action-status"),
@@ -210,14 +211,27 @@ async function handlePair() {
 
 function fieldValue(fieldKey) {
   if (!listing) return "";
+  const structured = listing.structuredFields || listing.structured_fields || {};
   const map = {
     title: listing.title ?? listing.name,
     description: listing.description,
-    brand: listing.brand,
-    size: listing.size,
-    color: listing.color,
-    condition: listing.condition,
+    brand: listing.brand ?? structured.brand,
+    category: structured.category,
+    subcategory: structured.subcategory,
+    size: listing.size ?? structured.size,
+    color: listing.color ?? structured.color,
+    colorSecondary: structured.colorSecondary,
+    condition: listing.condition ?? structured.condition,
     price: listing.price ?? listing.listPrice,
+    originalPrice: structured.originalPrice,
+    styleTags: Array.isArray(structured.styleTags)
+      ? structured.styleTags.join(", ")
+      : structured.styleTags,
+    packageWeight: structured.packageWeight,
+    shippingPayer: structured.shippingPayer,
+    fabric: structured.fabric,
+    measurements: structured.measurements,
+    smokePetNotes: structured.smokePetNotes,
   };
   const value = map[fieldKey];
   return value == null ? "" : String(value);
@@ -283,7 +297,22 @@ async function handleFillDescription() {
 }
 
 async function handleFillAll() {
-  const keys = ["title", "description", "brand", "size", "color", "condition", "price"];
+  const keys = [
+    "title",
+    "description",
+    "brand",
+    "category",
+    "subcategory",
+    "size",
+    "color",
+    "colorSecondary",
+    "condition",
+    "originalPrice",
+    "price",
+    "styleTags",
+    "packageWeight",
+    "shippingPayer",
+  ];
   let filled = 0;
   try {
     for (const key of keys) {
@@ -301,6 +330,60 @@ async function handleFillAll() {
     );
   } catch (error) {
     setStatus(els.actionStatus, error instanceof Error ? error.message : "Fill failed", "error");
+  }
+}
+
+async function handleSyncSchema() {
+  if (!pairing) {
+    setStatus(els.actionStatus, "Pair a listing first.", "error");
+    return;
+  }
+  try {
+    setStatus(els.actionStatus, "Reading sell form…");
+    const discovery = await sendToActiveTab({ type: "discoverForm" });
+    if (!discovery?.ok || !Array.isArray(discovery.fields) || !discovery.fields.length) {
+      throw new Error(
+        discovery?.error || "No form fields found. Open the marketplace sell/create page."
+      );
+    }
+    const platform =
+      discovery.platform ||
+      (listing?.platform === "poshmark" || listing?.platform === "mercari"
+        ? listing.platform
+        : null);
+    if (!platform) {
+      throw new Error("Could not tell if this is Mercari or Poshmark.");
+    }
+
+    const res = await fetch(`${pairing.appUrl}/api/platforms/schema/discover`, {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${pairing.token}`,
+      },
+      body: JSON.stringify({
+        platform,
+        sellPageUrl: discovery.url,
+        fields: discovery.fields,
+      }),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(json.error || `Sync failed (${res.status})`);
+    }
+    setStatus(
+      els.actionStatus,
+      json.message ||
+        `Synced ${discovery.fields.length} fields from the live ${platform} sell page.`,
+      "ok"
+    );
+  } catch (error) {
+    setStatus(
+      els.actionStatus,
+      error instanceof Error ? error.message : "Sync failed",
+      "error"
+    );
   }
 }
 
@@ -369,6 +452,7 @@ els.unpairBtn.addEventListener("click", clearPairing);
 els.fillTitleBtn.addEventListener("click", handleFillTitle);
 els.fillDescriptionBtn.addEventListener("click", handleFillDescription);
 els.fillAllBtn.addEventListener("click", handleFillAll);
+els.syncSchemaBtn.addEventListener("click", handleSyncSchema);
 els.copyPhotosBtn.addEventListener("click", handleCopyPhotos);
 els.nextStepBtn.addEventListener("click", handleNextStep);
 

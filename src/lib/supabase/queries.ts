@@ -1,6 +1,7 @@
 import { randomBytes } from "crypto";
 import { v4 as uuidv4 } from "uuid";
 import { createAdminClient } from "@/lib/supabase/admin";
+import type { PlatformListingSchema } from "@/lib/listing-schemas";
 import {
   emptyIdentifiedAttrs,
   emptyStructuredFields,
@@ -259,11 +260,13 @@ export async function updateListing(
 const ROLE_SORT: Record<PhotoRole, number> = {
   brand_tag: 0,
   care_tag: 1,
-  cover: 2,
-  front: 3,
-  back: 4,
-  detail: 5,
-  flaw: 6,
+  id_tag: 2,
+  inventory: 3,
+  cover: 4,
+  front: 5,
+  back: 6,
+  detail: 7,
+  flaw: 8,
 };
 
 export async function addPhoto(params: {
@@ -376,4 +379,56 @@ export function requestOrigin(request: Request): string | null {
   if (!host) return null;
   const proto = request.headers.get("x-forwarded-proto") || "https";
   return `${proto}://${host}`;
+}
+
+export async function getStoredListingSchema(
+  platform: Platform
+): Promise<PlatformListingSchema | null> {
+  const supabase = createAdminClient();
+  const { data, error } = await supabase
+    .from("platform_listing_schemas")
+    .select("*")
+    .eq("platform", platform)
+    .maybeSingle();
+  if (error) throw new Error(`getStoredListingSchema: ${error.message}`);
+  if (!data) return null;
+  return {
+    platform: data.platform as Platform,
+    version: data.version as number,
+    sellPageUrl: data.sell_page_url as string,
+    source: data.source as "seed" | "extension",
+    syncedAt: (data.synced_at as string | null) ?? null,
+    fields: data.fields as PlatformListingSchema["fields"],
+  };
+}
+
+export async function upsertListingSchema(
+  schema: PlatformListingSchema
+): Promise<PlatformListingSchema> {
+  const supabase = createAdminClient();
+  const { data, error } = await supabase
+    .from("platform_listing_schemas")
+    .upsert(
+      {
+        platform: schema.platform,
+        version: schema.version,
+        sell_page_url: schema.sellPageUrl,
+        source: schema.source,
+        fields: schema.fields,
+        synced_at: schema.syncedAt,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "platform" }
+    )
+    .select("*")
+    .single();
+  if (error) throw new Error(`upsertListingSchema: ${error.message}`);
+  return {
+    platform: data.platform as Platform,
+    version: data.version as number,
+    sellPageUrl: data.sell_page_url as string,
+    source: data.source as "seed" | "extension",
+    syncedAt: (data.synced_at as string | null) ?? null,
+    fields: data.fields as PlatformListingSchema["fields"],
+  };
 }

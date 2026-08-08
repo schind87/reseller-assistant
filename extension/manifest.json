@@ -1,11 +1,13 @@
 {
   "manifest_version": 3,
   "name": "Reseller Assistant",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Autofill Mercari and Poshmark listing pages from Reseller Assistant.",
   "permissions": ["storage", "activeTab", "sidePanel"],
   "host_permissions": [
     "https://reseller.mvfeed.us/*",
+    "https://reseller-assistant.vercel.app/*",
+    "https://*.vercel.app/*",
     "https://*.mercari.com/*",
     "https://poshmark.com/*",
     "https://*.poshmark.com/*"

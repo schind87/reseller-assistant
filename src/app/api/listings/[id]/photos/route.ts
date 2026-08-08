@@ -8,11 +8,16 @@ import {
   updateListing,
   uploadListingPhoto,
 } from "@/lib/supabase/queries";
-import type { PhotoRole } from "@/lib/types";
+import {
+  isIdentifyPhotoRole,
+  type PhotoRole,
+} from "@/lib/types";
 
 const PHOTO_ROLES: PhotoRole[] = [
   "brand_tag",
   "care_tag",
+  "id_tag",
+  "inventory",
   "cover",
   "front",
   "back",
@@ -27,9 +32,7 @@ async function runEarlyIdentify(listingId: string) {
     const result = await getListingWithPhotos(listingId);
     if (!result) return;
 
-    const tagPhotos = result.photos.filter(
-      (p) => p.role === "brand_tag" || p.role === "care_tag"
-    );
+    const tagPhotos = result.photos.filter((p) => isIdentifyPhotoRole(p.role));
     if (tagPhotos.length === 0) return;
 
     const urls = (
@@ -73,14 +76,20 @@ export async function POST(request: Request, context: RouteContext) {
 
     const steps = getPhotoSteps(listing.platform);
     const stepIndex = steps.findIndex((s) => s.role === role);
+    const step = stepIndex >= 0 ? steps[stepIndex] : null;
+    // Multi-shot steps stay on the same index until the seller advances manually.
     const nextStep =
-      stepIndex >= 0 ? Math.min(stepIndex + 1, steps.length) : listing.photo_step;
+      stepIndex >= 0
+        ? step?.allowMultiple
+          ? stepIndex
+          : Math.min(stepIndex + 1, steps.length)
+        : listing.photo_step;
 
     await updateListing(id, {
       photo_step: Math.max(listing.photo_step, nextStep),
     });
 
-    if (role === "brand_tag" || role === "care_tag") {
+    if (isIdentifyPhotoRole(role)) {
       void runEarlyIdentify(id);
     }
 

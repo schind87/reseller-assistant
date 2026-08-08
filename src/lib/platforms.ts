@@ -1,10 +1,15 @@
 import type { PhotoRole, Platform } from "@/lib/types";
 
+export type PhotoStepPurpose = "identify" | "inventory" | "listing";
+
 export type PhotoStepDef = {
   role: PhotoRole;
   title: string;
   instruction: string;
   optional: boolean;
+  purpose: PhotoStepPurpose;
+  /** Keep the coach on this step so the seller can add more shots. */
+  allowMultiple: boolean;
 };
 
 export type FieldLimits = {
@@ -19,48 +24,81 @@ export type ChecklistStep = {
   hint: string;
 };
 
+/** Ideal capture frame shown in the in-app camera for listing photos. */
+export type PhotoAspectGuide = {
+  width: number;
+  height: number;
+  label: string;
+};
+
+export const PLATFORM_PHOTO_ASPECT: Record<Platform, PhotoAspectGuide> = {
+  // Both marketplaces display listing grids as squares in practice.
+  mercari: { width: 1, height: 1, label: "1:1 square" },
+  poshmark: { width: 1, height: 1, label: "1:1 square" },
+};
+
 const SHARED_PHOTO_STEPS: PhotoStepDef[] = [
   {
-    role: "brand_tag",
-    title: "Brand tag",
-    instruction: "Photo the brand label inside the garment if you can find it.",
+    role: "id_tag",
+    title: "Identification tags",
+    instruction:
+      "Photo every tag on the garment — brand, size, care, style or SKU numbers, and any other labels. Take as many as you need. These are for identification only and will not be posted.",
     optional: true,
+    purpose: "identify",
+    allowMultiple: true,
   },
   {
-    role: "care_tag",
-    title: "Size & care tag",
-    instruction: "Photo the size and fabric/care label. This helps get the size right.",
+    role: "inventory",
+    title: "Inventory photo",
+    instruction:
+      "Optional: photo how this piece looks in your storage so you can find it later. This stays private and will not be posted.",
     optional: true,
+    purpose: "inventory",
+    allowMultiple: false,
   },
   {
     role: "cover",
     title: "Cover photo",
-    instruction: "Full item, front-facing, well lit. This is the main photo shoppers see first.",
+    instruction:
+      "Full garment, front-facing, well lit. This is the main photo shoppers see first.",
     optional: false,
+    purpose: "listing",
+    allowMultiple: false,
   },
   {
     role: "front",
     title: "Front",
-    instruction: "Clear front view of the whole item on a simple background.",
+    instruction:
+      "Clear front view of the whole garment on a simple background.",
     optional: false,
+    purpose: "listing",
+    allowMultiple: false,
   },
   {
     role: "back",
     title: "Back",
-    instruction: "Show the back of the item so shoppers see the full piece.",
+    instruction: "Show the back of the garment so shoppers see the full piece.",
     optional: false,
+    purpose: "listing",
+    allowMultiple: false,
   },
   {
     role: "detail",
     title: "Details",
-    instruction: "Close-up of interesting details — texture, buttons, embroidery, or style features.",
+    instruction:
+      "Close-up of fabric texture, buttons, zippers, embroidery, or style features.",
     optional: false,
+    purpose: "listing",
+    allowMultiple: false,
   },
   {
     role: "flaw",
     title: "Flaws",
-    instruction: "Photo any stains, holes, or wear. Skip if there are no flaws.",
+    instruction:
+      "Photo any stains, holes, pilling, or wear. Skip if the piece is clean.",
     optional: true,
+    purpose: "listing",
+    allowMultiple: true,
   },
 ];
 
@@ -69,7 +107,7 @@ const MERCARI_PHOTO_STEPS: PhotoStepDef[] = SHARED_PHOTO_STEPS.map((step) => {
     return {
       ...step,
       instruction:
-        "Main photo — full item, bright light. Mercari allows up to 12 photos; start with a clean cover shot.",
+        "Main listing photo — full garment, bright light, fill the square frame. Mercari allows up to 12 photos; start with a clean cover shot.",
     };
   }
   return step;
@@ -81,7 +119,7 @@ const POSHMARK_PHOTO_STEPS: PhotoStepDef[] = SHARED_PHOTO_STEPS.map((step) => {
       ...step,
       title: "Cover shot",
       instruction:
-        "Poshmark shoppers judge the cover first. Flat lay or hanging, full item, bright and uncluttered.",
+        "Poshmark shoppers judge the cover first. Flat lay or on a hanger, fill the square frame, bright and uncluttered.",
     };
   }
   return step;
@@ -124,22 +162,22 @@ export const POSTING_CHECKLIST: Record<Platform, ChecklistStep[]> = {
     },
     {
       id: "photos",
-      label: "Add photos in order",
-      hint: "Cover first, then front, back, details, and flaws.",
+      label: "Add listing photos in order",
+      hint: "Cover first, then front, back, details, and flaws. Skip identification and inventory photos.",
     },
     {
       id: "title",
       label: "Paste the title",
-      hint: "Brand, type, size, and color up front (80 character limit).",
+      hint: "Brand, garment type, size, and color up front (80 character limit).",
     },
     {
       id: "description",
       label: "Paste the description",
-      hint: "Include measurements, fabric, flaws, and smoke/pet notes.",
+      hint: "Include flat measurements, fabric, flaws, and smoke/pet notes.",
     },
     {
       id: "fields",
-      label: "Fill brand, category, size, color, condition",
+      label: "Fill brand, clothing category, size, color, condition",
       hint: "Match the review screen fields, or use the browser extension.",
     },
     {
@@ -166,8 +204,8 @@ export const POSTING_CHECKLIST: Record<Platform, ChecklistStep[]> = {
     },
     {
       id: "photos",
-      label: "Add remaining photos",
-      hint: "Front, back, details, then flaws if any.",
+      label: "Add remaining listing photos",
+      hint: "Front, back, details, then flaws if any. Do not upload identification or inventory photos.",
     },
     {
       id: "title",
@@ -177,11 +215,11 @@ export const POSTING_CHECKLIST: Record<Platform, ChecklistStep[]> = {
     {
       id: "description",
       label: "Paste the description",
-      hint: "Include flat measurements and condition notes.",
+      hint: "Include flat measurements, fabric, and condition notes.",
     },
     {
       id: "fields",
-      label: "Fill brand, category, size, color, condition",
+      label: "Fill brand, clothing category, size, color, condition",
       hint: "Also set original price and style tags if you have them.",
     },
     {
@@ -203,4 +241,29 @@ export function getPhotoSteps(platform: Platform): PhotoStepDef[] {
 
 export function getRequiredPhotoRoles(platform: Platform): PhotoRole[] {
   return PHOTO_STEPS[platform].filter((s) => !s.optional).map((s) => s.role);
+}
+
+export function photoRoleLabel(role: PhotoRole): string {
+  switch (role) {
+    case "brand_tag":
+    case "care_tag":
+    case "id_tag":
+      return "ID tag";
+    case "inventory":
+      return "Inventory";
+    case "cover":
+      return "Cover";
+    case "front":
+      return "Front";
+    case "back":
+      return "Back";
+    case "detail":
+      return "Detail";
+    case "flaw":
+      return "Flaw";
+    default: {
+      const _exhaustive: never = role;
+      return _exhaustive;
+    }
+  }
 }

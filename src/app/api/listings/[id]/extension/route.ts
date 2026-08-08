@@ -6,6 +6,7 @@ import {
   getListingWithPhotos,
   getSignedPhotoUrl,
 } from "@/lib/supabase/queries";
+import { isPostingPhotoRole } from "@/lib/types";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -49,19 +50,21 @@ export async function GET(request: Request, context: RouteContext) {
     }
 
     const photos = await Promise.all(
-      result.photos.map(async (photo) => ({
-        id: photo.id,
-        role: photo.role,
-        sortOrder: photo.sort_order,
-        url:
-          (photo.processed_path
+      result.photos
+        .filter((photo) => isPostingPhotoRole(photo.role))
+        .map(async (photo) => ({
+          id: photo.id,
+          role: photo.role,
+          sortOrder: photo.sort_order,
+          url:
+            (photo.processed_path
+              ? await getSignedPhotoUrl(photo.processed_path)
+              : null) ?? (await getSignedPhotoUrl(photo.storage_path)),
+          originalUrl: await getSignedPhotoUrl(photo.storage_path),
+          processedUrl: photo.processed_path
             ? await getSignedPhotoUrl(photo.processed_path)
-            : null) ?? (await getSignedPhotoUrl(photo.storage_path)),
-        originalUrl: await getSignedPhotoUrl(photo.storage_path),
-        processedUrl: photo.processed_path
-          ? await getSignedPhotoUrl(photo.processed_path)
-          : null,
-      }))
+            : null,
+        }))
     );
 
     const { listing } = result;

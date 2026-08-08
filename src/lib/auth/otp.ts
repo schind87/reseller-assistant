@@ -1,12 +1,40 @@
 import { createHash, randomInt } from "crypto";
 import { Resend } from "resend";
 import { createAdminClient } from "@/lib/supabase/admin";
+import {
+  defaultListingPreferences,
+  parseListingPreferences,
+  type ListingPreferences,
+} from "@/lib/seller-preferences";
 
 export type Profile = {
   id: string;
   email: string | null;
   pin_hash: string | null;
+  listing_preferences: ListingPreferences;
+  listing_prefs_completed_at: string | null;
 };
+
+function mapProfile(row: {
+  id: string;
+  email: string | null;
+  pin_hash: string | null;
+  listing_preferences?: unknown;
+  listing_prefs_completed_at?: string | null;
+}): Profile {
+  return {
+    id: row.id,
+    email: row.email,
+    pin_hash: row.pin_hash,
+    listing_preferences: parseListingPreferences(
+      row.listing_preferences ?? defaultListingPreferences()
+    ),
+    listing_prefs_completed_at: row.listing_prefs_completed_at ?? null,
+  };
+}
+
+const PROFILE_SELECT =
+  "id, email, pin_hash, listing_preferences, listing_prefs_completed_at";
 
 export function hashOtpCode(code: string): string {
   return createHash("sha256").update(code).digest("hex");
@@ -76,61 +104,63 @@ export async function upsertProfileByEmail(email: string): Promise<Profile> {
   const supabase = createAdminClient();
   const { data: existing } = await supabase
     .from("profiles")
-    .select("id, email, pin_hash")
+    .select(PROFILE_SELECT)
     .eq("email", email)
     .maybeSingle();
 
   if (existing) {
-    return {
-      id: existing.id as string,
-      email: existing.email as string | null,
-      pin_hash: existing.pin_hash as string | null,
-    };
+    return mapProfile(existing);
   }
 
   const { data, error } = await supabase
     .from("profiles")
     .insert({ email })
-    .select("id, email, pin_hash")
+    .select(PROFILE_SELECT)
     .single();
   if (error) throw new Error(`upsertProfileByEmail: ${error.message}`);
-  return {
-    id: data.id as string,
-    email: data.email as string | null,
-    pin_hash: data.pin_hash as string | null,
-  };
+  return mapProfile(data);
 }
 
 export async function getProfileByEmail(email: string): Promise<Profile | null> {
   const supabase = createAdminClient();
   const { data, error } = await supabase
     .from("profiles")
-    .select("id, email, pin_hash")
+    .select(PROFILE_SELECT)
     .eq("email", email)
     .maybeSingle();
   if (error) throw new Error(`getProfileByEmail: ${error.message}`);
   if (!data) return null;
-  return {
-    id: data.id as string,
-    email: data.email as string | null,
-    pin_hash: data.pin_hash as string | null,
-  };
+  return mapProfile(data);
 }
 
 export async function getProfileById(id: string): Promise<Profile | null> {
   const supabase = createAdminClient();
   const { data, error } = await supabase
     .from("profiles")
-    .select("id, email, pin_hash")
+    .select(PROFILE_SELECT)
     .eq("id", id)
     .maybeSingle();
   if (error) throw new Error(`getProfileById: ${error.message}`);
   if (!data) return null;
-  return {
-    id: data.id as string,
-    email: data.email as string | null,
-    pin_hash: data.pin_hash as string | null,
-  };
+  return mapProfile(data);
+}
+
+export async function updateListingPreferences(
+  userId: string,
+  preferences: ListingPreferences
+): Promise<Profile> {
+  const supabase = createAdminClient();
+  const { data, error } = await supabase
+    .from("profiles")
+    .update({
+      listing_preferences: preferences,
+      listing_prefs_completed_at: new Date().toISOString(),
+    })
+    .eq("id", userId)
+    .select(PROFILE_SELECT)
+    .single();
+  if (error) throw new Error(`updateListingPreferences: ${error.message}`);
+  return mapProfile(data);
 }
 
 export async function setProfilePin(
