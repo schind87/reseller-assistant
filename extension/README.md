@@ -1,72 +1,43 @@
 # Reseller Assistant Chrome Extension
 
-Manifest V3 side-panel helper that autofills **Mercari** and **Poshmark** listing pages from Reseller Assistant.
+Manifest V3 helper that autofills **Mercari** and **Poshmark** listing pages from Reseller Assistant.
 
-## Install (unpacked) — recommended for development
+## Install (unpacked)
 
-1. From the repo root, run:
+1. From the repo root: `npm run extension:live`
+2. Chrome → `chrome://extensions` → Developer mode → **Load unpacked**
+3. Select **`extension-live/`**
 
-```bash
-npm run extension:live
-```
+After code changes: run `npm run extension:live`, then **Reload extension** in the side panel.
 
-2. Open Chrome → `chrome://extensions`
-3. Turn on **Developer mode**
-4. Click **Load unpacked**
-5. Select **`extension-live/`** in this repo (always mirrored from `extension/`)
+## Easy posting flow
 
-`npm run dev` also refreshes `extension-live` before starting Next.js.
+1. Open a listing **Post checklist** in the web app (pairs the extension automatically).
+2. Tap **Open Mercari/Poshmark sell page**.
+3. On that page, use the green **Reseller Assistant** box in the corner:
+   - **Do this for me** — photos, title, description, then other details
+   - **Next step** / **Back**
+4. When it says to review, check the form and press **List / Publish** yourself.
 
-After pulling code changes: run `npm run extension:live`, then click **Reload extension** at the bottom of the side panel.
+The side panel mirrors the same steps if you prefer tapping there.
 
-## Pairing (automatic)
+## Pairing
 
-With the extension loaded:
+- Automatic from the Post checklist page
+- Or paste a join link / 6-digit code in the side panel
 
-1. Open a listing **Post checklist** in the web app — the page pushes the pairing to the extension and opens the side panel when possible.
-2. Or open / scan the extension QR / join link (`?purpose=extension`).
-3. Or paste a 6-digit code or join URL into the side panel (auto-pairs as you paste).
-
-Pairing is saved in `chrome.storage.local` as `{ appUrl, token, listingId }`.
-
-### How pairing talks to the app
-
-- Join code: `GET {appUrl}/api/extension/pair?joinCode=XXXXXX` → `{ token, listingId }`
-- Join token: `GET {appUrl}/api/extension/pair?token=...` → `{ token, listingId }`
-- Listing payload: `GET {appUrl}/api/listings/{listingId}/extension` with header `Authorization: Bearer {token}`
-- Web → extension bridge: `window.postMessage` handled by `bridge.js` on app origins
-
-## Using the coach
-
-1. Open a Mercari or Poshmark **sell / create / list** page
-2. Open the Reseller Assistant side panel
-3. Use:
-   - **Fill title / description / all text fields**
-   - **Attach photos to this page** (downloads your listing photos and drops them into the marketplace file picker)
-   - **Sync form fields**
-   - **Copy photo download links** (fallback)
-   - **Next step** checklist
-
-### Photo upload (recommended)
-
-1. Pair the extension with a listing that has listing photos
-2. Open the marketplace sell form’s photo step
-3. Click **Attach photos to this page**
-
-If the site only accepts one file at a time, attach what you can, then use **Download listing photos ZIP** from the web Post checklist for the rest.
-
-### Publish warning
-
-**You press Publish yourself.** This extension never clicks Publish.
+Stored in `chrome.storage.local` as `{ appUrl, token, listingId, listingCache, stepIndex }`.
 
 ## Files
 
 | File | Role |
 | --- | --- |
-| `manifest.json` | MV3 manifest, permissions, content scripts |
-| `background.js` | Side panel, apply pairing, badge, reload |
-| `bridge.js` | Receives pairing from the web app |
-| `sidepanel.html` / `sidepanel.css` / `sidepanel.js` | Pairing UI + listing coach + photo attach |
-| `content.js` | Field fill, photo attach, highlight on marketplace pages |
+| `manifest.json` | MV3 manifest |
+| `coach-shared.js` | Shared step definitions |
+| `background.js` | Pairing, listing cache, coach actions |
+| `bridge.js` | Web app → extension pairing |
+| `page-coach.js` | On-page helper UI (shadow DOM) |
+| `content.js` | Field fill + photo attach |
+| `sidepanel.*` | Pairing + mirror of coach |
 
 Source of truth is `extension/`. Load Chrome from **`extension-live/`**.

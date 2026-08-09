@@ -1,5 +1,6 @@
 import type { Platform } from "@/lib/types";
 import { getMarketplaceCategoryOptions } from "@/lib/marketplace-categories";
+import { POSHMARK_COLORS } from "@/lib/poshmark-formats";
 
 export type ListingFieldInput =
   | "text"
@@ -49,10 +50,10 @@ const MERCARI_CONDITION = [
   "Poor",
 ];
 
+/** Live Poshmark create-listing condition choices (Aug 2026). */
 const POSHMARK_CONDITION = [
   "New With Tags",
-  "New Without Tags",
-  "Excellent",
+  "Like New",
   "Good",
   "Fair",
 ];
@@ -210,7 +211,7 @@ export const SEED_LISTING_SCHEMAS: Record<Platform, PlatformListingSchema> = {
   },
   poshmark: {
     platform: "poshmark",
-    version: 3,
+    version: 4,
     sellPageUrl: "https://poshmark.com/create-listing",
     source: "seed",
     syncedAt: null,
@@ -241,9 +242,9 @@ export const SEED_LISTING_SCHEMAS: Record<Platform, PlatformListingSchema> = {
         id: "subcategory",
         label: "Subcategory",
         input: "select",
-        required: true,
+        required: false,
         source: "structured:subcategory",
-        hint: "Poshmark category under that department (Tops, Dresses, Shoes, …).",
+        hint: "Optional on Poshmark — pick when available under the category.",
         options: [],
         keywords: ["subcategory", "sub category"],
         copyable: true,
@@ -254,7 +255,8 @@ export const SEED_LISTING_SCHEMAS: Record<Platform, PlatformListingSchema> = {
         input: "text",
         required: true,
         source: "structured:brand",
-        keywords: ["brand"],
+        hint: "Match a brand from Poshmark’s autocomplete when possible.",
+        keywords: ["brand", "designer"],
         copyable: true,
       },
       {
@@ -263,26 +265,29 @@ export const SEED_LISTING_SCHEMAS: Record<Platform, PlatformListingSchema> = {
         input: "text",
         required: true,
         source: "structured:size",
-        hint: "Use the size on the garment tag.",
+        hint: "Use the size on the garment tag (US sizing when possible).",
         keywords: ["size"],
         copyable: true,
       },
       {
         id: "color",
         label: "Primary color",
-        input: "text",
+        input: "select",
         required: true,
         source: "structured:color",
+        options: [...POSHMARK_COLORS],
+        hint: "Must match Poshmark’s color swatches. Up to two colors total.",
         keywords: ["color", "colour", "primary color"],
         copyable: true,
       },
       {
         id: "colorSecondary",
         label: "Secondary color",
-        input: "text",
+        input: "select",
         required: false,
         source: "structured:colorSecondary",
-        hint: "Poshmark lets you mark up to two colors.",
+        options: [...POSHMARK_COLORS],
+        hint: "Optional second Poshmark color swatch.",
         keywords: ["secondary color", "second color", "color 2"],
         copyable: true,
       },
@@ -293,16 +298,17 @@ export const SEED_LISTING_SCHEMAS: Record<Platform, PlatformListingSchema> = {
         required: true,
         source: "structured:condition",
         options: POSHMARK_CONDITION,
-        keywords: ["condition", "nwt", "nwot"],
+        hint: "New With Tags, Like New (includes NWOT), Good, or Fair.",
+        keywords: ["condition", "nwt", "nwot", "like new"],
         copyable: true,
       },
       {
         id: "originalPrice",
         label: "Original price",
         input: "number",
-        required: false,
+        required: true,
         source: "structured:originalPrice",
-        hint: "Retail / original price when known.",
+        hint: "Required on Poshmark — retail / original price (use best estimate if unknown).",
         keywords: ["original price", "retail price", "original"],
         copyable: true,
       },
@@ -321,7 +327,7 @@ export const SEED_LISTING_SCHEMAS: Record<Platform, PlatformListingSchema> = {
         input: "tags",
         required: false,
         source: "structured:styleTags",
-        hint: "Comma-separated style tags (e.g. Bohemian, Casual).",
+        hint: "Up to 3 tags (e.g. Casual, Bohemian, Vintage). Prefer Poshmark’s suggested tags.",
         keywords: ["style", "style tags", "tags"],
         copyable: true,
       },

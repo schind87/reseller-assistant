@@ -9,17 +9,17 @@
   <body>
     <header class="header">
       <h1>Reseller Assistant</h1>
-      <p class="tagline">Fill Mercari &amp; Poshmark listings step by step</p>
+      <p class="tagline">Simple helper for Mercari &amp; Poshmark</p>
       <p id="connection-status" class="connection" role="status" aria-live="polite">
         Checking connection…
       </p>
     </header>
 
     <section id="pair-section" class="card" hidden>
-      <h2>Pair with your listing</h2>
+      <h2>Connect a listing</h2>
       <p class="help">
-        Open a listing’s Post checklist in the web app — this panel should connect
-        automatically. Or paste a join link / 6-digit code below.
+        Easiest: open the listing’s <strong>Post checklist</strong> in the web
+        app — this panel connects by itself. Or paste a join link / 6-digit code.
       </p>
 
       <label for="app-url">App URL</label>
@@ -31,7 +31,7 @@
         spellcheck="false"
       />
 
-      <label for="join-code">6-digit join code or paste join link</label>
+      <label for="join-code">6-digit code or join link</label>
       <input
         id="join-code"
         type="text"
@@ -41,34 +41,36 @@
         spellcheck="false"
       />
 
-      <p class="or-divider">or</p>
+      <details class="advanced">
+        <summary>Advanced: paste token</summary>
+        <label for="token">Token</label>
+        <textarea
+          id="token"
+          rows="3"
+          placeholder="Paste join token here"
+          autocomplete="off"
+          spellcheck="false"
+        ></textarea>
+        <label for="listing-id">Listing ID</label>
+        <input
+          id="listing-id"
+          type="text"
+          placeholder="Listing ID from the web app"
+          autocomplete="off"
+          spellcheck="false"
+        />
+      </details>
 
-      <label for="token">Paste token</label>
-      <textarea
-        id="token"
-        rows="3"
-        placeholder="Paste join token here"
-        autocomplete="off"
-        spellcheck="false"
-      ></textarea>
-
-      <label for="listing-id">Listing ID (required with token)</label>
-      <input
-        id="listing-id"
-        type="text"
-        placeholder="Listing ID from the web app"
-        autocomplete="off"
-        spellcheck="false"
-      />
-
-      <button id="pair-btn" class="btn btn-primary" type="button">Pair &amp; load listing</button>
+      <button id="pair-btn" class="btn btn-primary" type="button">
+        Connect listing
+      </button>
       <p id="pair-status" class="status" role="status" aria-live="polite"></p>
     </section>
 
     <section id="listing-section" class="card" hidden>
       <div class="listing-header">
         <h2 id="listing-title">Listing</h2>
-        <button id="unpair-btn" class="btn btn-ghost" type="button">Unpair</button>
+        <button id="unpair-btn" class="btn btn-ghost" type="button">Disconnect</button>
       </div>
 
       <dl class="listing-meta">
@@ -77,38 +79,51 @@
           <dd id="listing-brand">—</dd>
         </div>
         <div>
-          <dt>Description</dt>
-          <dd id="listing-description" class="description-preview">—</dd>
+          <dt>Now doing</dt>
+          <dd id="coach-step-label">—</dd>
         </div>
       </dl>
 
       <div class="warning" role="alert">
-        <strong>You press Publish yourself</strong>
-        <span>This extension never clicks Publish. Review everything, then publish on the site.</span>
+        <strong>Use the green box on the sell page</strong>
+        <span>
+          Open Mercari or Poshmark create/sell. A helper box appears in the
+          corner — tap <em>Do this for me</em>, then <em>Next step</em>.
+        </span>
       </div>
 
-      <h3 class="steps-heading">Steps coach</h3>
-      <ol id="steps-list" class="steps"></ol>
+      <p id="coach-help" class="help"></p>
+      <p id="coach-preview" class="preview-box"></p>
 
       <div class="actions">
-        <button id="fill-title-btn" class="btn btn-primary" type="button">Fill title</button>
-        <button id="fill-description-btn" class="btn btn-primary" type="button">
-          Fill description
+        <button id="do-step-btn" class="btn btn-primary" type="button">
+          Do this for me
         </button>
-        <button id="attach-photos-btn" class="btn btn-primary" type="button">
-          Attach photos to this page
+        <button id="next-step-btn" class="btn btn-accent" type="button">
+          Next step
         </button>
-        <button id="fill-all-btn" class="btn btn-secondary" type="button">
-          Fill all text fields
+        <button id="prev-step-btn" class="btn btn-secondary" type="button">
+          Back
         </button>
-        <button id="sync-schema-btn" class="btn btn-secondary" type="button">
-          Sync form fields
-        </button>
-        <button id="copy-photos-btn" class="btn btn-secondary" type="button">
-          Copy photo download links
-        </button>
-        <button id="next-step-btn" class="btn btn-accent" type="button">Next step</button>
       </div>
+
+      <details class="advanced">
+        <summary>More options</summary>
+        <div class="actions">
+          <button id="fill-all-btn" class="btn btn-secondary" type="button">
+            Fill all text fields
+          </button>
+          <button id="sync-schema-btn" class="btn btn-secondary" type="button">
+            Sync form fields
+          </button>
+          <button id="copy-photos-btn" class="btn btn-secondary" type="button">
+            Copy photo download links
+          </button>
+          <button id="refresh-btn" class="btn btn-secondary" type="button">
+            Refresh listing
+          </button>
+        </div>
+      </details>
 
       <p id="action-status" class="status" role="status" aria-live="polite"></p>
     </section>
@@ -120,6 +135,7 @@
       <p class="footer-hint">After pulling code, click this instead of chrome://extensions.</p>
     </footer>
 
+    <script src="coach-shared.js"></script>
     <script src="sidepanel.js"></script>
   </body>
 </html>

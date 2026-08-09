@@ -6,6 +6,7 @@ import {
   missingAiProviderMessage,
 } from "@/lib/ai/provider";
 import { FIELD_LIMITS, PLATFORM_LABELS } from "@/lib/platforms";
+import { normalizePoshmarkStructuredFields } from "@/lib/poshmark-formats";
 import {
   emptyStructuredFields,
   type IdentifiedAttrs,
@@ -84,7 +85,10 @@ function fallbackDraft(
     title,
     description,
     price: null,
-    structured_fields: fields,
+    structured_fields:
+      platform === "poshmark"
+        ? normalizePoshmarkStructuredFields(fields)
+        : fields,
     degraded: true,
     message: hasAiProvider()
       ? "Draft generation failed — using a simple template. Edit before posting."
@@ -115,7 +119,12 @@ export async function draftListing(params: {
   const platformTips =
     platform === "mercari"
       ? `Mercari: title max ${limits.titleMax} chars — front-load brand, type, size, color, condition. Description should include measurements, fabric, flaws, and smoke/pet notes.`
-      : `Poshmark: brand-first title (max ${limits.titleMax}). Description should include flat measurements, condition, and style tags. Include original price if known.`;
+      : `Poshmark: brand-first title (max ${limits.titleMax}).
+Condition MUST be exactly one of: "New With Tags", "Like New", "Good", "Fair".
+  (Use "Like New" for NWOT / never worn without tags / excellent used.)
+Primary/secondary color MUST be from: Red, Pink, Orange, Yellow, Green, Blue, Purple, Gold, Silver, Black, Gray, White, Cream, Brown, Tan.
+Style tags: at most 3 short tags. Original price is required on Poshmark when known — estimate retail if needed.
+Description should include flat measurements, fabric, and smoke/pet notes.`;
 
   try {
     const content: Array<
@@ -168,27 +177,48 @@ Keep title within ${limits.titleMax} characters and description within ${limits.
       description = description.slice(0, limits.descriptionMax - 1).trimEnd() + "…";
     }
 
+    const structured =
+      platform === "poshmark"
+        ? normalizePoshmarkStructuredFields({
+            brand: object.structured_fields.brand,
+            category: object.structured_fields.category,
+            subcategory: object.structured_fields.subcategory,
+            size: object.structured_fields.size,
+            color: object.structured_fields.color,
+            colorSecondary: object.structured_fields.colorSecondary,
+            condition: object.structured_fields.condition,
+            originalPrice: object.structured_fields.originalPrice,
+            styleTags: object.structured_fields.styleTags ?? [],
+            measurements: object.structured_fields.measurements,
+            fabric: object.structured_fields.fabric,
+            smokePetNotes:
+              object.structured_fields.smokePetNotes ?? smokePetNotes ?? null,
+            packageWeight: object.structured_fields.packageWeight,
+            shippingPayer: object.structured_fields.shippingPayer,
+          })
+        : {
+            brand: object.structured_fields.brand,
+            category: object.structured_fields.category,
+            subcategory: object.structured_fields.subcategory,
+            size: object.structured_fields.size,
+            color: object.structured_fields.color,
+            colorSecondary: object.structured_fields.colorSecondary,
+            condition: object.structured_fields.condition,
+            originalPrice: object.structured_fields.originalPrice,
+            styleTags: object.structured_fields.styleTags ?? [],
+            measurements: object.structured_fields.measurements,
+            fabric: object.structured_fields.fabric,
+            smokePetNotes:
+              object.structured_fields.smokePetNotes ?? smokePetNotes ?? null,
+            packageWeight: object.structured_fields.packageWeight,
+            shippingPayer: object.structured_fields.shippingPayer,
+          };
+
     return {
       title,
       description,
       price: object.price,
-      structured_fields: {
-        brand: object.structured_fields.brand,
-        category: object.structured_fields.category,
-        subcategory: object.structured_fields.subcategory,
-        size: object.structured_fields.size,
-        color: object.structured_fields.color,
-        colorSecondary: object.structured_fields.colorSecondary,
-        condition: object.structured_fields.condition,
-        originalPrice: object.structured_fields.originalPrice,
-        styleTags: object.structured_fields.styleTags ?? [],
-        measurements: object.structured_fields.measurements,
-        fabric: object.structured_fields.fabric,
-        smokePetNotes:
-          object.structured_fields.smokePetNotes ?? smokePetNotes ?? null,
-        packageWeight: object.structured_fields.packageWeight,
-        shippingPayer: object.structured_fields.shippingPayer,
-      },
+      structured_fields: structured,
       degraded: false,
     };
   } catch (err) {

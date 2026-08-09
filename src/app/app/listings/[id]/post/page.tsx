@@ -184,29 +184,55 @@ export default function PostPage() {
 
       <section className="flex flex-col gap-3 rounded-2xl border border-[var(--border)] bg-white p-5">
         <h2 className="font-[family-name:var(--font-brand)] text-2xl">
-          Upload photos
+          Easy posting with the Chrome helper
         </h2>
-        <ol className="list-decimal space-y-2 pl-5 text-base text-[var(--muted)]">
+        <ol className="list-decimal space-y-3 pl-5 text-base text-[var(--muted)]">
           <li>
-            Install/open the Reseller Assistant Chrome extension and pair this
-            listing (automatic on this page when loaded).
-          </li>
-          <li>
-            On the {PLATFORM_LABELS[platform]} sell page, open the photo upload
-            step.
-          </li>
-          <li>
-            In the extension side panel, tap{" "}
-            <span className="font-semibold text-[var(--foreground)]">
-              Attach photos to this page
-            </span>
+            Keep this page open so the Chrome extension stays connected
+            {extensionStatus ? (
+              <>
+                {" "}
+                —{" "}
+                <span className="font-semibold text-[var(--foreground)]">
+                  {extensionStatus}
+                </span>
+              </>
+            ) : null}
             .
+          </li>
+          <li>
+            Tap{" "}
+            <span className="font-semibold text-[var(--foreground)]">
+              Open {PLATFORM_LABELS[platform]} sell page
+            </span>{" "}
+            above.
+          </li>
+          <li>
+            On that page, use the green{" "}
+            <span className="font-semibold text-[var(--foreground)]">
+              Reseller Assistant
+            </span>{" "}
+            box in the corner:{" "}
+            <span className="font-semibold text-[var(--foreground)]">
+              Do this for me
+            </span>
+            , then{" "}
+            <span className="font-semibold text-[var(--foreground)]">
+              Next step
+            </span>
+            . It walks through photos, title, description, and the rest.
+          </li>
+          <li>
+            When the helper says to review, check the form, then press{" "}
+            <span className="font-semibold text-[var(--foreground)]">
+              List / Publish
+            </span>{" "}
+            yourself on {PLATFORM_LABELS[platform]}.
           </li>
         </ol>
         <p className="text-base text-[var(--muted)]">
-          If attach fails, download the ZIP and choose those files in the
-          marketplace picker (cover is <code>01-cover</code>). Tag and stocking
-          photos are excluded unless you also added them to the listing.
+          Backup if photos don’t attach: download the ZIP and choose those files
+          in the marketplace picker (cover is <code>01-cover</code>).
         </p>
         <a
           href={`/api/listings/${listing.id}/photos/zip`}
@@ -262,12 +288,6 @@ export default function PostPage() {
         })}
         <CopyField label="Pairing code" value={listing.join_code} />
       </section>
-
-      {extensionStatus ? (
-        <p className="rounded-xl bg-[var(--accent-soft)] px-4 py-3 text-base text-[var(--accent)]">
-          {extensionStatus}
-        </p>
-      ) : null}
 
       {extensionUrl ? (
         <QrPanel

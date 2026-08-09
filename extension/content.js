@@ -217,6 +217,38 @@ function fillElement(el, value) {
   return true;
 }
 
+function fillByClickingOption(value) {
+  const normalized = normalizeText(value);
+  if (!normalized) return false;
+
+  const nodes = Array.from(
+    document.querySelectorAll(
+      'li, button, [role="option"], [role="menuitem"], label, span, div'
+    )
+  ).filter((node) => {
+    if (!(node instanceof HTMLElement)) return false;
+    if (node.closest("#reseller-assistant-page-coach")) return false;
+    const text = normalizeText(node.textContent || "");
+    if (!text || text.length > 80) return false;
+    return (
+      text === normalized ||
+      text.startsWith(normalized) ||
+      text.includes(normalized)
+    );
+  });
+
+  nodes.sort(
+    (a, b) =>
+      (a.textContent || "").trim().length - (b.textContent || "").trim().length
+  );
+
+  const target = nodes[0];
+  if (!target) return false;
+  target.click();
+  highlightElement(target);
+  return true;
+}
+
 function clearHighlights() {
   document.querySelectorAll(".ra-highlight-target").forEach((node) => {
     node.classList.remove("ra-highlight-target");
@@ -240,13 +272,37 @@ function handleFillField(payload) {
   }
 
   const el = findField(fieldKey, selector);
-  if (!el) {
-    return { ok: false, filled: false, error: `No field matched for ${fieldKey}` };
+  if (el) {
+    const filled = fillElement(el, value);
+    if (filled) {
+      highlightElement(el);
+      return { ok: true, filled: true };
+    }
   }
 
-  const filled = fillElement(el, value);
-  if (filled) highlightElement(el);
-  return { ok: filled, filled };
+  if (
+    ["condition", "color", "colorSecondary", "category", "subcategory", "size"].includes(
+      fieldKey
+    )
+  ) {
+    if (el) {
+      try {
+        el.click();
+      } catch {
+        /* ignore */
+      }
+    }
+    const clicked = fillByClickingOption(value);
+    if (clicked) return { ok: true, filled: true };
+  }
+
+  return {
+    ok: false,
+    filled: false,
+    error: el
+      ? `Could not set ${fieldKey}`
+      : `No field matched for ${fieldKey}`,
+  };
 }
 
 function handleHighlightNext(payload) {
@@ -414,6 +470,8 @@ function handleMessage(message) {
   }
 
   switch (message.type) {
+    case "ping":
+      return { ok: true, pong: true, href: location.href };
     case "fillField":
       return handleFillField(message);
     case "highlightNext":
