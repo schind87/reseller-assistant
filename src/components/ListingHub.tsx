@@ -374,7 +374,7 @@ export function ListingHub({ listingId }: ListingHubProps) {
 
     if (sectionForRole(photo.role) === section) {
       setMovingPhotoId(null);
-      setStatusMessage("Photo is already in that section.");
+      setStatusMessage("Drop onto another photo in this group to reorder.");
       return;
     }
 
@@ -403,6 +403,93 @@ export function ListingHub({ listingId }: ListingHubProps) {
       await load({ syncDraft: false });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not move photo");
+    } finally {
+      setMovingPhoto(false);
+    }
+  }
+
+  async function reorderPhotoInSection(
+    section: PhotoSection,
+    draggedId: string,
+    targetId: string,
+    place: "before" | "after"
+  ) {
+    if (!data || draggedId === targetId) {
+      setMovingPhotoId(null);
+      return;
+    }
+
+    const sectionPhotos = data.photos.filter(
+      (photo) => sectionForRole(photo.role) === section
+    );
+    const dragged = data.photos.find((photo) => photo.id === draggedId);
+    if (!dragged) return;
+
+    // Dropping from another section onto a photo: move into this section first.
+    if (sectionForRole(dragged.role) !== section) {
+      await movePhotoToSection(draggedId, section);
+      return;
+    }
+
+    const ids = sectionPhotos.map((photo) => photo.id);
+    const from = ids.indexOf(draggedId);
+    let to = ids.indexOf(targetId);
+    if (from < 0 || to < 0) return;
+
+    ids.splice(from, 1);
+    to = ids.indexOf(targetId);
+    if (to < 0) return;
+    if (place === "after") to += 1;
+    ids.splice(to, 0, draggedId);
+
+    const unchanged = sectionPhotos.every((photo, index) => photo.id === ids[index]);
+    if (unchanged) {
+      setMovingPhotoId(null);
+      return;
+    }
+
+    const byId = new Map(sectionPhotos.map((photo) => [photo.id, photo]));
+    const sortValues = sectionPhotos.map((photo) => photo.sort_order);
+    const reorderedSection = ids.map((id, index) => ({
+      ...byId.get(id)!,
+      sort_order: sortValues[index],
+    }));
+
+    setData((prev) => {
+      if (!prev) return prev;
+      const others = prev.photos.filter(
+        (photo) => sectionForRole(photo.role) !== section
+      );
+      return {
+        ...prev,
+        photos: [...others, ...reorderedSection].sort(
+          (a, b) => a.sort_order - b.sort_order
+        ),
+      };
+    });
+    setMovingPhotoId(null);
+    setMovingPhoto(true);
+    setError(null);
+
+    try {
+      const res = await fetch(`/api/listings/${listingId}/photos`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderedIds: ids }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(
+          typeof json.error === "string"
+            ? json.error
+            : "Could not reorder photos"
+        );
+      }
+      setStatusMessage("Photo order updated.");
+      await load({ syncDraft: false });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not reorder photos");
+      await load({ syncDraft: false });
     } finally {
       setMovingPhoto(false);
     }
@@ -782,14 +869,16 @@ export function ListingHub({ listingId }: ListingHubProps) {
         </h2>
         <p className="text-base text-[var(--muted)]">
           Drop image files onto a section to upload, or use Add to choose from
-          this computer. Long-press a photo, then drop or tap another section to
-          move it. Use the QR code for guided shooting on your phone.
+          this computer. Drag photos to reorder within a group, or long-press
+          and drop onto another section to move. Use the QR code for guided
+          shooting on your phone.
         </p>
 
         {movingPhotoId ? (
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--accent)] bg-[var(--accent-soft)] px-4 py-3">
             <p className="text-base font-semibold text-[var(--accent)]">
-              Moving photo — drop or tap a section below
+              Moving photo — drop on another photo to reorder, or onto a
+              different section to move it
             </p>
             <button
               type="button"
@@ -814,7 +903,11 @@ export function ListingHub({ listingId }: ListingHubProps) {
           onPreview={setPreviewPhoto}
           onDropFiles={(files) => void uploadFilesToSection(files, "identify")}
           onDropPhoto={(photoId) => void movePhotoToSection(photoId, "identify")}
+          onReorderPhoto={(draggedId, targetId, place) =>
+            void reorderPhotoInSection("identify", draggedId, targetId, place)
+          }
           onBeginMove={(photoId) => setMovingPhotoId(photoId)}
+          onCancelMove={() => setMovingPhotoId(null)}
           movingPhotoId={movingPhotoId}
           promotePhotoId={promotePhotoId}
           dragOver={dragOverSection === "identify"}
@@ -858,7 +951,11 @@ export function ListingHub({ listingId }: ListingHubProps) {
             onDropPhoto={(photoId) =>
               void movePhotoToSection(photoId, "listing")
             }
+            onReorderPhoto={(draggedId, targetId, place) =>
+              void reorderPhotoInSection("listing", draggedId, targetId, place)
+            }
             onBeginMove={(photoId) => setMovingPhotoId(photoId)}
+            onCancelMove={() => setMovingPhotoId(null)}
             movingPhotoId={movingPhotoId}
             dragOver={dragOverSection === "listing"}
             onDragOverChange={(over) =>
@@ -1048,7 +1145,9 @@ function PhotoGroup({
   onPreview,
   onDropFiles,
   onDropPhoto,
+  onReorderPhoto,
   onBeginMove,
+  onCancelMove,
   movingPhotoId,
   promotePhotoId,
   dragOver,
@@ -1069,7 +1168,13 @@ function PhotoGroup({
   onPreview: (photo: ListingPhotoWithUrl) => void;
   onDropFiles: (files: File[]) => void;
   onDropPhoto: (photoId: string) => void;
+  onReorderPhoto: (
+    draggedId: string,
+    targetId: string,
+    place: "before" | "after"
+  ) => void;
   onBeginMove: (photoId: string) => void;
+  onCancelMove: () => void;
   movingPhotoId?: string | null;
   promotePhotoId?: string | null;
   dragOver?: boolean;
@@ -1158,7 +1263,7 @@ function PhotoGroup({
         <p className="text-xs text-[var(--muted)]">
           {moveArmed
             ? "Tap or drop here to move the photo"
-            : "Drop images here to upload · tap a photo to enlarge"}
+            : "Drop images here to upload · drag to reorder · tap a photo to enlarge"}
         </p>
       </div>
       {photos.length === 0 ? (
@@ -1172,6 +1277,7 @@ function PhotoGroup({
               deleting={deletingPhotoId === photo.id}
               promoting={promotePhotoId === photo.id}
               moving={movingPhotoId === photo.id}
+              movingPhotoId={movingPhotoId ?? null}
               moveArmed={moveArmed}
               disabled={disabled}
               onPreview={() => onPreview(photo)}
@@ -1182,6 +1288,10 @@ function PhotoGroup({
               }
               onDelete={() => onDelete(photo.id)}
               onBeginMove={() => onBeginMove(photo.id)}
+              onCancelMove={onCancelMove}
+              onReorder={(draggedId, place) =>
+                onReorderPhoto(draggedId, photo.id, place)
+              }
             />
           ))}
           <li onClick={(e) => e.stopPropagation()}>
@@ -1220,27 +1330,34 @@ function PhotoTile({
   deleting,
   promoting,
   moving,
+  movingPhotoId,
   moveArmed,
   disabled,
   onPreview,
   onUseInListing,
   onDelete,
   onBeginMove,
+  onCancelMove,
+  onReorder,
 }: {
   photo: ListingPhotoWithUrl;
   deleting: boolean;
   promoting: boolean;
   moving: boolean;
+  movingPhotoId: string | null;
   moveArmed: boolean;
   disabled?: boolean;
   onPreview: () => void;
   onUseInListing?: () => void;
   onDelete: () => void;
   onBeginMove: () => void;
+  onCancelMove: () => void;
+  onReorder: (draggedId: string, place: "before" | "after") => void;
 }) {
   const longPressTimer = useRef<number | null>(null);
   const longPressTriggered = useRef(false);
-  const [draggable, setDraggable] = useState(false);
+  const [draggable, setDraggable] = useState(true);
+  const [dropEdge, setDropEdge] = useState<"before" | "after" | null>(null);
 
   function clearLongPress() {
     if (longPressTimer.current != null) {
@@ -1254,18 +1371,22 @@ function PhotoTile({
     if (e.pointerType === "mouse" && e.button !== 0) return;
     longPressTriggered.current = false;
     clearLongPress();
-    longPressTimer.current = window.setTimeout(() => {
-      longPressTriggered.current = true;
-      setDraggable(true);
-      onBeginMove();
-      try {
-        if (typeof navigator !== "undefined" && "vibrate" in navigator) {
-          navigator.vibrate(12);
+    // Touch needs a long-press to arm move / reorder mode.
+    if (e.pointerType !== "mouse") {
+      setDraggable(false);
+      longPressTimer.current = window.setTimeout(() => {
+        longPressTriggered.current = true;
+        setDraggable(true);
+        onBeginMove();
+        try {
+          if (typeof navigator !== "undefined" && "vibrate" in navigator) {
+            navigator.vibrate(12);
+          }
+        } catch {
+          /* ignore */
         }
-      } catch {
-        /* ignore */
-      }
-    }, LONG_PRESS_MS);
+      }, LONG_PRESS_MS);
+    }
   }
 
   function handlePointerUp() {
@@ -1277,7 +1398,7 @@ function PhotoTile({
   }
 
   function handleDragStart(e: DragEvent<HTMLLIElement>) {
-    if (!draggable && !moving) {
+    if (disabled) {
       e.preventDefault();
       return;
     }
@@ -1287,17 +1408,53 @@ function PhotoTile({
   }
 
   function handleDragEnd() {
-    setDraggable(false);
+    setDropEdge(null);
+    setDraggable(true);
+    onCancelMove();
+  }
+
+  function edgeFromEvent(e: { clientX: number; currentTarget: Element }) {
+    const rect = e.currentTarget.getBoundingClientRect();
+    return e.clientX < rect.left + rect.width / 2 ? "before" : "after";
+  }
+
+  function handleTileDragOver(e: DragEvent<HTMLLIElement>) {
+    if (disabled || moving) return;
+    const hasPhoto = Array.from(e.dataTransfer.types).includes(PHOTO_DND_TYPE);
+    if (!hasPhoto && !moveArmed) return;
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = "move";
+    setDropEdge(edgeFromEvent(e));
+  }
+
+  function handleTileDragLeave(e: DragEvent<HTMLLIElement>) {
+    if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
+    setDropEdge(null);
+  }
+
+  function handleTileDrop(e: DragEvent<HTMLLIElement>) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (disabled || moving) return;
+    const draggedId = e.dataTransfer.getData(PHOTO_DND_TYPE);
+    const place = dropEdge || edgeFromEvent(e);
+    setDropEdge(null);
+    if (!draggedId || draggedId === photo.id) return;
+    onReorder(draggedId, place);
   }
 
   return (
     <li
-      draggable={draggable || moving}
+      draggable={!disabled && draggable}
       onPointerDown={handlePointerDown}
       onPointerUp={handlePointerUp}
       onPointerCancel={handlePointerCancel}
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
+      onDragOver={handleTileDragOver}
+      onDragLeave={handleTileDragLeave}
+      onDrop={handleTileDrop}
       onClick={(e) => {
         if (moving) {
           e.stopPropagation();
@@ -1311,7 +1468,11 @@ function PhotoTile({
           longPressTriggered.current = false;
           return;
         }
-        // While another photo is being moved, let the click hit the section drop target.
+        if (moveArmed && movingPhotoId && movingPhotoId !== photo.id) {
+          e.stopPropagation();
+          onReorder(movingPhotoId, "before");
+          return;
+        }
         if (moveArmed) {
           return;
         }
@@ -1321,11 +1482,25 @@ function PhotoTile({
       className={`relative overflow-hidden rounded-xl ring-1 select-none ${
         moving || promoting
           ? "ring-2 ring-[var(--accent)]"
-          : "ring-[var(--border)]"
-      } ${moving ? "opacity-80" : ""} ${disabled ? "opacity-60" : "cursor-pointer"}`}
+          : dropEdge
+            ? "ring-2 ring-[var(--accent)]"
+            : "ring-[var(--border)]"
+      } ${moving ? "opacity-80" : ""} ${disabled ? "opacity-60" : "cursor-grab active:cursor-grabbing"}`}
       style={{ touchAction: "manipulation" }}
-      title="Tap to enlarge · long-press to move"
+      title="Drag to reorder · long-press on phone to move · tap to enlarge"
     >
+      {dropEdge === "before" ? (
+        <span
+          aria-hidden
+          className="pointer-events-none absolute inset-y-2 left-0 z-10 w-1 rounded-full bg-[var(--accent)]"
+        />
+      ) : null}
+      {dropEdge === "after" ? (
+        <span
+          aria-hidden
+          className="pointer-events-none absolute inset-y-2 right-0 z-10 w-1 rounded-full bg-[var(--accent)]"
+        />
+      ) : null}
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src={photo.processedSignedUrl ?? photo.signedUrl ?? undefined}

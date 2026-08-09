@@ -404,6 +404,54 @@ export async function moveListingPhoto(
   return updated;
 }
 
+/** Reassign sort_order within a set of photos (same listing). */
+export async function reorderListingPhotos(
+  listingId: string,
+  orderedIds: string[]
+): Promise<ListingPhoto[]> {
+  if (orderedIds.length < 2) {
+    throw new Error("Need at least two photos to reorder");
+  }
+
+  const uniqueIds = [...new Set(orderedIds)];
+  if (uniqueIds.length !== orderedIds.length) {
+    throw new Error("Duplicate photo ids in reorder list");
+  }
+
+  const supabase = createAdminClient();
+  const { data, error } = await supabase
+    .from("listing_photos")
+    .select("*")
+    .eq("listing_id", listingId)
+    .in("id", orderedIds);
+
+  if (error) throw new Error(`reorderListingPhotos: ${error.message}`);
+  const photos = (data ?? []) as ListingPhoto[];
+  if (photos.length !== orderedIds.length) {
+    throw new Error("One or more photos were not found on this listing");
+  }
+
+  const byId = new Map(photos.map((photo) => [photo.id, photo]));
+  const sortValues = [...photos]
+    .sort((a, b) => a.sort_order - b.sort_order)
+    .map((photo) => photo.sort_order);
+
+  const updated: ListingPhoto[] = [];
+  for (let i = 0; i < orderedIds.length; i += 1) {
+    const id = orderedIds[i];
+    const current = byId.get(id);
+    if (!current) throw new Error("Photo not found");
+    const nextOrder = sortValues[i];
+    if (current.sort_order === nextOrder) {
+      updated.push(current);
+      continue;
+    }
+    updated.push(await updatePhoto(id, { sort_order: nextOrder }));
+  }
+
+  return updated.sort((a, b) => a.sort_order - b.sort_order);
+}
+
 export async function getListingPhoto(
   listingId: string,
   photoId: string

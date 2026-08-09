@@ -5,6 +5,7 @@ import { getPhotoSteps } from "@/lib/platforms";
 import {
   getListingWithPhotos,
   getSignedPhotoUrl,
+  reorderListingPhotos,
   updateListing,
   uploadListingPhoto,
 } from "@/lib/supabase/queries";
@@ -26,6 +27,46 @@ const PHOTO_ROLES: PhotoRole[] = [
 ];
 
 type RouteContext = { params: Promise<{ id: string }> };
+
+export async function PATCH(request: Request, context: RouteContext) {
+  const { id } = await context.params;
+  const access = await authorizeListingAccess(id);
+  if (access.error) return access.error;
+
+  let body: { orderedIds?: unknown };
+  try {
+    body = (await request.json()) as { orderedIds?: unknown };
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+  }
+
+  const orderedIds = Array.isArray(body.orderedIds)
+    ? body.orderedIds.filter((value): value is string => typeof value === "string")
+    : null;
+
+  if (!orderedIds || orderedIds.length < 2) {
+    return NextResponse.json(
+      { error: "orderedIds must include at least two photo ids" },
+      { status: 400 }
+    );
+  }
+
+  try {
+    const photos = await reorderListingPhotos(id, orderedIds);
+    return NextResponse.json({ photos });
+  } catch (err) {
+    const message =
+      err instanceof Error ? err.message : "Could not reorder photos";
+    const status =
+      message.includes("not found") || message.includes("Duplicate")
+        ? 400
+        : 500;
+    if (status === 500) {
+      console.error("reorder photos error:", err);
+    }
+    return NextResponse.json({ error: message }, { status });
+  }
+}
 
 async function runEarlyIdentify(listingId: string) {
   try {
