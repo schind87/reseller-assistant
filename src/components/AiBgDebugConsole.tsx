@@ -423,6 +423,8 @@ export function AiBgDebugConsole({
           <ul className="grid max-h-[70vh] grid-cols-2 gap-3 overflow-y-auto">
             {photos.map((photo) => {
               const active = photo.id === selectedPhoto?.id;
+              const previewLabel =
+                photo.listing_title || photoRoleLabel(photo.role);
               return (
                 <li key={photo.id}>
                   <div
@@ -432,25 +434,28 @@ export function AiBgDebugConsole({
                         : "ring-[var(--border)]"
                     }`}
                   >
-                    <button
-                      type="button"
-                      title="View full size"
-                      onClick={() => {
-                        setSelectedPhotoId(photo.id);
-                        openPreview(
-                          photo.signedUrl,
-                          photo.listing_title || photoRoleLabel(photo.role),
-                        );
-                      }}
-                      className="block w-full cursor-zoom-in"
-                    >
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={photo.signedUrl ?? undefined}
-                        alt=""
-                        className="aspect-square w-full bg-[var(--surface-muted)] object-cover"
+                    <div className="relative">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedPhotoId(photo.id);
+                        }}
+                        className="block w-full"
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={photo.signedUrl ?? undefined}
+                          alt=""
+                          className="aspect-square w-full bg-[var(--surface-muted)] object-cover"
+                        />
+                      </button>
+                      <MagnifyButton
+                        disabled={!photo.signedUrl}
+                        onClick={() =>
+                          openPreview(photo.signedUrl, previewLabel)
+                        }
                       />
-                    </button>
+                    </div>
                     <button
                       type="button"
                       onClick={() => {
@@ -484,26 +489,25 @@ export function AiBgDebugConsole({
             </h2>
             {selectedPhoto ? (
               <div className="mt-3 flex flex-col gap-3 sm:flex-row">
-                <button
-                  type="button"
-                  title="View full size"
-                  onClick={() =>
-                    openPreview(
-                      selectedPhoto.signedUrl,
-                      selectedPhoto.listing_title ||
-                        photoRoleLabel(selectedPhoto.role),
-                    )
-                  }
-                  className="cursor-zoom-in"
-                >
+                <div className="relative w-full max-w-xs">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={selectedPhoto.signedUrl ?? undefined}
                     alt=""
-                    className="max-h-64 w-full max-w-xs rounded-xl object-contain ring-1 ring-[var(--border)]"
+                    className="max-h-64 w-full rounded-xl object-contain ring-1 ring-[var(--border)]"
                     style={CHECKERBOARD_STYLE}
                   />
-                </button>
+                  <MagnifyButton
+                    disabled={!selectedPhoto.signedUrl}
+                    onClick={() =>
+                      openPreview(
+                        selectedPhoto.signedUrl,
+                        selectedPhoto.listing_title ||
+                          photoRoleLabel(selectedPhoto.role),
+                      )
+                    }
+                  />
+                </div>
                 <div className="space-y-2 text-sm text-[var(--muted)]">
                   <p>
                     <span className="font-semibold text-[var(--foreground)]">
@@ -707,14 +711,7 @@ export function AiBgDebugConsole({
                       </div>
                     </div>
                     {result.ok && result.imageUrl ? (
-                      <button
-                        type="button"
-                        title="View full size"
-                        onClick={() =>
-                          openPreview(result.imageUrl, entry.label)
-                        }
-                        className="block w-full cursor-zoom-in"
-                      >
+                      <div className="relative">
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img
                           src={result.imageUrl}
@@ -722,7 +719,12 @@ export function AiBgDebugConsole({
                           className="aspect-square w-full object-contain"
                           style={CHECKERBOARD_STYLE}
                         />
-                      </button>
+                        <MagnifyButton
+                          onClick={() =>
+                            openPreview(result.imageUrl, entry.label)
+                          }
+                        />
+                      </div>
                     ) : (
                       <p className="bg-red-50 px-3 py-6 text-sm text-red-800">
                         {result.error || "No image"}
@@ -744,6 +746,44 @@ export function AiBgDebugConsole({
         />
       ) : null}
     </div>
+  );
+}
+
+function MagnifyButton({
+  onClick,
+  disabled,
+}: {
+  onClick: () => void;
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      title="Enlarge"
+      aria-label="Enlarge photo"
+      disabled={disabled}
+      onClick={(e) => {
+        e.stopPropagation();
+        onClick();
+      }}
+      className="absolute bottom-2 right-2 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-black/45 text-white shadow-sm backdrop-blur-[1px] transition hover:bg-black/60 disabled:pointer-events-none disabled:opacity-40"
+    >
+      <svg
+        viewBox="0 0 24 24"
+        className="h-4 w-4"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden="true"
+      >
+        <circle cx="10.5" cy="10.5" r="6.5" />
+        <path d="M16 16l4.5 4.5" />
+        <path d="M10.5 8v5" />
+        <path d="M8 10.5h5" />
+      </svg>
+    </button>
   );
 }
 
