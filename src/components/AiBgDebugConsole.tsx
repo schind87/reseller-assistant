@@ -53,6 +53,20 @@ type ModelHistory = {
   versions: RunResult[];
 };
 
+type RecentRunSummary = {
+  id: string;
+  createdAt: string;
+  photoId: string;
+  listingId: string;
+  photoRole: string | null;
+  listingTitle: string | null;
+  listingPlatform: string | null;
+  resultCount: number;
+  okCount: number;
+  modelLabels: string[];
+  thumbUrl: string | null;
+};
+
 type PreviewImage = {
   src: string;
   label: string;
@@ -90,6 +104,7 @@ const ROLE_FILTERS: Array<PhotoRole | "all"> = [
 type Props = {
   initialPhotos: AdminPhoto[];
   initialTotal: number;
+  initialRecentRuns?: RecentRunSummary[];
   models: FalBgModelDef[];
   hasFalKey: boolean;
 };
@@ -226,6 +241,7 @@ function buildModelHistories(runs: SavedRun[]): ModelHistory[] {
 export function AiBgDebugConsole({
   initialPhotos,
   initialTotal,
+  initialRecentRuns = [],
   models,
   hasFalKey,
 }: Props) {
@@ -235,7 +251,7 @@ export function AiBgDebugConsole({
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [q, setQ] = useState("");
-  const [role, setRole] = useState<PhotoRole | "all">("cover");
+  const [role, setRole] = useState<PhotoRole | "all">("all");
   const [selectedPhotoId, setSelectedPhotoId] = useState<string | null>(
     initialPhotos[0]?.id ?? null,
   );
@@ -243,8 +259,9 @@ export function AiBgDebugConsole({
     () => new Set(models.filter((m) => m.defaultSelected).map((m) => m.id)),
   );
   const [labBackdrop, setLabBackdrop] = useState<LabBackdrop>("white");
-  const [bakeComposite, setBakeComposite] = useState(true);
   const [history, setHistory] = useState<SavedRun[]>([]);
+  const [recentRuns, setRecentRuns] =
+    useState<RecentRunSummary[]>(initialRecentRuns);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [refreshingCosts, setRefreshingCosts] = useState(false);
   /** Index into each model's saved versions (0 = newest). */
@@ -293,13 +310,30 @@ export function AiBgDebugConsole({
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "Could not load history");
       const runs = (json.runs as SavedRun[]) ?? [];
+      const recent = (json.recentRuns as RecentRunSummary[]) ?? [];
       startTransition(() => {
         applyHistory(runs, true);
+        setRecentRuns(recent);
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not load history");
     } finally {
       setHistoryLoading(false);
+    }
+  }
+
+  async function loadRecentRuns() {
+    try {
+      const res = await fetch("/api/admin/bg-debug/run?recent=1");
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "Could not load recent runs");
+      startTransition(() => {
+        setRecentRuns((json.recentRuns as RecentRunSummary[]) ?? []);
+      });
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Could not load recent runs",
+      );
     }
   }
 
@@ -315,8 +349,10 @@ export function AiBgDebugConsole({
         if (cancelled) return;
         if (!res.ok) throw new Error(json.error ?? "Could not load history");
         const runs = (json.runs as SavedRun[]) ?? [];
+        const recent = (json.recentRuns as RecentRunSummary[]) ?? [];
         startTransition(() => {
           applyHistory(runs, true);
+          setRecentRuns(recent);
         });
       } catch (err) {
         if (!cancelled) {
@@ -379,6 +415,38 @@ export function AiBgDebugConsole({
     });
   }
 
+  async function openRecentRun(run: RecentRunSummary) {
+    setError(null);
+    setSelectedPhotoId(run.photoId);
+    // Ensure the photo is in the list even if the current filter hid it.
+    if (!photos.some((p) => p.id === run.photoId)) {
+      try {
+        const params = new URLSearchParams({
+          limit: "48",
+          role: "all",
+          q: run.listingTitle ?? "",
+        });
+        const res = await fetch(`/api/admin/photos?${params}`);
+        const json = await res.json();
+        if (res.ok) {
+          const list = (json.photos as AdminPhoto[]) ?? [];
+          startTransition(() => {
+            setRole("all");
+            setPhotos((prev) => {
+              const byId = new Map(prev.map((p) => [p.id, p]));
+              for (const photo of list) byId.set(photo.id, photo);
+              return [...byId.values()];
+            });
+            setTotal(json.total ?? list.length);
+          });
+        }
+      } catch {
+        /* history load for photoId still proceeds */
+      }
+    }
+    await loadHistory(run.photoId);
+  }
+
   async function runModels() {
     if (!selectedPhoto || selectedModels.size === 0) return;
     setRunning(true);
@@ -390,7 +458,6 @@ export function AiBgDebugConsole({
         body: JSON.stringify({
           photoId: selectedPhoto.id,
           modelIds: [...selectedModels],
-          compositeBackdrop: bakeComposite ? labBackdrop : "none",
         }),
       });
       const json = await res.json();
@@ -422,6 +489,7 @@ export function AiBgDebugConsole({
       startTransition(() => {
         applyHistory(runs, false);
       });
+      await loadRecentRuns();
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Could not refresh costs",
@@ -454,6 +522,90 @@ export function AiBgDebugConsole({
           ← Back to listings
         </Link>
       </header>
+
+      <section className="rounded-2xl border border-[var(--border)] bg-white p-5">
+        <div className="flex flex-wrap items-end justify-between gap-2">
+          <div>
+            <h2 className="text-lg font-semibold text-[var(--foreground)]">
+              Your recent runs
+            </h2>
+            <p className="mt-1 text-sm text-[var(--muted)]">
+              Every comparison you&apos;ve run in the lab. Tap one to reopen that
+              photo and its saved results.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => void loadRecentRuns()}
+            className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-sm font-semibold text-[var(--foreground)] transition hover:bg-[var(--surface-muted)]"
+          >
+            Refresh list
+          </button>
+        </div>
+        {recentRuns.length === 0 ? (
+          <p className="mt-4 text-sm text-[var(--muted)]">
+            No lab runs yet. Pick a photo below and run one or more models.
+          </p>
+        ) : (
+          <ul className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {recentRuns.map((run) => {
+              const active = selectedPhotoId === run.photoId;
+              const when = formatRunTime(run.createdAt);
+              const roleLabel = run.photoRole
+                ? photoRoleLabel(run.photoRole as PhotoRole)
+                : "Photo";
+              const platform =
+                run.listingPlatform &&
+                run.listingPlatform in PLATFORM_LABELS
+                  ? PLATFORM_LABELS[run.listingPlatform as Platform]
+                  : run.listingPlatform;
+              return (
+                <li key={run.id}>
+                  <button
+                    type="button"
+                    onClick={() => void openRecentRun(run)}
+                    className={`flex w-full gap-3 rounded-xl border p-2.5 text-left transition ${
+                      active
+                        ? "border-[var(--accent)] bg-[var(--accent-soft)]"
+                        : "border-[var(--border)] hover:bg-[var(--surface-muted)]"
+                    }`}
+                  >
+                    <div
+                      className="h-16 w-16 shrink-0 overflow-hidden rounded-lg ring-1 ring-[var(--border)]"
+                      style={resultBackdropStyle(labBackdrop)}
+                    >
+                      {run.thumbUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={run.thumbUrl}
+                          alt=""
+                          className="h-full w-full object-contain"
+                        />
+                      ) : (
+                        <div className="flex h-full items-center justify-center text-[10px] text-[var(--muted)]">
+                          No thumb
+                        </div>
+                      )}
+                    </div>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-semibold text-[var(--foreground)]">
+                        {run.listingTitle || platform || "Listing"}
+                      </span>
+                      <span className="block text-xs text-[var(--muted)]">
+                        {roleLabel} · {run.okCount}/{run.resultCount} ok
+                        {when ? ` · ${when}` : ""}
+                      </span>
+                      <span className="mt-0.5 block truncate text-xs text-[var(--muted)]">
+                        {run.modelLabels.join(", ") || "No models"}
+                      </span>
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </section>
 
       <div className="flex flex-wrap items-center gap-2">
         <span
@@ -688,44 +840,35 @@ export function AiBgDebugConsole({
               })}
             </ul>
 
-            <div className="mt-4 space-y-3">
-              <div>
-                <p className="text-sm font-semibold text-[var(--foreground)]">
-                  Edge review backdrop
-                </p>
-                <p className="mt-1 text-xs text-[var(--muted)]">
-                  Dark grey makes soft/jagged cut edges easier to see.
-                </p>
-                <div className="mt-2 inline-flex rounded-lg border border-[var(--border)] p-0.5">
-                  {(
-                    [
-                      { id: "white", label: "White" },
-                      { id: "dark", label: "Dark grey" },
-                    ] as const
-                  ).map((option) => (
-                    <button
-                      key={option.id}
-                      type="button"
-                      onClick={() => setLabBackdrop(option.id)}
-                      className={`rounded-md px-3 py-1.5 text-sm font-semibold transition ${
-                        labBackdrop === option.id
-                          ? "bg-[var(--accent)] text-white"
-                          : "text-[var(--foreground)] hover:bg-[var(--surface-muted)]"
-                      }`}
-                    >
-                      {option.label}
-                    </button>
-                  ))}
-                </div>
+            <div className="mt-4 space-y-2">
+              <p className="text-sm font-semibold text-[var(--foreground)]">
+                Edge review backdrop
+              </p>
+              <p className="text-xs text-[var(--muted)]">
+                Display-only — results stay transparent. Dark grey makes soft
+                edges easier to see.
+              </p>
+              <div className="inline-flex rounded-lg border border-[var(--border)] p-0.5">
+                {(
+                  [
+                    { id: "white", label: "White" },
+                    { id: "dark", label: "Dark grey" },
+                  ] as const
+                ).map((option) => (
+                  <button
+                    key={option.id}
+                    type="button"
+                    onClick={() => setLabBackdrop(option.id)}
+                    className={`rounded-md px-3 py-1.5 text-sm font-semibold transition ${
+                      labBackdrop === option.id
+                        ? "bg-[var(--accent)] text-white"
+                        : "text-[var(--foreground)] hover:bg-[var(--surface-muted)]"
+                    }`}
+                  >
+                    {option.label}
+                  </button>
+                ))}
               </div>
-              <label className="flex items-center gap-2 text-sm text-[var(--foreground)]">
-                <input
-                  type="checkbox"
-                  checked={bakeComposite}
-                  onChange={(e) => setBakeComposite(e.target.checked)}
-                />
-                Bake this backdrop into saved transparent cutouts
-              </label>
             </div>
 
             <div className="mt-4 max-w-sm">

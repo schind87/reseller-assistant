@@ -212,3 +212,116 @@ export async function listBgLabRunsForPhoto(
     results: byRun.get(r.id as string) ?? [],
   }));
 }
+
+export type BgLabRecentRunSummary = {
+  id: string;
+  created_at: string;
+  listing_photo_id: string;
+  listing_id: string;
+  run_by_user_id: string | null;
+  composite_white: boolean;
+  photo_role: string | null;
+  listing_title: string | null;
+  listing_platform: string | null;
+  result_count: number;
+  ok_count: number;
+  model_labels: string[];
+  thumbUrl: string | null;
+};
+
+/** Recent lab runs (optionally for one admin user), newest first. */
+export async function listRecentBgLabRuns(opts?: {
+  userId?: string | null;
+  limit?: number;
+}): Promise<BgLabRecentRunSummary[]> {
+  const supabase = createAdminClient();
+  const limit = opts?.limit ?? 40;
+
+  let query = supabase
+    .from("bg_lab_runs")
+    .select(
+      "id, created_at, listing_photo_id, listing_id, run_by_user_id, composite_white"
+    )
+    .order("created_at", { ascending: false })
+    .limit(limit);
+
+  if (opts?.userId) {
+    query = query.eq("run_by_user_id", opts.userId);
+  }
+
+  const { data: runs, error } = await query;
+  if (error) throw new Error(`listRecentBgLabRuns: ${error.message}`);
+  const runRows = runs ?? [];
+  if (runRows.length === 0) return [];
+
+  const runIds = runRows.map((r) => r.id as string);
+  const photoIds = [...new Set(runRows.map((r) => r.listing_photo_id as string))];
+  const listingIds = [...new Set(runRows.map((r) => r.listing_id as string))];
+
+  const [{ data: results }, { data: photos }, { data: listings }] =
+    await Promise.all([
+      supabase
+        .from("bg_lab_results")
+        .select("run_id, model_label, ok, storage_path, created_at")
+        .in("run_id", runIds)
+        .order("created_at", { ascending: true }),
+      supabase.from("listing_photos").select("id, role").in("id", photoIds),
+      supabase
+        .from("listings")
+        .select("id, title, platform")
+        .in("id", listingIds),
+    ]);
+
+  const photoById = new Map(
+    (photos ?? []).map((p) => [p.id as string, p] as const)
+  );
+  const listingById = new Map(
+    (listings ?? []).map((l) => [l.id as string, l] as const)
+  );
+  const resultsByRun = new Map<
+    string,
+    Array<{
+      model_label: string;
+      ok: boolean;
+      storage_path: string | null;
+    }>
+  >();
+
+  for (const raw of results ?? []) {
+    const runId = raw.run_id as string;
+    const list = resultsByRun.get(runId) ?? [];
+    list.push({
+      model_label: raw.model_label as string,
+      ok: Boolean(raw.ok),
+      storage_path: (raw.storage_path as string | null) ?? null,
+    });
+    resultsByRun.set(runId, list);
+  }
+
+  const summaries: BgLabRecentRunSummary[] = [];
+  for (const run of runRows) {
+    const runId = run.id as string;
+    const runResults = resultsByRun.get(runId) ?? [];
+    const photo = photoById.get(run.listing_photo_id as string);
+    const listing = listingById.get(run.listing_id as string);
+    const thumbPath =
+      runResults.find((r) => r.ok && r.storage_path)?.storage_path ?? null;
+    summaries.push({
+      id: runId,
+      created_at: run.created_at as string,
+      listing_photo_id: run.listing_photo_id as string,
+      listing_id: run.listing_id as string,
+      run_by_user_id: (run.run_by_user_id as string | null) ?? null,
+      composite_white: Boolean(run.composite_white),
+      photo_role: (photo?.role as string | null) ?? null,
+      listing_title: (listing?.title as string | null) ?? null,
+      listing_platform: (listing?.platform as string | null) ?? null,
+      result_count: runResults.length,
+      ok_count: runResults.filter((r) => r.ok).length,
+      model_labels: runResults.map((r) => r.model_label),
+      thumbUrl: thumbPath ? await getSignedPhotoUrl(thumbPath) : null,
+    });
+  }
+
+  return summaries;
+}

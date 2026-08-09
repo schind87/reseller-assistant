@@ -18,6 +18,7 @@ import {
   createBgLabRun,
   insertBgLabResult,
   listBgLabRunsForPhoto,
+  listRecentBgLabRuns,
   updateBgLabResultCost,
   uploadBgLabImage,
 } from "@/lib/supabase/bg-lab";
@@ -28,10 +29,6 @@ export const maxDuration = 300;
 type RunBody = {
   photoId?: string;
   modelIds?: string[];
-  /** Composite transparent results onto a solid color for comparison. */
-  compositeWhite?: boolean;
-  /** Preferred over compositeWhite when set: none | white | dark */
-  compositeBackdrop?: "none" | "white" | "dark";
   /** Re-fetch fal billing for saved results that are missing actual cost. */
   refreshCosts?: boolean;
 };
@@ -72,33 +69,6 @@ async function downloadImageBuffer(imageUrl: string): Promise<Buffer> {
   return Buffer.from(await res.arrayBuffer());
 }
 
-async function maybeCompositeBuffer(
-  buf: Buffer,
-  background: { r: number; g: number; b: number }
-): Promise<Buffer> {
-  const meta = await sharp(buf).metadata();
-  if (!meta.hasAlpha || !meta.width || !meta.height) {
-    return buf;
-  }
-
-  return sharp({
-    create: {
-      width: meta.width,
-      height: meta.height,
-      channels: 3,
-      background,
-    },
-  })
-    .composite([{ input: await sharp(buf).png().toBuffer(), blend: "over" }])
-    .png()
-    .toBuffer();
-}
-
-const LAB_BACKDROPS = {
-  white: { r: 255, g: 255, b: 255 },
-  dark: { r: 63, g: 63, b: 70 }, // zinc-700 — dark grey for edge review
-} as const;
-
 function formatCostUsd(value: number | null | undefined): string | null {
   if (value == null || Number.isNaN(value) || !Number.isFinite(value)) {
     return null;
@@ -136,15 +106,40 @@ export async function GET(request: Request) {
   const auth = await requireAdmin();
   if (auth.error) return auth.error;
 
-  const photoId = new URL(request.url).searchParams.get("photoId")?.trim();
+  const url = new URL(request.url);
+  const photoId = url.searchParams.get("photoId")?.trim();
+  const wantRecent = url.searchParams.get("recent") === "1";
+
   if (!photoId) {
+    const recentRuns = wantRecent
+      ? await listRecentBgLabRuns({
+          userId: auth.user.id,
+          limit: 40,
+        })
+      : [];
     return NextResponse.json({
       models: FAL_BG_MODELS,
       hasFalKey: Boolean(falKey()),
+      recentRuns: recentRuns.map((run) => ({
+        id: run.id,
+        createdAt: run.created_at,
+        photoId: run.listing_photo_id,
+        listingId: run.listing_id,
+        photoRole: run.photo_role,
+        listingTitle: run.listing_title,
+        listingPlatform: run.listing_platform,
+        resultCount: run.result_count,
+        okCount: run.ok_count,
+        modelLabels: run.model_labels,
+        thumbUrl: run.thumbUrl,
+      })),
     });
   }
 
-  const runs = await listBgLabRunsForPhoto(photoId, 50);
+  const [runs, recentRuns] = await Promise.all([
+    listBgLabRunsForPhoto(photoId, 50),
+    listRecentBgLabRuns({ userId: auth.user.id, limit: 40 }),
+  ]);
   return NextResponse.json({
     runs: runs.map((run) => ({
       id: run.id,
@@ -173,6 +168,19 @@ export async function GET(request: Request) {
         createdAt: r.created_at,
       })),
     })),
+    recentRuns: recentRuns.map((run) => ({
+      id: run.id,
+      createdAt: run.created_at,
+      photoId: run.listing_photo_id,
+      listingId: run.listing_id,
+      photoRole: run.photo_role,
+      listingTitle: run.listing_title,
+      listingPlatform: run.listing_platform,
+      resultCount: run.result_count,
+      okCount: run.ok_count,
+      modelLabels: run.model_labels,
+      thumbUrl: run.thumbUrl,
+    })),
   });
 }
 
@@ -189,15 +197,7 @@ export async function POST(request: Request) {
 
   const photoId = body.photoId?.trim();
   const modelIds = Array.isArray(body.modelIds) ? body.modelIds : [];
-  const compositeBackdrop: "none" | "white" | "dark" =
-    body.compositeBackdrop === "none" ||
-    body.compositeBackdrop === "white" ||
-    body.compositeBackdrop === "dark"
-      ? body.compositeBackdrop
-      : body.compositeWhite === false
-        ? "none"
-        : "white";
-  const bakeComposite = compositeBackdrop !== "none";
+  // Lab always keeps transparent / native model output — backdrop is display-only.
 
   if (!photoId) {
     return NextResponse.json({ error: "photoId is required" }, { status: 400 });
@@ -316,7 +316,7 @@ export async function POST(request: Request) {
       photoId,
       listingId: photo.listing_id,
       runByUserId: auth.user.id,
-      compositeWhite: bakeComposite && compositeBackdrop === "white",
+      compositeWhite: false,
     });
 
     const results: ModelRunResult[] = [];
@@ -360,13 +360,7 @@ export async function POST(request: Request) {
         if (!remoteUrl) {
           throw new Error("No image URL in fal response");
         }
-        let outBuf = await downloadImageBuffer(remoteUrl);
-        if (bakeComposite && !model.solidBackground) {
-          outBuf = await maybeCompositeBuffer(
-            outBuf,
-            LAB_BACKDROPS[compositeBackdrop === "dark" ? "dark" : "white"]
-          );
-        }
+        const outBuf = await downloadImageBuffer(remoteUrl);
 
         const billing = await resolveFalCost({
           requestId,
