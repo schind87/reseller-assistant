@@ -21,6 +21,7 @@ type AdminPhoto = {
 };
 
 type RunResult = {
+  id?: string;
   modelId: string;
   label: string;
   provider: "fal" | "photoroom";
@@ -28,6 +29,18 @@ type RunResult = {
   ms: number;
   imageUrl: string | null;
   error?: string;
+  falRequestId?: string | null;
+  falDashboardUrl?: string | null;
+  costUsd?: number | null;
+  costSource?: string | null;
+  costLabel?: string | null;
+};
+
+type SavedRun = {
+  id: string;
+  createdAt: string;
+  compositeWhite: boolean;
+  results: RunResult[];
 };
 
 type PreviewImage = {
@@ -59,6 +72,45 @@ type Props = {
   hasPhotoroomKey: boolean;
 };
 
+function formatCost(result: RunResult): string | null {
+  if (result.costLabel) return result.costLabel;
+  if (result.costUsd == null || Number.isNaN(result.costUsd)) return null;
+  if (result.costUsd >= 0.01) return `$${result.costUsd.toFixed(3)}`;
+  return `$${result.costUsd.toFixed(5)}`;
+}
+
+function costSourceLabel(source: string | null | undefined): string | null {
+  switch (source) {
+    case "billing":
+    case "billing_event":
+      return "fal billed";
+    case "estimate":
+    case "pricing_estimate":
+      return "catalog estimate";
+    case "catalog_estimate":
+      return "catalog estimate";
+    case null:
+    case undefined:
+    case "":
+      return null;
+    default:
+      return source;
+  }
+}
+
+function formatRunTime(iso: string): string {
+  try {
+    return new Date(iso).toLocaleString(undefined, {
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  } catch {
+    return iso;
+  }
+}
+
 export function AiBgDebugConsole({
   initialPhotos,
   initialTotal,
@@ -74,13 +126,16 @@ export function AiBgDebugConsole({
   const [q, setQ] = useState("");
   const [role, setRole] = useState<PhotoRole | "all">("cover");
   const [selectedPhotoId, setSelectedPhotoId] = useState<string | null>(
-    initialPhotos[0]?.id ?? null
+    initialPhotos[0]?.id ?? null,
   );
   const [selectedModels, setSelectedModels] = useState<Set<FalBgModelId>>(
-    () => new Set(models.filter((m) => m.defaultSelected).map((m) => m.id))
+    () => new Set(models.filter((m) => m.defaultSelected).map((m) => m.id)),
   );
   const [compositeWhite, setCompositeWhite] = useState(true);
   const [results, setResults] = useState<RunResult[] | null>(null);
+  const [latestRunId, setLatestRunId] = useState<string | null>(null);
+  const [history, setHistory] = useState<SavedRun[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
   const [preview, setPreview] = useState<PreviewImage | null>(null);
 
   const selectedPhoto =
@@ -90,6 +145,72 @@ export function AiBgDebugConsole({
     if (!src) return;
     setPreview({ src, label });
   }
+
+  async function loadHistory(
+    photoId: string,
+    opts?: { selectLatest?: boolean },
+  ) {
+    const selectLatest = opts?.selectLatest !== false;
+    setHistoryLoading(true);
+    try {
+      const res = await fetch(
+        `/api/admin/bg-debug/run?photoId=${encodeURIComponent(photoId)}`,
+      );
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "Could not load history");
+      const runs = (json.runs as SavedRun[]) ?? [];
+      startTransition(() => {
+        setHistory(runs);
+        if (!selectLatest) return;
+        if (runs[0]?.results?.length) {
+          setResults(runs[0].results);
+          setLatestRunId(runs[0].id);
+        } else {
+          setResults(null);
+          setLatestRunId(null);
+        }
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not load history");
+    } finally {
+      setHistoryLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    if (!selectedPhotoId) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch(
+          `/api/admin/bg-debug/run?photoId=${encodeURIComponent(selectedPhotoId)}`,
+        );
+        const json = await res.json();
+        if (cancelled) return;
+        if (!res.ok) throw new Error(json.error ?? "Could not load history");
+        const runs = (json.runs as SavedRun[]) ?? [];
+        startTransition(() => {
+          setHistory(runs);
+          if (runs[0]?.results?.length) {
+            setResults(runs[0].results);
+            setLatestRunId(runs[0].id);
+          } else {
+            setResults(null);
+            setLatestRunId(null);
+          }
+        });
+      } catch (err) {
+        if (!cancelled) {
+          setError(
+            err instanceof Error ? err.message : "Could not load history",
+          );
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedPhotoId]);
 
   async function loadPhotos(nextRole = role, nextQ = q) {
     setLoading(true);
@@ -111,7 +232,6 @@ export function AiBgDebugConsole({
           if (prev && list.some((p) => p.id === prev)) return prev;
           return list[0]?.id ?? null;
         });
-        setResults(null);
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not load photos");
@@ -133,7 +253,6 @@ export function AiBgDebugConsole({
     if (!selectedPhoto || selectedModels.size === 0) return;
     setRunning(true);
     setError(null);
-    setResults(null);
     try {
       const res = await fetch("/api/admin/bg-debug/run", {
         method: "POST",
@@ -146,7 +265,10 @@ export function AiBgDebugConsole({
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "Run failed");
-      setResults(json.results as RunResult[]);
+      const nextResults = json.results as RunResult[];
+      setResults(nextResults);
+      setLatestRunId((json.runId as string) ?? null);
+      await loadHistory(selectedPhoto.id, { selectLatest: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Run failed");
     } finally {
@@ -165,8 +287,9 @@ export function AiBgDebugConsole({
             Background model lab
           </h1>
           <p className="mt-2 max-w-2xl text-base text-[var(--muted)]">
-            Compare fal.ai (and PhotoRoom) removers on any listing photo in the
-            database. Results are ephemeral — nothing is saved to the listing.
+            Compare fal.ai (and PhotoRoom) removers on any listing photo.
+            Results are saved with per-request cost when fal billing data is
+            available.
           </p>
         </div>
         <Link
@@ -266,9 +389,10 @@ export function AiBgDebugConsole({
                       onClick={() => {
                         setSelectedPhotoId(photo.id);
                         setResults(null);
+                        setLatestRunId(null);
                         openPreview(
                           photo.signedUrl,
-                          photo.listing_title || photoRoleLabel(photo.role)
+                          photo.listing_title || photoRoleLabel(photo.role),
                         );
                       }}
                       className="block w-full cursor-zoom-in"
@@ -285,6 +409,7 @@ export function AiBgDebugConsole({
                       onClick={() => {
                         setSelectedPhotoId(photo.id);
                         setResults(null);
+                        setLatestRunId(null);
                       }}
                       className="w-full space-y-0.5 px-2.5 py-2 text-left hover:bg-[var(--surface-muted)]"
                     >
@@ -321,7 +446,7 @@ export function AiBgDebugConsole({
                     openPreview(
                       selectedPhoto.signedUrl,
                       selectedPhoto.listing_title ||
-                        photoRoleLabel(selectedPhoto.role)
+                        photoRoleLabel(selectedPhoto.role),
                     )
                   }
                   className="cursor-zoom-in"
@@ -433,6 +558,65 @@ export function AiBgDebugConsole({
               </BigButton>
             </div>
           </div>
+
+          {selectedPhoto ? (
+            <div className="rounded-2xl border border-[var(--border)] bg-white p-5">
+              <div className="flex items-center justify-between gap-3">
+                <h2 className="text-lg font-semibold text-[var(--foreground)]">
+                  Saved runs
+                </h2>
+                {historyLoading ? (
+                  <span className="text-sm text-[var(--muted)]">Loading…</span>
+                ) : (
+                  <span className="text-sm text-[var(--muted)]">
+                    {history.length} saved
+                  </span>
+                )}
+              </div>
+              {history.length === 0 ? (
+                <p className="mt-2 text-sm text-[var(--muted)]">
+                  No saved comparisons for this photo yet.
+                </p>
+              ) : (
+                <ul className="mt-3 space-y-2">
+                  {history.map((run) => {
+                    const active = run.id === latestRunId;
+                    const billed = run.results.reduce(
+                      (sum, r) => sum + (r.costUsd ?? 0),
+                      0,
+                    );
+                    return (
+                      <li key={run.id}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setLatestRunId(run.id);
+                            setResults(run.results);
+                          }}
+                          className={`w-full rounded-xl border px-3 py-2 text-left ${
+                            active
+                              ? "border-[var(--accent)] bg-[var(--accent-soft)]"
+                              : "border-[var(--border)] hover:bg-[var(--surface-muted)]"
+                          }`}
+                        >
+                          <p className="text-sm font-semibold text-[var(--foreground)]">
+                            {formatRunTime(run.createdAt)}
+                          </p>
+                          <p className="text-xs text-[var(--muted)]">
+                            {run.results.length} model
+                            {run.results.length === 1 ? "" : "s"}
+                            {billed > 0
+                              ? ` · ~$${billed.toFixed(3)} total`
+                              : ""}
+                          </p>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+          ) : null}
         </div>
       </section>
 
@@ -442,42 +626,58 @@ export function AiBgDebugConsole({
             Results
           </h2>
           <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {results.map((result) => (
-              <article
-                key={result.modelId}
-                className="overflow-hidden rounded-xl ring-1 ring-[var(--border)]"
-              >
-                <div className="border-b border-[var(--border)] px-3 py-2">
-                  <p className="font-semibold text-[var(--foreground)]">
-                    {result.label}
-                  </p>
-                  <p className="text-xs text-[var(--muted)]">
-                    {result.provider} · {result.ms}ms
-                    {result.ok ? "" : " · failed"}
-                  </p>
-                </div>
-                {result.ok && result.imageUrl ? (
-                  <button
-                    type="button"
-                    title="View full size"
-                    onClick={() => openPreview(result.imageUrl, result.label)}
-                    className="block w-full cursor-zoom-in"
-                  >
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={result.imageUrl}
-                      alt={result.label}
-                      className="aspect-square w-full object-contain"
-                      style={CHECKERBOARD_STYLE}
-                    />
-                  </button>
-                ) : (
-                  <p className="bg-red-50 px-3 py-6 text-sm text-red-800">
-                    {result.error || "No image"}
-                  </p>
-                )}
-              </article>
-            ))}
+            {results.map((result) => {
+              const cost = formatCost(result);
+              const source = costSourceLabel(result.costSource);
+              return (
+                <article
+                  key={`${result.modelId}-${result.id ?? result.ms}`}
+                  className="overflow-hidden rounded-xl ring-1 ring-[var(--border)]"
+                >
+                  <div className="border-b border-[var(--border)] px-3 py-2">
+                    <p className="font-semibold text-[var(--foreground)]">
+                      {result.label}
+                    </p>
+                    <p className="text-xs text-[var(--muted)]">
+                      {result.provider} · {result.ms}ms
+                      {result.ok ? "" : " · failed"}
+                      {cost ? ` · ${cost}` : ""}
+                      {source ? ` (${source})` : ""}
+                    </p>
+                    {result.falDashboardUrl ? (
+                      <a
+                        href={result.falDashboardUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="mt-1 inline-block text-xs font-semibold text-[var(--accent)] hover:underline"
+                      >
+                        fal request →
+                      </a>
+                    ) : null}
+                  </div>
+                  {result.ok && result.imageUrl ? (
+                    <button
+                      type="button"
+                      title="View full size"
+                      onClick={() => openPreview(result.imageUrl, result.label)}
+                      className="block w-full cursor-zoom-in"
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={result.imageUrl}
+                        alt={result.label}
+                        className="aspect-square w-full object-contain"
+                        style={CHECKERBOARD_STYLE}
+                      />
+                    </button>
+                  ) : (
+                    <p className="bg-red-50 px-3 py-6 text-sm text-red-800">
+                      {result.error || "No image"}
+                    </p>
+                  )}
+                </article>
+              );
+            })}
           </div>
         </section>
       ) : null}
