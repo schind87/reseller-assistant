@@ -2,6 +2,7 @@
 
 import { useState, type FormEvent } from "react";
 import { BigButton } from "@/components/BigButton";
+import { PLATFORM_LABELS } from "@/lib/platforms";
 import {
   composeSmokePetNotes,
   defaultListingPreferences,
@@ -113,6 +114,17 @@ export function SellerOnboarding({
           your usual clothing listings. You can change them later.
         </p>
       </header>
+
+      <ChoiceGroup
+        legend="Where do you sell?"
+        hint="We’ll default new listings to this site. You can still pick the other one when listing a piece."
+        value={prefs.sellingWebsite}
+        onChange={(value) => patch("sellingWebsite", value)}
+        options={[
+          { value: "mercari", label: PLATFORM_LABELS.mercari },
+          { value: "poshmark", label: PLATFORM_LABELS.poshmark },
+        ]}
+      />
 
       <ChoiceGroup
         legend="Is your home smoke-free?"

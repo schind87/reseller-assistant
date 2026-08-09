@@ -14,6 +14,12 @@ import {
 } from "@/lib/seller-preferences";
 import type { Listing, Platform } from "@/lib/types";
 
+function preferredSellingWebsite(
+  preferences: ListingPreferences | null
+): Platform {
+  return preferences?.sellingWebsite ?? "mercari";
+}
+
 type AppHomeProps = {
   initialListings: Listing[];
   preferencesCompleted: boolean;
@@ -140,11 +146,30 @@ export function AppHome({
           <h2 className="font-[family-name:var(--font-brand)] text-2xl">
             Seller preferences
           </h2>
-          <p className="mt-2 text-base text-[var(--muted)]">
-            {preferences
-              ? composeSmokePetNotes(preferences)
-              : "No seller preferences saved yet."}
-          </p>
+          {preferences ? (
+            <dl className="mt-3 space-y-3 text-base">
+              <div>
+                <dt className="font-semibold text-[var(--foreground)]">
+                  Selling website
+                </dt>
+                <dd className="text-[var(--muted)]">
+                  {PLATFORM_LABELS[preferredSellingWebsite(preferences)]}
+                </dd>
+              </div>
+              <div>
+                <dt className="font-semibold text-[var(--foreground)]">
+                  Home note
+                </dt>
+                <dd className="text-[var(--muted)]">
+                  {composeSmokePetNotes(preferences)}
+                </dd>
+              </div>
+            </dl>
+          ) : (
+            <p className="mt-2 text-base text-[var(--muted)]">
+              No seller preferences saved yet.
+            </p>
+          )}
           <div className="mt-4">
             <BigButton
               variant="secondary"
@@ -197,26 +222,41 @@ export function AppHome({
       ) : null}
 
       {!choosing ? (
-        <BigButton disabled={busy} onClick={() => setChoosing(true)}>
-          List a clothing item
-        </BigButton>
+        <div className="flex flex-col gap-3">
+          <BigButton
+            disabled={busy}
+            onClick={() =>
+              void startListing(preferredSellingWebsite(preferences))
+            }
+          >
+            List on {PLATFORM_LABELS[preferredSellingWebsite(preferences)]}
+          </BigButton>
+          <BigButton
+            variant="secondary"
+            disabled={busy}
+            onClick={() => setChoosing(true)}
+          >
+            Sell on a different site
+          </BigButton>
+        </div>
       ) : (
         <div className="flex flex-col gap-3 rounded-2xl border border-[var(--border)] bg-white p-5">
           <h2 className="font-[family-name:var(--font-brand)] text-2xl">
             Where will you sell this piece?
           </h2>
-          <BigButton
-            disabled={busy}
-            onClick={() => void startListing("mercari")}
-          >
-            Mercari
-          </BigButton>
-          <BigButton
-            disabled={busy}
-            onClick={() => void startListing("poshmark")}
-          >
-            Poshmark
-          </BigButton>
+          {(["mercari", "poshmark"] as const).map((platform) => {
+            const preferred = preferredSellingWebsite(preferences) === platform;
+            return (
+              <BigButton
+                key={platform}
+                disabled={busy}
+                onClick={() => void startListing(platform)}
+              >
+                {PLATFORM_LABELS[platform]}
+                {preferred ? " (your usual site)" : ""}
+              </BigButton>
+            );
+          })}
           <BigButton
             variant="ghost"
             disabled={busy}

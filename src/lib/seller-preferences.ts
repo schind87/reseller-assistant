@@ -1,6 +1,11 @@
 import { z } from "zod";
+import { PLATFORM_LABELS } from "@/lib/platforms";
+import type { Platform } from "@/lib/types";
+
+export const sellingWebsiteSchema = z.enum(["mercari", "poshmark"]);
 
 export const listingPreferencesSchema = z.object({
+  sellingWebsite: sellingWebsiteSchema,
   smokeFree: z.enum(["yes", "no", "outdoor_only"]),
   pets: z.enum(["none", "dogs", "cats", "dogs_and_cats", "other"]),
   petDetails: z.string().max(120).nullable().optional(),
@@ -15,6 +20,7 @@ export const listingPreferencesSchema = z.object({
 export type ListingPreferences = z.infer<typeof listingPreferencesSchema>;
 
 export const defaultListingPreferences = (): ListingPreferences => ({
+  sellingWebsite: "mercari",
   smokeFree: "yes",
   pets: "none",
   petDetails: null,
@@ -27,13 +33,22 @@ export const defaultListingPreferences = (): ListingPreferences => ({
 });
 
 export function parseListingPreferences(raw: unknown): ListingPreferences {
-  const parsed = listingPreferencesSchema.safeParse(raw);
+  const base = defaultListingPreferences();
+  const merged =
+    raw && typeof raw === "object" && !Array.isArray(raw)
+      ? { ...base, ...(raw as Record<string, unknown>) }
+      : base;
+  const parsed = listingPreferencesSchema.safeParse(merged);
   if (parsed.success) return parsed.data;
-  return defaultListingPreferences();
+  return base;
 }
 
 export function isListingPreferencesComplete(raw: unknown): boolean {
-  return listingPreferencesSchema.safeParse(raw).success;
+  return listingPreferencesSchema.safeParse(
+    raw && typeof raw === "object" && !Array.isArray(raw)
+      ? { ...defaultListingPreferences(), ...(raw as Record<string, unknown>) }
+      : raw
+  ).success;
 }
 
 /** Short smoke/pet sentence for listing structured fields. */
@@ -73,9 +88,14 @@ export function composeSmokePetNotes(prefs: ListingPreferences): string {
   return `${smoke}. ${pets}.`;
 }
 
+export function sellingWebsiteLabel(platform: Platform): string {
+  return PLATFORM_LABELS[platform];
+}
+
 /** Extra context injected into AI draft prompts. */
 export function composeSellerContext(prefs: ListingPreferences): string {
   const lines: string[] = [
+    `Primary selling website: ${sellingWebsiteLabel(prefs.sellingWebsite)}`,
     `Home notes: ${composeSmokePetNotes(prefs)}`,
     `Primary clothing focus: ${
       prefs.audience === "womens"
