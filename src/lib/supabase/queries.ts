@@ -439,16 +439,14 @@ export async function reorderListingPhotos(
   }
 
   const byId = new Map(photos.map((photo) => [photo.id, photo]));
-  const sortValues = [...photos]
-    .sort((a, b) => a.sort_order - b.sort_order)
-    .map((photo) => photo.sort_order);
+  const orderBase = Math.min(...photos.map((photo) => photo.sort_order));
 
   const updated: ListingPhoto[] = [];
   for (let i = 0; i < orderedIds.length; i += 1) {
     const id = orderedIds[i];
     const current = byId.get(id);
     if (!current) throw new Error("Photo not found");
-    const nextOrder = sortValues[i];
+    const nextOrder = orderBase + i;
     if (current.sort_order === nextOrder) {
       updated.push(current);
       continue;

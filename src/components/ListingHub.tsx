@@ -56,6 +56,23 @@ type PhotoSection = "identify" | "inventory" | "listing";
 const PHOTO_DND_TYPE = "application/x-ra-photo-id";
 const LONG_PRESS_MS = 450;
 
+/** Sync drag id — React state is too late for dragover during HTML5 DnD. */
+let activePhotoDragId: string | null = null;
+
+function readDraggedPhotoId(dataTransfer: DataTransfer): string {
+  return (
+    dataTransfer.getData(PHOTO_DND_TYPE) ||
+    dataTransfer.getData("text/plain") ||
+    activePhotoDragId ||
+    ""
+  );
+}
+
+function isPhotoDrag(dataTransfer: DataTransfer, moveArmed: boolean): boolean {
+  if (moveArmed || activePhotoDragId) return true;
+  return Array.from(dataTransfer.types).includes(PHOTO_DND_TYPE);
+}
+
 const LISTING_ROLES: PhotoRole[] = [
   "cover",
   "front",
@@ -172,6 +189,18 @@ export function ListingHub({ listingId }: ListingHubProps) {
   );
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pendingUploadRoleRef = useRef<PhotoRole | null>(null);
+
+  function beginPhotoDrag(photoId: string, opts?: { showBanner?: boolean }) {
+    activePhotoDragId = photoId;
+    if (opts?.showBanner !== false) {
+      setMovingPhotoId(photoId);
+    }
+  }
+
+  function endPhotoDrag() {
+    activePhotoDragId = null;
+    setMovingPhotoId(null);
+  }
 
   const [schema, setSchema] = useState<PlatformListingSchema | null>(null);
   const [title, setTitle] = useState("");
@@ -327,7 +356,7 @@ export function ListingHub({ listingId }: ListingHubProps) {
 
     setUploading(true);
     setError(null);
-    setMovingPhotoId(null);
+    endPhotoDrag();
     try {
       let working = data?.photos ?? [];
       for (const file of images) {
@@ -367,8 +396,8 @@ export function ListingHub({ listingId }: ListingHubProps) {
     if (!photo) return;
 
     if (sectionForRole(photo.role) === section) {
-      setMovingPhotoId(null);
-      setStatusMessage("Drop onto another photo in this group to reorder.");
+      // Same-group drops belong on a photo tile (reorder), not the section.
+      endPhotoDrag();
       return;
     }
 
@@ -390,7 +419,7 @@ export function ListingHub({ listingId }: ListingHubProps) {
           typeof json.error === "string" ? json.error : "Could not move photo"
         );
       }
-      setMovingPhotoId(null);
+      endPhotoDrag();
       setStatusMessage(
         `Moved to ${sectionLabel(section)} as ${photoRoleLabel(targetRole)}.`
       );
@@ -409,7 +438,7 @@ export function ListingHub({ listingId }: ListingHubProps) {
     place: "before" | "after"
   ) {
     if (!data || draggedId === targetId) {
-      setMovingPhotoId(null);
+      endPhotoDrag();
       return;
     }
 
@@ -438,15 +467,18 @@ export function ListingHub({ listingId }: ListingHubProps) {
 
     const unchanged = sectionPhotos.every((photo, index) => photo.id === ids[index]);
     if (unchanged) {
-      setMovingPhotoId(null);
+      endPhotoDrag();
       return;
     }
 
     const byId = new Map(sectionPhotos.map((photo) => [photo.id, photo]));
-    const sortValues = sectionPhotos.map((photo) => photo.sort_order);
+    // Dense contiguous orders so section display order is unambiguous.
+    const orderBase = Math.min(
+      ...sectionPhotos.map((photo) => photo.sort_order)
+    );
     const reorderedSection = ids.map((id, index) => ({
       ...byId.get(id)!,
-      sort_order: sortValues[index],
+      sort_order: orderBase + index,
     }));
 
     setData((prev) => {
@@ -461,7 +493,7 @@ export function ListingHub({ listingId }: ListingHubProps) {
         ),
       };
     });
-    setMovingPhotoId(null);
+    endPhotoDrag();
     setMovingPhoto(true);
     setError(null);
 
@@ -938,7 +970,7 @@ export function ListingHub({ listingId }: ListingHubProps) {
             <button
               type="button"
               className="text-base font-semibold text-[var(--accent)] underline"
-              onClick={() => setMovingPhotoId(null)}
+              onClick={() => endPhotoDrag()}
             >
               Cancel
             </button>
@@ -961,8 +993,8 @@ export function ListingHub({ listingId }: ListingHubProps) {
           onReorderPhoto={(draggedId, targetId, place) =>
             void reorderPhotoInSection("identify", draggedId, targetId, place)
           }
-          onBeginMove={(photoId) => setMovingPhotoId(photoId)}
-          onCancelMove={() => setMovingPhotoId(null)}
+          onBeginMove={(photoId) => beginPhotoDrag(photoId)}
+          onCancelMove={endPhotoDrag}
           movingPhotoId={movingPhotoId}
           promotePhotoId={promotePhotoId}
           dragOver={dragOverSection === "identify"}
@@ -1012,8 +1044,8 @@ export function ListingHub({ listingId }: ListingHubProps) {
             onReorderPhoto={(draggedId, targetId, place) =>
               void reorderPhotoInSection("listing", draggedId, targetId, place)
             }
-            onBeginMove={(photoId) => setMovingPhotoId(photoId)}
-            onCancelMove={() => setMovingPhotoId(null)}
+            onBeginMove={(photoId) => beginPhotoDrag(photoId)}
+            onCancelMove={endPhotoDrag}
             movingPhotoId={movingPhotoId}
             dragOver={dragOverSection === "listing"}
             onDragOverChange={(over) =>
@@ -1254,8 +1286,8 @@ function PhotoGroup({
   function handleDragOver(e: DragEvent<HTMLDivElement>) {
     if (disabled) return;
     const hasFiles = Array.from(e.dataTransfer.types).includes("Files");
-    const hasPhoto = Array.from(e.dataTransfer.types).includes(PHOTO_DND_TYPE);
-    if (!hasFiles && !hasPhoto && !moveArmed) return;
+    const hasPhoto = isPhotoDrag(e.dataTransfer, moveArmed);
+    if (!hasFiles && !hasPhoto) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = hasFiles ? "copy" : "move";
     onDragOverChange(true);
@@ -1271,8 +1303,13 @@ function PhotoGroup({
     onDragOverChange(false);
     if (disabled) return;
 
-    const photoId =
-      e.dataTransfer.getData(PHOTO_DND_TYPE) || movingPhotoId || "";
+    // Tile drops handle reorder; don't treat them as section moves.
+    const onPhotoTile = (e.target as HTMLElement | null)?.closest?.(
+      "[data-photo-tile]"
+    );
+    if (onPhotoTile) return;
+
+    const photoId = readDraggedPhotoId(e.dataTransfer) || movingPhotoId || "";
     const files = imageFilesFromDataTransfer(e.dataTransfer);
 
     if (photoId) {
@@ -1473,14 +1510,18 @@ function PhotoTile({
       e.preventDefault();
       return;
     }
+    // Sync id first so drop targets work before React re-renders.
+    activePhotoDragId = photo.id;
     e.dataTransfer.setData(PHOTO_DND_TYPE, photo.id);
+    e.dataTransfer.setData("text/plain", photo.id);
     e.dataTransfer.effectAllowed = "move";
-    onBeginMove();
+    // Don't open the move banner on desktop drag — layout shift cancels DnD.
   }
 
   function handleDragEnd() {
     setDropEdge(null);
     setDraggable(true);
+    activePhotoDragId = null;
     onCancelMove();
   }
 
@@ -1491,8 +1532,7 @@ function PhotoTile({
 
   function handleTileDragOver(e: DragEvent<HTMLLIElement>) {
     if (disabled || moving) return;
-    const hasPhoto = Array.from(e.dataTransfer.types).includes(PHOTO_DND_TYPE);
-    if (!hasPhoto && !moveArmed) return;
+    if (!isPhotoDrag(e.dataTransfer, moveArmed)) return;
     e.preventDefault();
     e.stopPropagation();
     e.dataTransfer.dropEffect = "move";
@@ -1508,7 +1548,8 @@ function PhotoTile({
     e.preventDefault();
     e.stopPropagation();
     if (disabled || moving) return;
-    const draggedId = e.dataTransfer.getData(PHOTO_DND_TYPE);
+    const draggedId =
+      readDraggedPhotoId(e.dataTransfer) || movingPhotoId || "";
     const place = dropEdge || edgeFromEvent(e);
     setDropEdge(null);
     if (!draggedId || draggedId === photo.id) return;
@@ -1517,6 +1558,7 @@ function PhotoTile({
 
   return (
     <li
+      data-photo-tile={photo.id}
       draggable={!disabled && draggable}
       onPointerDown={handlePointerDown}
       onPointerUp={handlePointerUp}
