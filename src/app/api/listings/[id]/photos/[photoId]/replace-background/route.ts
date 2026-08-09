@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server";
 import { v4 as uuidv4 } from "uuid";
 import { authorizeListingAccess } from "@/lib/listing-access";
-import { replaceBackground } from "@/lib/ai/background";
+import {
+  BG_PIPELINE_TAG,
+  isCurrentBgPipeline,
+  replaceBackground,
+} from "@/lib/ai/background";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   getListingPhoto,
@@ -70,9 +74,9 @@ export async function POST(request: Request, context: RouteContext) {
       ) {
         await updateListing(id, { cover_processed_path: null });
       }
-    } else if (runNow && updated.processed_path) {
+    } else if (runNow && isCurrentBgPipeline(updated.processed_path)) {
       // Reuse the previously cleaned image — no fal.ai call.
-      if (updated.role === "cover") {
+      if (updated.role === "cover" && updated.processed_path) {
         await updateListing(id, {
           cover_processed_path: updated.processed_path,
         });
@@ -109,7 +113,7 @@ export async function POST(request: Request, context: RouteContext) {
         );
       }
 
-      const processedPath = `${id}/${updated.role}-bg-${uuidv4()}.png`;
+      const processedPath = `${id}/${updated.role}-${BG_PIPELINE_TAG}-${uuidv4()}.png`;
       const supabase = createAdminClient();
       const { error: uploadError } = await supabase.storage
         .from("listing-photos")

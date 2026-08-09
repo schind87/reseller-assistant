@@ -2,13 +2,23 @@
  * Background replacement via fal.ai:
  * 1) BiRefNet v2 for a high-quality garment cutout / mask
  * 2) EVF-SAM hanger mask unioned in so hooks/hangers are not clipped
- * 3) Composite onto a solid studio color (simple replacement)
- *
- * Returns processed image bytes, or null if FAL_KEY is missing / the call fails.
+ * 3) Drop disconnected leftover backdrop islands (wrinkles/folds)
+ * 4) Composite onto a solid studio color
  */
 import sharp from "sharp";
 
 const DEFAULT_BACKGROUND = "#FFFFFF";
+
+/** Filename marker so older cleaned files are regenerated after pipeline fixes. */
+export const BG_PIPELINE_TAG = "bgv2";
+
+export function isCurrentBgPipeline(
+  processedPath: string | null | undefined
+): boolean {
+  return Boolean(
+    processedPath && processedPath.includes(`-${BG_PIPELINE_TAG}-`)
+  );
+}
 
 type FalImagePayload = {
   image?: { url?: string };
@@ -177,6 +187,111 @@ async function maskHasForeground(
 }
 
 /**
+ * Drop disconnected leftover islands (backdrop folds, sheet wrinkles) while
+ * keeping the main garment blob and any hanger pieces near the top.
+ */
+function pruneOrphanForeground(
+  alpha: Buffer,
+  width: number,
+  height: number,
+  protectGray: Buffer | null
+): Buffer {
+  const n = width * height;
+  if (alpha.length < n) return alpha;
+
+  const labels = new Int32Array(n);
+  const areas: number[] = [0];
+  let nextLabel = 0;
+
+  const qx = new Int32Array(n);
+  const qy = new Int32Array(n);
+
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const start = y * width + x;
+      if (alpha[start] <= 127 || labels[start] !== 0) continue;
+
+      nextLabel += 1;
+      let area = 0;
+      let head = 0;
+      let tail = 0;
+      qx[tail] = x;
+      qy[tail] = y;
+      tail += 1;
+      labels[start] = nextLabel;
+
+      while (head < tail) {
+        const cx = qx[head];
+        const cy = qy[head];
+        head += 1;
+        area += 1;
+
+        const neighbors = [
+          [cx + 1, cy],
+          [cx - 1, cy],
+          [cx, cy + 1],
+          [cx, cy - 1],
+        ] as const;
+        for (const [nx, ny] of neighbors) {
+          if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue;
+          const ni = ny * width + nx;
+          if (alpha[ni] <= 127 || labels[ni] !== 0) continue;
+          labels[ni] = nextLabel;
+          qx[tail] = nx;
+          qy[tail] = ny;
+          tail += 1;
+        }
+      }
+
+      areas[nextLabel] = area;
+    }
+  }
+
+  if (nextLabel === 0) return alpha;
+
+  let best = 1;
+  for (let label = 2; label <= nextLabel; label++) {
+    if (areas[label] > areas[best]) best = label;
+  }
+
+  const keep = new Set<number>([best]);
+
+  if (protectGray && protectGray.length >= n) {
+    const overlap = new Array<number>(nextLabel + 1).fill(0);
+    for (let i = 0; i < n; i++) {
+      const label = labels[i];
+      if (label && protectGray[i] > 127) overlap[label] += 1;
+    }
+    const minOverlap = Math.max(16, Math.floor(areas[best] * 0.0002));
+    for (let label = 1; label <= nextLabel; label++) {
+      if (overlap[label] >= minOverlap) keep.add(label);
+    }
+  }
+
+  // Thin hanger hooks sometimes separate from the garment — keep sizable
+  // blobs that touch the top of the frame.
+  const topBand = Math.max(8, Math.floor(height * 0.14));
+  const minTopArea = Math.max(40, Math.floor(areas[best] * 0.005));
+  const touchesTop = new Array<boolean>(nextLabel + 1).fill(false);
+  for (let y = 0; y < topBand; y++) {
+    for (let x = 0; x < width; x++) {
+      const label = labels[y * width + x];
+      if (label) touchesTop[label] = true;
+    }
+  }
+  for (let label = 1; label <= nextLabel; label++) {
+    if (touchesTop[label] && areas[label] >= minTopArea) keep.add(label);
+  }
+
+  const cleaned = Buffer.from(alpha);
+  for (let i = 0; i < n; i++) {
+    const label = labels[i];
+    if (label && !keep.has(label)) cleaned[i] = 0;
+  }
+  return cleaned;
+}
+
+/**
  * Build a single alpha channel: BiRefNet garment ∪ hanger mask.
  * Falls back to the cutout's existing alpha when no separate mask exists.
  */
@@ -196,23 +311,24 @@ async function buildUnionAlpha(params: {
     .raw()
     .toBuffer();
 
-  const alpha = Buffer.from(cutoutAlpha);
-
+  // Prefer the dedicated mask when present; otherwise use cutout alpha.
+  // Do not expand with MAX of both — that keeps false-positive backdrop bits.
+  let alpha: Buffer;
   if (params.birefnetMaskBytes) {
-    const maskGray = await sharp(Buffer.from(params.birefnetMaskBytes))
+    alpha = await sharp(Buffer.from(params.birefnetMaskBytes))
       .greyscale()
       .resize(width, height, { fit: "fill" })
       .raw()
       .toBuffer();
-    for (let i = 0; i < alpha.length; i++) {
-      if (maskGray[i] > alpha[i]) alpha[i] = maskGray[i];
-    }
+  } else {
+    alpha = Buffer.from(cutoutAlpha);
   }
 
+  let hangerGray: Buffer | null = null;
   if (params.hangerMaskBytes) {
     const usable = await maskHasForeground(params.hangerMaskBytes);
     if (usable) {
-      const hangerGray = await sharp(Buffer.from(params.hangerMaskBytes))
+      hangerGray = await sharp(Buffer.from(params.hangerMaskBytes))
         .greyscale()
         .resize(width, height, { fit: "fill" })
         .raw()
@@ -223,7 +339,7 @@ async function buildUnionAlpha(params: {
     }
   }
 
-  return alpha;
+  return pruneOrphanForeground(alpha, width, height, hangerGray);
 }
 
 /**
@@ -281,7 +397,8 @@ export async function replaceBackground(
       return {
         ok: false,
         reason: "fal_failed",
-        detail: "fal.ai garment cutout failed. Check FAL_KEY and fal.ai status.",
+        detail:
+          "fal.ai garment cutout failed. Check FAL_KEY and fal.ai status.",
       };
     }
 
@@ -318,7 +435,7 @@ export async function replaceBackground(
       hangerMaskBytes: hangerMask?.bytes ?? null,
     });
 
-    // Original RGB + union alpha, flattened onto the studio color.
+    // Original RGB + cleaned alpha, flattened onto the studio color.
     const rgba = await sharp(Buffer.from(originalBytes.bytes))
       .ensureAlpha()
       .resize(width, height, { fit: "fill" })

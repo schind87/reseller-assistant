@@ -2,7 +2,11 @@ import { NextResponse } from "next/server";
 import { v4 as uuidv4 } from "uuid";
 import { authorizeListingAccess } from "@/lib/listing-access";
 import { draftListing } from "@/lib/ai/draft";
-import { replaceBackground } from "@/lib/ai/background";
+import {
+  BG_PIPELINE_TAG,
+  isCurrentBgPipeline,
+  replaceBackground,
+} from "@/lib/ai/background";
 import { identifyFromPhotos } from "@/lib/ai/identify";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
@@ -104,9 +108,9 @@ export async function POST(_request: Request, context: RouteContext) {
     );
 
     for (const entry of bgTargets) {
-      // Skip fal when a cleaned version already exists for this photo.
-      if (entry.photo.processed_path) {
-        if (entry.photo.role === "cover") {
+      // Skip fal when a current-pipeline cleaned version already exists.
+      if (isCurrentBgPipeline(entry.photo.processed_path)) {
+        if (entry.photo.role === "cover" && entry.photo.processed_path) {
           coverProcessedPath = entry.photo.processed_path;
         }
         continue;
@@ -125,7 +129,7 @@ export async function POST(_request: Request, context: RouteContext) {
         continue;
       }
 
-      const processedPath = `${id}/${entry.photo.role}-bg-${uuidv4()}.png`;
+      const processedPath = `${id}/${entry.photo.role}-${BG_PIPELINE_TAG}-${uuidv4()}.png`;
       const { error: uploadError } = await supabase.storage
         .from("listing-photos")
         .upload(processedPath, downloaded.bytes, {
