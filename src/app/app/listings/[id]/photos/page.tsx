@@ -113,7 +113,7 @@ function PhotosPageInner() {
           <QrPanel
             value={joinUrl}
             title="Phone photo coach"
-            hint="Scan with your phone to open the step-by-step clothing photo guide."
+            hint="Scan anytime with your phone — this QR stays valid. Opens the step-by-step clothing photo guide."
             code={listing.join_code}
           />
         ) : (
