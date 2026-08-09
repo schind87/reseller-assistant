@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { v4 as uuidv4 } from "uuid";
 import { authorizeListingAccess } from "@/lib/listing-access";
 import { draftListing } from "@/lib/ai/draft";
-import { fetchImageBytes, removeBackground } from "@/lib/ai/background";
+import { replaceBackground } from "@/lib/ai/background";
 import { identifyFromPhotos } from "@/lib/ai/identify";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
@@ -18,7 +18,10 @@ import {
   composeSmokePetNotes,
   defaultListingPreferences,
 } from "@/lib/seller-preferences";
-import { isIdentifyPhotoRole, isPostingPhotoRole } from "@/lib/types";
+import {
+  isIdentifyPhotoRole,
+  isPostingPhotoRole,
+} from "@/lib/types";
 
 export const maxDuration = 120;
 
@@ -93,18 +96,20 @@ export async function POST(_request: Request, context: RouteContext) {
 
     let coverProcessedPath: string | null = result.listing.cover_processed_path;
 
+    // Only replace backgrounds on photos the seller opted into.
     const supabase = createAdminClient();
-    for (const role of ["cover", "front"] as const) {
-      const entry = signedUrls.find((p) => p.photo.role === role);
-      if (!entry) continue;
+    const bgTargets = signedUrls.filter(
+      (p) =>
+        p.photo.replace_background && isPostingPhotoRole(p.photo.role)
+    );
 
-      const processedUrl = await removeBackground(entry.url);
-      if (!processedUrl) continue;
-
-      const downloaded = await fetchImageBytes(processedUrl);
+    for (const entry of bgTargets) {
+      const downloaded = await replaceBackground(entry.url, {
+        keepHanger: true,
+      });
       if (!downloaded) continue;
 
-      const processedPath = `${id}/${role}-bg-${uuidv4()}.png`;
+      const processedPath = `${id}/${entry.photo.role}-bg-${uuidv4()}.png`;
       const { error: uploadError } = await supabase.storage
         .from("listing-photos")
         .upload(processedPath, downloaded.bytes, {
@@ -117,8 +122,18 @@ export async function POST(_request: Request, context: RouteContext) {
         continue;
       }
 
+      if (
+        entry.photo.processed_path &&
+        entry.photo.processed_path !== processedPath
+      ) {
+        await supabase.storage
+          .from("listing-photos")
+          .remove([entry.photo.processed_path])
+          .catch(() => undefined);
+      }
+
       await updatePhoto(entry.photo.id, { processed_path: processedPath });
-      if (role === "cover") {
+      if (entry.photo.role === "cover") {
         coverProcessedPath = processedPath;
       }
     }

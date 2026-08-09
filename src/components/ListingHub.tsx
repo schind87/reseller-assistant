@@ -152,6 +152,7 @@ export function ListingHub({ listingId }: ListingHubProps) {
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [deletingPhotoId, setDeletingPhotoId] = useState<string | null>(null);
+  const [bgPhotoId, setBgPhotoId] = useState<string | null>(null);
   const [pickListingRole, setPickListingRole] = useState(false);
   const [promotePhotoId, setPromotePhotoId] = useState<string | null>(null);
   const [promotingPhoto, setPromotingPhoto] = useState(false);
@@ -496,6 +497,60 @@ export function ListingHub({ listingId }: ListingHubProps) {
     }
   }
 
+  async function toggleCleanBackground(photo: ListingPhotoWithUrl) {
+    const enable = !photo.replace_background;
+    setBgPhotoId(photo.id);
+    setError(null);
+    setStatusMessage(
+      enable ? "Cleaning background (keeping hangers)…" : "Restoring original…"
+    );
+    try {
+      const res = await fetch(
+        `/api/listings/${listingId}/photos/${photo.id}/replace-background`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            replaceBackground: enable,
+            run: enable,
+          }),
+        }
+      );
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(
+          typeof json.error === "string"
+            ? json.error
+            : "Could not update background"
+        );
+      }
+      const nextPhoto = json.photo as ListingPhotoWithUrl;
+      setData((prev) =>
+        prev
+          ? {
+              ...prev,
+              photos: prev.photos.map((p) =>
+                p.id === nextPhoto.id ? nextPhoto : p
+              ),
+            }
+          : prev
+      );
+      setStatusMessage(
+        enable
+          ? "Clean background applied — hanger kept when detected."
+          : "Original photo restored."
+      );
+      await load({ syncDraft: false });
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Could not update background"
+      );
+      setStatusMessage(null);
+    } finally {
+      setBgPhotoId(null);
+    }
+  }
+
   async function addPhotoToListing(photoId: string, role: PhotoRole) {
     setPromotingPhoto(true);
     setError(null);
@@ -812,12 +867,15 @@ export function ListingHub({ listingId }: ListingHubProps) {
           <PhotoGroup
             title="Photos shoppers will see"
             badge="Listing photos · posted"
-            description="Cover, front, back, details, and flaws for the marketplace listing. You can add multiple photos of each type. These are the only photos that get uploaded when you post."
+            description="Cover, front, back, details, and flaws for the marketplace listing. You can add multiple photos of each type. Use Clean bg on a shot to swap the backdrop for white while keeping hangers intact."
             photos={listingPhotos}
             empty="No listing photos yet — drop images here or start with a clean cover shot."
             section="listing"
             onAdd={() => setPickListingRole((open) => !open)}
             onDelete={(photoId) => void deletePhoto(photoId)}
+            onToggleCleanBackground={(photo) =>
+              void toggleCleanBackground(photo)
+            }
             onPreview={setPreviewPhoto}
             onDropFiles={(files) => void uploadFilesToSection(files, "listing")}
             onDropPhoto={(photoId) =>
@@ -830,8 +888,12 @@ export function ListingHub({ listingId }: ListingHubProps) {
               setDragOverSection(over ? "listing" : null)
             }
             deletingPhotoId={deletingPhotoId}
+            bgPhotoId={bgPhotoId}
             disabled={
-              uploading || Boolean(deletingPhotoId) || movingPhoto
+              uploading ||
+              Boolean(deletingPhotoId) ||
+              movingPhoto ||
+              Boolean(bgPhotoId)
             }
             tone="listing"
           />
@@ -1036,6 +1098,7 @@ function PhotoGroup({
   onAdd,
   onDelete,
   onUseInListing,
+  onToggleCleanBackground,
   onPreview,
   onDropFiles,
   onDropPhoto,
@@ -1045,6 +1108,7 @@ function PhotoGroup({
   dragOver,
   onDragOverChange,
   deletingPhotoId,
+  bgPhotoId,
   disabled,
   tone = "listing",
 }: {
@@ -1057,6 +1121,7 @@ function PhotoGroup({
   onAdd: () => void;
   onDelete: (photoId: string) => void;
   onUseInListing?: (photoId: string) => void;
+  onToggleCleanBackground?: (photo: ListingPhotoWithUrl) => void;
   onPreview: (photo: ListingPhotoWithUrl) => void;
   onDropFiles: (files: File[]) => void;
   onDropPhoto: (photoId: string) => void;
@@ -1066,6 +1131,7 @@ function PhotoGroup({
   dragOver?: boolean;
   onDragOverChange: (over: boolean) => void;
   deletingPhotoId?: string | null;
+  bgPhotoId?: string | null;
   disabled?: boolean;
   tone?: "private" | "listing";
 }) {
@@ -1162,6 +1228,7 @@ function PhotoGroup({
               photo={photo}
               deleting={deletingPhotoId === photo.id}
               promoting={promotePhotoId === photo.id}
+              cleaningBg={bgPhotoId === photo.id}
               moving={movingPhotoId === photo.id}
               moveArmed={moveArmed}
               disabled={disabled}
@@ -1169,6 +1236,11 @@ function PhotoGroup({
               onUseInListing={
                 onUseInListing
                   ? () => onUseInListing(photo.id)
+                  : undefined
+              }
+              onToggleCleanBackground={
+                onToggleCleanBackground
+                  ? () => onToggleCleanBackground(photo)
                   : undefined
               }
               onDelete={() => onDelete(photo.id)}
@@ -1210,22 +1282,26 @@ function PhotoTile({
   photo,
   deleting,
   promoting,
+  cleaningBg,
   moving,
   moveArmed,
   disabled,
   onPreview,
   onUseInListing,
+  onToggleCleanBackground,
   onDelete,
   onBeginMove,
 }: {
   photo: ListingPhotoWithUrl;
   deleting: boolean;
   promoting: boolean;
+  cleaningBg?: boolean;
   moving: boolean;
   moveArmed: boolean;
   disabled?: boolean;
   onPreview: () => void;
   onUseInListing?: () => void;
+  onToggleCleanBackground?: () => void;
   onDelete: () => void;
   onBeginMove: () => void;
 }) {
@@ -1333,7 +1409,7 @@ function PhotoTile({
           {photoRoleLabel(photo.role)}
           {moving ? " · moving" : ""}
         </p>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {onUseInListing ? (
             <button
               type="button"
@@ -1350,6 +1426,33 @@ function PhotoTile({
               }`}
             >
               {promoting ? "Choosing…" : "Use in listing"}
+            </button>
+          ) : null}
+          {onToggleCleanBackground ? (
+            <button
+              type="button"
+              disabled={disabled}
+              onClick={(e) => {
+                e.stopPropagation();
+                onToggleCleanBackground();
+              }}
+              aria-pressed={Boolean(photo.replace_background)}
+              title={
+                photo.replace_background
+                  ? "Restore original background"
+                  : "Replace background with white; keeps hangers"
+              }
+              className={`rounded-md border px-2 py-1 text-sm font-semibold transition disabled:opacity-50 ${
+                photo.replace_background
+                  ? "border-[var(--accent)] bg-[var(--accent)] text-white"
+                  : "border-[var(--border)] bg-transparent text-[var(--foreground)] hover:bg-[var(--surface-muted)]"
+              }`}
+            >
+              {cleaningBg
+                ? "Working…"
+                : photo.replace_background
+                  ? "Clean bg on"
+                  : "Clean bg"}
             </button>
           ) : null}
           <button
