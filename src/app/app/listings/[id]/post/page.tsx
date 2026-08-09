@@ -158,7 +158,14 @@ export default function PostPage() {
         </h1>
         <p className="mt-2 text-lg text-[var(--muted)]">
           Copy each {PLATFORM_LABELS[platform]} field in order — same labels as
-          the sell form.
+          the sell form. Need to change something?{" "}
+          <Link
+            href={`/app/listings/${listing.id}?tweak=1`}
+            className="font-semibold text-[var(--accent)]"
+          >
+            Open the large field editor
+          </Link>
+          .
         </p>
       </header>
 

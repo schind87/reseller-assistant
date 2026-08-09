@@ -102,6 +102,17 @@
         border: 2px solid #1f5c4a;
       }
       .row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+      .btn-link {
+        background: transparent;
+        color: #1f5c4a;
+        border: 0;
+        padding: 4px 0;
+        font-size: 14px;
+        font-weight: 700;
+        text-decoration: underline;
+        cursor: pointer;
+        text-align: left;
+      }
       .status {
         min-height: 1.3em;
         font-size: 14px;
@@ -150,6 +161,7 @@
         <div class="preview" id="preview"></div>
         <div class="actions">
           <button class="btn btn-primary" type="button" id="do-step">Do this for me</button>
+          <button class="btn-link" type="button" id="tweak">Tweak listing fields…</button>
           <div class="row">
             <button class="btn btn-secondary" type="button" id="prev">Back</button>
             <button class="btn btn-secondary" type="button" id="next">Next step</button>
@@ -170,6 +182,7 @@
     help: shadow.getElementById("help"),
     preview: shadow.getElementById("preview"),
     doStep: shadow.getElementById("do-step"),
+    tweak: shadow.getElementById("tweak"),
     prev: shadow.getElementById("prev"),
     next: shadow.getElementById("next"),
     status: shadow.getElementById("status"),
@@ -181,6 +194,7 @@
   function setBusy(next) {
     busy = next;
     ui.doStep.disabled = busy;
+    ui.tweak.disabled = busy;
     ui.prev.disabled = busy;
     ui.next.disabled = busy;
   }
@@ -234,6 +248,7 @@
 
     ui.prev.disabled = busy || index <= 0;
     ui.next.disabled = busy || index >= total - 1;
+    ui.tweak.disabled = busy;
     ui.doStep.disabled = busy || step.key === "review";
     if (step.key === "review") {
       ui.doStep.textContent = "Review on the page";
@@ -292,6 +307,14 @@
   });
   ui.next.addEventListener("click", () => void run("coachNext"));
   ui.prev.addEventListener("click", () => void run("coachPrev"));
+  ui.tweak.addEventListener("click", () => {
+    if (!state?.paired) {
+      ui.status.textContent = "Connect a listing first.";
+      ui.status.className = "status err";
+      return;
+    }
+    void run("openTweakListing");
+  });
   ui.minimize.addEventListener("click", () => {
     minimized = true;
     render();

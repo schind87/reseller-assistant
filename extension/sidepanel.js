@@ -24,6 +24,7 @@ const els = {
   coachHelp: document.getElementById("coach-help"),
   coachPreview: document.getElementById("coach-preview"),
   doStepBtn: document.getElementById("do-step-btn"),
+  tweakListingBtn: document.getElementById("tweak-listing-btn"),
   nextStepBtn: document.getElementById("next-step-btn"),
   prevStepBtn: document.getElementById("prev-step-btn"),
   fillAllBtn: document.getElementById("fill-all-btn"),
@@ -437,6 +438,9 @@ async function handleCopyPhotos() {
 els.pairBtn.addEventListener("click", () => void handlePair());
 els.unpairBtn.addEventListener("click", () => void clearPairing());
 els.doStepBtn.addEventListener("click", () => void runCoach("coachDoStep"));
+els.tweakListingBtn.addEventListener("click", () =>
+  void runCoach("openTweakListing")
+);
 els.nextStepBtn.addEventListener("click", () => void runCoach("coachNext"));
 els.prevStepBtn.addEventListener("click", () => void runCoach("coachPrev"));
 els.fillAllBtn.addEventListener("click", () => void runCoach("coachFillAll"));

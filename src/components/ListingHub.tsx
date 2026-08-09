@@ -11,9 +11,10 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { BigButton } from "@/components/BigButton";
 import { ListingSchemaForm } from "@/components/ListingSchemaForm";
+import { ListingTweakDialog } from "@/components/ListingTweakDialog";
 import { QrPanel } from "@/components/QrPanel";
 import {
   getSeedListingSchema,
@@ -139,6 +140,8 @@ function applyListingToDraft(listing: Listing) {
 
 export function ListingHub({ listingId }: ListingHubProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const [tweakOpen, setTweakOpen] = useState(false);
   const [data, setData] = useState<ListingPayload | null>(null);
   const [joinUrl, setJoinUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -234,6 +237,26 @@ export function ListingHub({ listingId }: ListingHubProps) {
     draftHydrated.current = false;
     schemaLoadedFor.current = null;
   }, [listingId]);
+
+  useEffect(() => {
+    if (searchParams.get("tweak") === "1") {
+      setTweakOpen(true);
+    }
+  }, [searchParams]);
+
+  const closeTweak = useCallback(() => {
+    setTweakOpen(false);
+    if (searchParams.get("tweak") === "1") {
+      router.replace(`/app/listings/${listingId}`, { scroll: false });
+    }
+  }, [listingId, router, searchParams]);
+
+  const openTweak = useCallback(() => {
+    setTweakOpen(true);
+    if (searchParams.get("tweak") !== "1") {
+      router.replace(`/app/listings/${listingId}?tweak=1`, { scroll: false });
+    }
+  }, [listingId, router, searchParams]);
 
   useEffect(() => {
     let cancelled = false;
@@ -902,14 +925,23 @@ export function ListingHub({ listingId }: ListingHubProps) {
       </section>
 
       <section className="flex flex-col gap-4 rounded-2xl border border-[var(--border)] bg-white p-6">
-        <div>
-          <h2 className="font-[family-name:var(--font-brand)] text-2xl">
-            {PLATFORM_LABELS[platform]} listing fields
-          </h2>
-          <p className="mt-2 text-base text-[var(--muted)]">
-            Edit these directly — same fields you will enter on{" "}
-            {PLATFORM_LABELS[platform]}.
-          </p>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h2 className="font-[family-name:var(--font-brand)] text-2xl">
+              {PLATFORM_LABELS[platform]} listing fields
+            </h2>
+            <p className="mt-2 text-base text-[var(--muted)]">
+              Edit these directly — same fields you will enter on{" "}
+              {PLATFORM_LABELS[platform]}.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={openTweak}
+            className="touch-target shrink-0 rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] px-4 text-base font-semibold text-[var(--foreground)]"
+          >
+            Open large editor
+          </button>
         </div>
 
         {schema ? (
@@ -981,6 +1013,52 @@ export function ListingHub({ listingId }: ListingHubProps) {
         <PhotoLightbox
           photo={previewPhoto}
           onClose={() => setPreviewPhoto(null)}
+        />
+      ) : null}
+
+      {tweakOpen && schema ? (
+        <ListingTweakDialog
+          platform={platform}
+          schema={schema}
+          title={title}
+          description={description}
+          price={price}
+          fields={fields}
+          onTitleChange={(value) => {
+            setTitle(value);
+            setDraftDirty(true);
+          }}
+          onDescriptionChange={(value) => {
+            setDescription(value);
+            setDraftDirty(true);
+          }}
+          onPriceChange={(value) => {
+            setPrice(value);
+            setDraftDirty(true);
+          }}
+          onFieldsChange={(next) => {
+            setFields(next);
+            setDraftDirty(true);
+          }}
+          onRewriteDescription={() => void rewriteDescription()}
+          rewritingDescription={rewritingDescription}
+          saving={saving}
+          draftDirty={draftDirty}
+          onSubmit={(e) => void saveDraft(e)}
+          onClose={closeTweak}
+          footerExtra={
+            searchParams.get("popup") === "1" ? (
+              <p className="text-sm text-[var(--muted)]">
+                Save your changes, then close this window and tap{" "}
+                <strong>Refresh listing</strong> in the Chrome extension.
+              </p>
+            ) : (
+              <p className="text-sm text-[var(--muted)]">
+                After saving, tap <strong>Refresh listing</strong> in the Chrome
+                extension so fills use your updates.
+              </p>
+            )
+          }
         />
       ) : null}
     </div>

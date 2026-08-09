@@ -17,6 +17,7 @@ After code changes: run `npm run extension:live`, then **Reload extension** in t
 3. On that page, use the green **Reseller Assistant** box in the corner:
    - **Do this for me** — photos, title, description, then other details
    - After a successful fill, it checks the page and moves to the next step
+   - **Tweak listing fields** opens a large app editor popup (save there; closing refreshes the listing)
    - Use **Back** if you need to redo a step
 4. When it says to review, check the form and press **List / Publish** yourself.
 

@@ -409,8 +409,8 @@ async function runCurrentStep() {
   }
 }
 
-async function broadcastCoachState() {
-  const state = await buildCoachState();
+async function broadcastCoachState(prebuilt) {
+  const state = prebuilt || (await buildCoachState());
   const tabs = await findMarketplaceTabs(state.platform || null);
   await Promise.all(
     tabs.map(async (tab) => {
@@ -427,6 +427,56 @@ async function broadcastCoachState() {
     })
   );
   return state;
+}
+
+async function openTweakListingWindow() {
+  const pairing = await getPairing();
+  if (!pairing?.appUrl || !pairing.listingId) {
+    throw new Error("Connect a listing first.");
+  }
+
+  const url = `${pairing.appUrl}/app/listings/${pairing.listingId}?tweak=1&popup=1`;
+  const current = await chrome.windows.getCurrent().catch(() => null);
+  const width = Math.min(980, Math.max(720, (current?.width || 1200) - 80));
+  const height = Math.min(920, Math.max(680, (current?.height || 900) - 40));
+  const left = Math.round(
+    (current?.left || 0) + ((current?.width || width) - width) / 2
+  );
+  const top = Math.round(
+    (current?.top || 0) + ((current?.height || height) - height) / 2
+  );
+
+  const created = await chrome.windows.create({
+    url,
+    type: "popup",
+    width,
+    height,
+    left,
+    top,
+    focused: true,
+  });
+
+  if (created?.id != null) {
+    const windowId = created.id;
+    const onRemoved = (removedId) => {
+      if (removedId !== windowId) return;
+      chrome.windows.onRemoved.removeListener(onRemoved);
+      void refreshListingCache()
+        .then(() =>
+          buildCoachState({
+            message: "Listing refreshed after you closed the editor.",
+          })
+        )
+        .then((state) => broadcastCoachState(state))
+        .catch(() => undefined);
+    };
+    chrome.windows.onRemoved.addListener(onRemoved);
+  }
+
+  return buildCoachState({
+    message:
+      "Opened the listing editor. Save there, then close the window — we’ll refresh automatically.",
+  });
 }
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -534,6 +584,25 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         message: error instanceof Error ? error.message : "Could not go back.",
       })
     );
+    return true;
+  }
+
+  if (message.type === "openTweakListing") {
+    void openTweakListingWindow()
+      .then(async (state) => {
+        await broadcastCoachState();
+        sendResponse(state);
+      })
+      .catch((error) =>
+        sendResponse({
+          ok: false,
+          error: true,
+          message:
+            error instanceof Error
+              ? error.message
+              : "Could not open listing editor.",
+        })
+      );
     return true;
   }
 
