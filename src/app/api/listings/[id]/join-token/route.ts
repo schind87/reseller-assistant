@@ -3,7 +3,7 @@ import { z } from "zod";
 import { authorizeListingAccess } from "@/lib/listing-access";
 import {
   appUrl,
-  createJoinToken,
+  getOrCreateJoinToken,
   requestOrigin,
 } from "@/lib/supabase/queries";
 
@@ -27,7 +27,8 @@ export async function POST(request: Request, context: RouteContext) {
       return NextResponse.json({ error: "Invalid purpose" }, { status: 400 });
     }
 
-    const join = await createJoinToken(id, parsed.data.purpose, 120);
+    // Same QR/link stays valid across scans and page refreshes (until expiry).
+    const join = await getOrCreateJoinToken(id, parsed.data.purpose);
     const origin = requestOrigin(request);
     const url =
       parsed.data.purpose === "extension"

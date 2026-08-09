@@ -478,7 +478,7 @@ export function ListingHub({ listingId }: ListingHubProps) {
           <QrPanel
             value={joinUrl}
             title="Phone photo coach"
-            hint="Scan with your phone to open the guided clothing photo steps. Keep this computer on the listing hub."
+            hint="Scan anytime with your phone to open the guided photo steps — this QR stays valid. Keep this computer on the listing hub."
             code={listing.join_code}
           />
         ) : (

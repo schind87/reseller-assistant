@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createSessionCookie } from "@/lib/session";
-import { consumeJoinToken } from "@/lib/supabase/queries";
+import { redeemJoinToken } from "@/lib/supabase/queries";
 
 const bodySchema = z.object({
   token: z.string().min(1),
@@ -15,7 +15,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Token is required" }, { status: 400 });
     }
 
-    const result = await consumeJoinToken(parsed.data.token);
+    const result = await redeemJoinToken(parsed.data.token);
     if (!result) {
       return NextResponse.json(
         { error: "This join link is invalid or expired" },

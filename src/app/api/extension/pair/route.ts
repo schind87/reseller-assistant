@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 import {
-  createJoinToken,
   findListingByJoinCode,
   findValidJoinToken,
   getListingWithPhotos,
+  getOrCreateJoinToken,
 } from "@/lib/supabase/queries";
 
 /**
@@ -56,7 +56,7 @@ export async function GET(request: Request) {
       );
     }
 
-    const join = await createJoinToken(listing.id, "extension", 60 * 24);
+    const join = await getOrCreateJoinToken(listing.id, "extension");
     return NextResponse.json({
       token: join.token,
       listingId: listing.id,

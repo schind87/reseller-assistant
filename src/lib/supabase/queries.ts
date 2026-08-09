@@ -146,7 +146,7 @@ export async function createListing(
 export async function createJoinToken(
   listingId: string,
   purpose: JoinTokenPurpose,
-  ttlMinutes = 60
+  ttlMinutes = 60 * 24 * 7
 ): Promise<ListingJoinToken> {
   const supabase = createAdminClient();
   const token = generateJoinToken();
@@ -167,32 +167,44 @@ export async function createJoinToken(
   return data as ListingJoinToken;
 }
 
+/** Reuse an unexpired QR/join link so the same code keeps working across scans. */
+export async function getOrCreateJoinToken(
+  listingId: string,
+  purpose: JoinTokenPurpose,
+  ttlMinutes = 60 * 24 * 7
+): Promise<ListingJoinToken> {
+  const supabase = createAdminClient();
+  const now = new Date().toISOString();
+
+  const { data: existing, error } = await supabase
+    .from("listing_join_tokens")
+    .select("*")
+    .eq("listing_id", listingId)
+    .eq("purpose", purpose)
+    .gt("expires_at", now)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) throw new Error(`getOrCreateJoinToken: ${error.message}`);
+  if (existing) return existing as ListingJoinToken;
+
+  return createJoinToken(listingId, purpose, ttlMinutes);
+}
+
+/** Validate a join token without burning it — QR links are reusable until they expire. */
+export async function redeemJoinToken(
+  token: string
+): Promise<{ listingId: string; purpose: JoinTokenPurpose } | null> {
+  const row = await findValidJoinToken(token);
+  if (!row) return null;
+  return { listingId: row.listing_id, purpose: row.purpose };
+}
+
 export async function consumeJoinToken(
   token: string
 ): Promise<{ listingId: string; purpose: JoinTokenPurpose } | null> {
-  const supabase = createAdminClient();
-  const { data, error } = await supabase
-    .from("listing_join_tokens")
-    .select("*")
-    .eq("token", token)
-    .maybeSingle();
-
-  if (error) throw new Error(`consumeJoinToken: ${error.message}`);
-  if (!data) return null;
-
-  const row = data as ListingJoinToken;
-  if (row.consumed_at) return null;
-  if (new Date(row.expires_at).getTime() < Date.now()) return null;
-
-  const { error: updateError } = await supabase
-    .from("listing_join_tokens")
-    .update({ consumed_at: new Date().toISOString() })
-    .eq("id", row.id)
-    .is("consumed_at", null);
-
-  if (updateError) throw new Error(`consumeJoinToken update: ${updateError.message}`);
-
-  return { listingId: row.listing_id, purpose: row.purpose };
+  return redeemJoinToken(token);
 }
 
 export async function findValidJoinToken(
