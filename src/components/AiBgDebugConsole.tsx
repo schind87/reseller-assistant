@@ -159,9 +159,9 @@ export function AiBgDebugConsole({
         </Link>
       </header>
 
-      <div className="flex flex-wrap gap-3 text-sm">
+      <div className="flex flex-wrap items-center gap-2">
         <span
-          className={`rounded-md px-2 py-1 font-semibold ${
+          className={`rounded-lg px-2.5 py-1 text-sm font-semibold ${
             hasFalKey
               ? "bg-[var(--accent-soft)] text-[var(--accent)]"
               : "bg-red-50 text-red-800"
@@ -170,7 +170,7 @@ export function AiBgDebugConsole({
           FAL_KEY {hasFalKey ? "ready" : "missing"}
         </span>
         <span
-          className={`rounded-md px-2 py-1 font-semibold ${
+          className={`rounded-lg px-2.5 py-1 text-sm font-semibold ${
             hasPhotoroomKey
               ? "bg-[var(--accent-soft)] text-[var(--accent)]"
               : "bg-[var(--surface-muted)] text-[var(--muted)]"
@@ -186,10 +186,10 @@ export function AiBgDebugConsole({
         </p>
       ) : null}
 
-      <section className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
-        <div className="flex flex-col gap-4 rounded-2xl border border-[var(--border)] bg-white p-4">
+      <section className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)] lg:items-start">
+        <div className="flex flex-col gap-5 rounded-2xl border border-[var(--border)] bg-white p-5">
           <form
-            className="flex flex-col gap-3 sm:flex-row"
+            className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:items-center"
             onSubmit={(e) => {
               e.preventDefault();
               void loadPhotos();
@@ -200,7 +200,7 @@ export function AiBgDebugConsole({
               value={q}
               onChange={(e) => setQ(e.target.value)}
               placeholder="Filter by title, email, id…"
-              className="touch-target w-full rounded-xl border border-[var(--border)] bg-white px-4 text-base"
+              className="touch-target min-w-0 w-full rounded-xl border border-[var(--border)] bg-white px-4 text-base"
             />
             <select
               value={role}
@@ -209,7 +209,8 @@ export function AiBgDebugConsole({
                 setRole(next);
                 void loadPhotos(next, q);
               }}
-              className="touch-target rounded-xl border border-[var(--border)] bg-white px-3 text-base"
+              aria-label="Photo role"
+              className="touch-target w-full min-w-[9.5rem] rounded-xl border border-[var(--border)] bg-white px-3 text-base sm:w-auto"
             >
               {ROLE_FILTERS.map((r) => (
                 <option key={r} value={r}>
@@ -219,7 +220,7 @@ export function AiBgDebugConsole({
             </select>
             <button
               type="submit"
-              className="touch-target rounded-xl border border-[var(--border)] px-4 text-base font-semibold hover:bg-[var(--surface-muted)]"
+              className="touch-target w-full shrink-0 rounded-xl border border-[var(--border)] px-5 text-base font-semibold hover:bg-[var(--surface-muted)] sm:w-auto"
             >
               Refresh
             </button>
@@ -229,7 +230,7 @@ export function AiBgDebugConsole({
             {loading ? "Loading…" : `${photos.length} shown · ${total} total`}
           </p>
 
-          <ul className="grid max-h-[70vh] grid-cols-2 gap-3 overflow-y-auto sm:grid-cols-3">
+          <ul className="grid max-h-[70vh] grid-cols-2 gap-3 overflow-y-auto">
             {photos.map((photo) => {
               const active = photo.id === selectedPhoto?.id;
               return (
@@ -252,7 +253,7 @@ export function AiBgDebugConsole({
                       alt=""
                       className="aspect-square w-full bg-[var(--surface-muted)] object-cover"
                     />
-                    <div className="space-y-0.5 px-2 py-1.5">
+                    <div className="space-y-0.5 px-2.5 py-2">
                       <p className="truncate text-sm font-semibold text-[var(--foreground)]">
                         {photoRoleLabel(photo.role)}
                         {photo.replace_background ? " · clean" : ""}
@@ -272,8 +273,8 @@ export function AiBgDebugConsole({
           </ul>
         </div>
 
-        <div className="flex flex-col gap-4">
-          <div className="rounded-2xl border border-[var(--border)] bg-white p-4">
+        <div className="flex flex-col gap-5">
+          <div className="rounded-2xl border border-[var(--border)] bg-white p-5">
             <h2 className="text-lg font-semibold text-[var(--foreground)]">
               Selected photo
             </h2>
@@ -322,7 +323,7 @@ export function AiBgDebugConsole({
             )}
           </div>
 
-          <div className="rounded-2xl border border-[var(--border)] bg-white p-4">
+          <div className="rounded-2xl border border-[var(--border)] bg-white p-5">
             <h2 className="text-lg font-semibold text-[var(--foreground)]">
               Models
             </h2>
@@ -393,7 +394,7 @@ export function AiBgDebugConsole({
       </section>
 
       {results ? (
-        <section className="rounded-2xl border border-[var(--border)] bg-white p-4">
+        <section className="rounded-2xl border border-[var(--border)] bg-white p-5">
           <h2 className="text-lg font-semibold text-[var(--foreground)]">
             Results
           </h2>
