@@ -104,7 +104,7 @@ export async function GET(request: Request) {
     });
   }
 
-  const runs = await listBgLabRunsForPhoto(photoId, 20);
+  const runs = await listBgLabRunsForPhoto(photoId, 50);
   return NextResponse.json({
     runs: runs.map((run) => ({
       id: run.id,
@@ -112,6 +112,7 @@ export async function GET(request: Request) {
       compositeWhite: run.composite_white,
       results: run.results.map((r) => ({
         id: r.id,
+        runId: r.run_id,
         modelId: r.model_id,
         label: r.model_label,
         provider: r.provider,
@@ -129,6 +130,7 @@ export async function GET(request: Request) {
         costSource: r.cost_source,
         storagePath: r.storage_path,
         costLabel: formatCostUsd(r.cost_usd),
+        createdAt: r.created_at,
       })),
     })),
   });

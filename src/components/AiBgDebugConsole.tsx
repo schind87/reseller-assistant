@@ -1,6 +1,6 @@
 "use client";
 
-import { startTransition, useEffect, useState } from "react";
+import { startTransition, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { BigButton } from "@/components/BigButton";
 import type { FalBgModelDef, FalBgModelId } from "@/lib/ai/fal-bg-models";
@@ -22,6 +22,7 @@ type AdminPhoto = {
 
 type RunResult = {
   id?: string;
+  runId?: string;
   modelId: string;
   label: string;
   provider: "fal" | "photoroom";
@@ -34,6 +35,7 @@ type RunResult = {
   costUsd?: number | null;
   costSource?: string | null;
   costLabel?: string | null;
+  createdAt?: string;
 };
 
 type SavedRun = {
@@ -41,6 +43,12 @@ type SavedRun = {
   createdAt: string;
   compositeWhite: boolean;
   results: RunResult[];
+};
+
+type ModelHistory = {
+  modelId: string;
+  label: string;
+  versions: RunResult[];
 };
 
 type PreviewImage = {
@@ -97,7 +105,8 @@ function costSourceLabel(source: string | null | undefined): string | null {
   }
 }
 
-function formatRunTime(iso: string): string {
+function formatRunTime(iso: string | undefined): string {
+  if (!iso) return "";
   try {
     return new Date(iso).toLocaleString(undefined, {
       month: "short",
@@ -108,6 +117,43 @@ function formatRunTime(iso: string): string {
   } catch {
     return iso;
   }
+}
+
+/** Newest-first history for each model across all saved runs for a photo. */
+function buildModelHistories(runs: SavedRun[]): ModelHistory[] {
+  const byModel = new Map<string, ModelHistory>();
+
+  for (const run of runs) {
+    for (const result of run.results) {
+      const existing = byModel.get(result.modelId);
+      const withMeta: RunResult = {
+        ...result,
+        runId: result.runId ?? run.id,
+        createdAt: result.createdAt ?? run.createdAt,
+      };
+      if (existing) {
+        existing.versions.push(withMeta);
+      } else {
+        byModel.set(result.modelId, {
+          modelId: result.modelId,
+          label: result.label,
+          versions: [withMeta],
+        });
+      }
+    }
+  }
+
+  for (const entry of byModel.values()) {
+    entry.versions.sort((a, b) => {
+      const aTime = a.createdAt ? Date.parse(a.createdAt) : 0;
+      const bTime = b.createdAt ? Date.parse(b.createdAt) : 0;
+      return bTime - aTime;
+    });
+  }
+
+  return [...byModel.values()].sort((a, b) =>
+    a.label.localeCompare(b.label),
+  );
 }
 
 export function AiBgDebugConsole({
@@ -130,25 +176,46 @@ export function AiBgDebugConsole({
     () => new Set(models.filter((m) => m.defaultSelected).map((m) => m.id)),
   );
   const [compositeWhite, setCompositeWhite] = useState(true);
-  const [results, setResults] = useState<RunResult[] | null>(null);
-  const [latestRunId, setLatestRunId] = useState<string | null>(null);
   const [history, setHistory] = useState<SavedRun[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
+  /** Index into each model's saved versions (0 = newest). */
+  const [versionIndexByModel, setVersionIndexByModel] = useState<
+    Record<string, number>
+  >({});
   const [preview, setPreview] = useState<PreviewImage | null>(null);
 
   const selectedPhoto =
     photos.find((p) => p.id === selectedPhotoId) ?? photos[0] ?? null;
+
+  const modelHistories = useMemo(
+    () => buildModelHistories(history),
+    [history],
+  );
+
+  const savedCountByModel = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const entry of modelHistories) {
+      counts.set(entry.modelId, entry.versions.length);
+    }
+    return counts;
+  }, [modelHistories]);
 
   function openPreview(src: string | null | undefined, label: string) {
     if (!src) return;
     setPreview({ src, label });
   }
 
-  async function loadHistory(
-    photoId: string,
-    opts?: { selectLatest?: boolean },
-  ) {
-    const selectLatest = opts?.selectLatest !== false;
+  function applyHistory(runs: SavedRun[], preferLatest = true) {
+    setHistory(runs);
+    if (!preferLatest) return;
+    const nextIndexes: Record<string, number> = {};
+    for (const entry of buildModelHistories(runs)) {
+      nextIndexes[entry.modelId] = 0;
+    }
+    setVersionIndexByModel(nextIndexes);
+  }
+
+  async function loadHistory(photoId: string) {
     setHistoryLoading(true);
     try {
       const res = await fetch(
@@ -158,15 +225,7 @@ export function AiBgDebugConsole({
       if (!res.ok) throw new Error(json.error ?? "Could not load history");
       const runs = (json.runs as SavedRun[]) ?? [];
       startTransition(() => {
-        setHistory(runs);
-        if (!selectLatest) return;
-        if (runs[0]?.results?.length) {
-          setResults(runs[0].results);
-          setLatestRunId(runs[0].id);
-        } else {
-          setResults(null);
-          setLatestRunId(null);
-        }
+        applyHistory(runs, true);
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not load history");
@@ -188,14 +247,7 @@ export function AiBgDebugConsole({
         if (!res.ok) throw new Error(json.error ?? "Could not load history");
         const runs = (json.runs as SavedRun[]) ?? [];
         startTransition(() => {
-          setHistory(runs);
-          if (runs[0]?.results?.length) {
-            setResults(runs[0].results);
-            setLatestRunId(runs[0].id);
-          } else {
-            setResults(null);
-            setLatestRunId(null);
-          }
+          applyHistory(runs, true);
         });
       } catch (err) {
         if (!cancelled) {
@@ -247,6 +299,17 @@ export function AiBgDebugConsole({
     });
   }
 
+  function stepVersion(modelId: string, delta: number, totalVersions: number) {
+    setVersionIndexByModel((prev) => {
+      const current = prev[modelId] ?? 0;
+      const next = Math.min(
+        Math.max(current + delta, 0),
+        Math.max(totalVersions - 1, 0),
+      );
+      return { ...prev, [modelId]: next };
+    });
+  }
+
   async function runModels() {
     if (!selectedPhoto || selectedModels.size === 0) return;
     setRunning(true);
@@ -263,10 +326,7 @@ export function AiBgDebugConsole({
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "Run failed");
-      const nextResults = json.results as RunResult[];
-      setResults(nextResults);
-      setLatestRunId((json.runId as string) ?? null);
-      await loadHistory(selectedPhoto.id, { selectLatest: true });
+      await loadHistory(selectedPhoto.id);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Run failed");
     } finally {
@@ -285,8 +345,9 @@ export function AiBgDebugConsole({
             Background model lab
           </h1>
           <p className="mt-2 max-w-2xl text-base text-[var(--muted)]">
-            Compare fal.ai removers on any listing photo. Results are saved with
-            per-request cost when fal billing data is available.
+            Compare fal.ai removers on any listing photo. Each model&apos;s past
+            runs are saved per photo so you can flip versions without calling
+            fal again.
           </p>
         </div>
         <Link
@@ -376,8 +437,6 @@ export function AiBgDebugConsole({
                       title="View full size"
                       onClick={() => {
                         setSelectedPhotoId(photo.id);
-                        setResults(null);
-                        setLatestRunId(null);
                         openPreview(
                           photo.signedUrl,
                           photo.listing_title || photoRoleLabel(photo.role),
@@ -396,8 +455,6 @@ export function AiBgDebugConsole({
                       type="button"
                       onClick={() => {
                         setSelectedPhotoId(photo.id);
-                        setResults(null);
-                        setLatestRunId(null);
                       }}
                       className="w-full space-y-0.5 px-2.5 py-2 text-left hover:bg-[var(--surface-muted)]"
                     >
@@ -471,7 +528,13 @@ export function AiBgDebugConsole({
                     </span>{" "}
                     {selectedPhoto.owner_email || "—"}
                   </p>
-                  <p className="text-xs">Click the image to view full size.</p>
+                  <p className="text-xs">
+                    {historyLoading
+                      ? "Loading saved model results…"
+                      : modelHistories.length > 0
+                        ? `${modelHistories.length} model${modelHistories.length === 1 ? "" : "s"} saved for this photo`
+                        : "No saved model results yet for this photo."}
+                  </p>
                 </div>
               </div>
             ) : (
@@ -484,36 +547,44 @@ export function AiBgDebugConsole({
               Models
             </h2>
             <ul className="mt-3 space-y-2">
-              {models.map((model) => (
-                <li key={model.id}>
-                  <label
-                    className={`flex cursor-pointer gap-3 rounded-xl border px-3 py-2 ${
-                      selectedModels.has(model.id)
-                        ? "border-[var(--accent)] bg-[var(--accent-soft)]"
-                        : "border-[var(--border)] bg-white"
-                    } ${!hasFalKey ? "opacity-50" : ""}`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={selectedModels.has(model.id)}
-                      disabled={!hasFalKey}
-                      onChange={() => toggleModel(model.id)}
-                      className="mt-1"
-                    />
-                    <span className="min-w-0">
-                      <span className="block text-sm font-semibold text-[var(--foreground)]">
-                        {model.label}{" "}
-                        <span className="font-normal text-[var(--muted)]">
-                          ({model.approxCost})
+              {models.map((model) => {
+                const savedCount = savedCountByModel.get(model.id) ?? 0;
+                return (
+                  <li key={model.id}>
+                    <label
+                      className={`flex cursor-pointer gap-3 rounded-xl border px-3 py-2 ${
+                        selectedModels.has(model.id)
+                          ? "border-[var(--accent)] bg-[var(--accent-soft)]"
+                          : "border-[var(--border)] bg-white"
+                      } ${!hasFalKey ? "opacity-50" : ""}`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedModels.has(model.id)}
+                        disabled={!hasFalKey}
+                        onChange={() => toggleModel(model.id)}
+                        className="mt-1"
+                      />
+                      <span className="min-w-0">
+                        <span className="block text-sm font-semibold text-[var(--foreground)]">
+                          {model.label}{" "}
+                          <span className="font-normal text-[var(--muted)]">
+                            ({model.approxCost})
+                          </span>
+                          {savedCount > 0 ? (
+                            <span className="ml-2 font-normal text-[var(--accent)]">
+                              · {savedCount} saved
+                            </span>
+                          ) : null}
+                        </span>
+                        <span className="block text-xs leading-relaxed text-[var(--muted)]">
+                          {model.description}
                         </span>
                       </span>
-                      <span className="block text-xs leading-relaxed text-[var(--muted)]">
-                        {model.description}
-                      </span>
-                    </span>
-                  </label>
-                </li>
-              ))}
+                    </label>
+                  </li>
+                );
+              })}
             </ul>
 
             <label className="mt-4 flex items-center gap-2 text-sm text-[var(--foreground)]">
@@ -537,128 +608,131 @@ export function AiBgDebugConsole({
                   : `Run ${selectedModels.size} model${selectedModels.size === 1 ? "" : "s"}`}
               </BigButton>
             </div>
+            <p className="mt-2 text-xs text-[var(--muted)]">
+              Run calls fal and appends a new saved version. Switching photos or
+              flipping versions below only loads stored results.
+            </p>
           </div>
-
-          {selectedPhoto ? (
-            <div className="rounded-2xl border border-[var(--border)] bg-white p-5">
-              <div className="flex items-center justify-between gap-3">
-                <h2 className="text-lg font-semibold text-[var(--foreground)]">
-                  Saved runs
-                </h2>
-                {historyLoading ? (
-                  <span className="text-sm text-[var(--muted)]">Loading…</span>
-                ) : (
-                  <span className="text-sm text-[var(--muted)]">
-                    {history.length} saved
-                  </span>
-                )}
-              </div>
-              {history.length === 0 ? (
-                <p className="mt-2 text-sm text-[var(--muted)]">
-                  No saved comparisons for this photo yet.
-                </p>
-              ) : (
-                <ul className="mt-3 space-y-2">
-                  {history.map((run) => {
-                    const active = run.id === latestRunId;
-                    const billed = run.results.reduce(
-                      (sum, r) => sum + (r.costUsd ?? 0),
-                      0,
-                    );
-                    return (
-                      <li key={run.id}>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setLatestRunId(run.id);
-                            setResults(run.results);
-                          }}
-                          className={`w-full rounded-xl border px-3 py-2 text-left ${
-                            active
-                              ? "border-[var(--accent)] bg-[var(--accent-soft)]"
-                              : "border-[var(--border)] hover:bg-[var(--surface-muted)]"
-                          }`}
-                        >
-                          <p className="text-sm font-semibold text-[var(--foreground)]">
-                            {formatRunTime(run.createdAt)}
-                          </p>
-                          <p className="text-xs text-[var(--muted)]">
-                            {run.results.length} model
-                            {run.results.length === 1 ? "" : "s"}
-                            {billed > 0
-                              ? ` · ~$${billed.toFixed(3)} total`
-                              : ""}
-                          </p>
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-            </div>
-          ) : null}
         </div>
       </section>
 
-      {results ? (
+      {selectedPhoto ? (
         <section className="rounded-2xl border border-[var(--border)] bg-white p-5">
-          <h2 className="text-lg font-semibold text-[var(--foreground)]">
-            Results
-          </h2>
-          <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {results.map((result) => {
-              const cost = formatCost(result);
-              const source = costSourceLabel(result.costSource);
-              return (
-                <article
-                  key={`${result.modelId}-${result.id ?? result.ms}`}
-                  className="overflow-hidden rounded-xl ring-1 ring-[var(--border)]"
-                >
-                  <div className="border-b border-[var(--border)] px-3 py-2">
-                    <p className="font-semibold text-[var(--foreground)]">
-                      {result.label}
-                    </p>
-                    <p className="text-xs text-[var(--muted)]">
-                      {result.provider} · {result.ms}ms
-                      {result.ok ? "" : " · failed"}
-                      {cost ? ` · ${cost}` : ""}
-                      {source ? ` (${source})` : ""}
-                    </p>
-                    {result.falDashboardUrl ? (
-                      <a
-                        href={result.falDashboardUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="mt-1 inline-block text-xs font-semibold text-[var(--accent)] hover:underline"
-                      >
-                        fal request →
-                      </a>
-                    ) : null}
-                  </div>
-                  {result.ok && result.imageUrl ? (
-                    <button
-                      type="button"
-                      title="View full size"
-                      onClick={() => openPreview(result.imageUrl, result.label)}
-                      className="block w-full cursor-zoom-in"
-                    >
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={result.imageUrl}
-                        alt={result.label}
-                        className="aspect-square w-full object-contain"
-                        style={CHECKERBOARD_STYLE}
-                      />
-                    </button>
-                  ) : (
-                    <p className="bg-red-50 px-3 py-6 text-sm text-red-800">
-                      {result.error || "No image"}
-                    </p>
-                  )}
-                </article>
-              );
-            })}
+          <div className="flex flex-wrap items-end justify-between gap-2">
+            <div>
+              <h2 className="text-lg font-semibold text-[var(--foreground)]">
+                Saved results by model
+              </h2>
+              <p className="mt-1 text-sm text-[var(--muted)]">
+                Flip older/newer versions per model without re-running.
+              </p>
+            </div>
+            {historyLoading ? (
+              <span className="text-sm text-[var(--muted)]">Loading…</span>
+            ) : null}
           </div>
+
+          {modelHistories.length === 0 && !historyLoading ? (
+            <p className="mt-4 text-sm text-[var(--muted)]">
+              No saved comparisons for this photo yet. Select models and run
+              once to start building history.
+            </p>
+          ) : (
+            <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {modelHistories.map((entry) => {
+                const index = Math.min(
+                  versionIndexByModel[entry.modelId] ?? 0,
+                  entry.versions.length - 1,
+                );
+                const result = entry.versions[index];
+                if (!result) return null;
+                const cost = formatCost(result);
+                const source = costSourceLabel(result.costSource);
+                const when = formatRunTime(result.createdAt);
+                const canNewer = index > 0;
+                const canOlder = index < entry.versions.length - 1;
+
+                return (
+                  <article
+                    key={entry.modelId}
+                    className="overflow-hidden rounded-xl ring-1 ring-[var(--border)]"
+                  >
+                    <div className="border-b border-[var(--border)] px-3 py-2">
+                      <p className="font-semibold text-[var(--foreground)]">
+                        {entry.label}
+                      </p>
+                      <p className="text-xs text-[var(--muted)]">
+                        {result.provider} · {result.ms}ms
+                        {result.ok ? "" : " · failed"}
+                        {cost ? ` · ${cost}` : ""}
+                        {source ? ` (${source})` : ""}
+                      </p>
+                      {when ? (
+                        <p className="text-xs text-[var(--muted)]">{when}</p>
+                      ) : null}
+                      {result.falDashboardUrl ? (
+                        <a
+                          href={result.falDashboardUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="mt-1 inline-block text-xs font-semibold text-[var(--accent)] hover:underline"
+                        >
+                          fal request →
+                        </a>
+                      ) : null}
+                      <div className="mt-2 flex items-center justify-between gap-2">
+                        <button
+                          type="button"
+                          disabled={!canNewer}
+                          onClick={() =>
+                            stepVersion(entry.modelId, -1, entry.versions.length)
+                          }
+                          className="touch-target rounded-lg border border-[var(--border)] px-2.5 text-sm font-semibold disabled:opacity-40"
+                        >
+                          ← Newer
+                        </button>
+                        <span className="text-xs text-[var(--muted)]">
+                          {index + 1} / {entry.versions.length}
+                        </span>
+                        <button
+                          type="button"
+                          disabled={!canOlder}
+                          onClick={() =>
+                            stepVersion(entry.modelId, 1, entry.versions.length)
+                          }
+                          className="touch-target rounded-lg border border-[var(--border)] px-2.5 text-sm font-semibold disabled:opacity-40"
+                        >
+                          Older →
+                        </button>
+                      </div>
+                    </div>
+                    {result.ok && result.imageUrl ? (
+                      <button
+                        type="button"
+                        title="View full size"
+                        onClick={() =>
+                          openPreview(result.imageUrl, entry.label)
+                        }
+                        className="block w-full cursor-zoom-in"
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={result.imageUrl}
+                          alt={entry.label}
+                          className="aspect-square w-full object-contain"
+                          style={CHECKERBOARD_STYLE}
+                        />
+                      </button>
+                    ) : (
+                      <p className="bg-red-50 px-3 py-6 text-sm text-red-800">
+                        {result.error || "No image"}
+                      </p>
+                    )}
+                  </article>
+                );
+              })}
+            </div>
+          )}
         </section>
       ) : null}
 
