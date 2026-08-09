@@ -677,6 +677,55 @@ export function ListingHub({ listingId }: ListingHubProps) {
     }
   }
 
+  async function redoCleanBackground(photo: ListingPhotoWithUrl) {
+    if (!photo.replace_background) return;
+    setBgPhotoId(photo.id);
+    setError(null);
+    setStatusMessage("Re-cleaning background from original photo…");
+    try {
+      const res = await fetch(
+        `/api/listings/${listingId}/photos/${photo.id}/replace-background`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            replaceBackground: true,
+            run: true,
+            force: true,
+          }),
+        }
+      );
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(
+          typeof json.error === "string"
+            ? json.error
+            : "Could not re-clean background"
+        );
+      }
+      const nextPhoto = json.photo as ListingPhotoWithUrl;
+      setData((prev) =>
+        prev
+          ? {
+              ...prev,
+              photos: prev.photos.map((p) =>
+                p.id === nextPhoto.id ? nextPhoto : p
+              ),
+            }
+          : prev
+      );
+      setStatusMessage("Clean background redone from original.");
+      await load({ syncDraft: false });
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Could not re-clean background"
+      );
+      setStatusMessage(null);
+    } finally {
+      setBgPhotoId(null);
+    }
+  }
+
   async function addPhotoToListing(photoId: string, role: PhotoRole) {
     setPromotingPhoto(true);
     setError(null);
@@ -1036,6 +1085,7 @@ export function ListingHub({ listingId }: ListingHubProps) {
             onToggleCleanBackground={(photo) =>
               void toggleCleanBackground(photo)
             }
+            onRedoCleanBackground={(photo) => void redoCleanBackground(photo)}
             onPreview={setPreviewPhoto}
             onDropFiles={(files) => void uploadFilesToSection(files, "listing")}
             onDropPhoto={(photoId) =>
@@ -1232,6 +1282,7 @@ function PhotoGroup({
   onDelete,
   onUseInListing,
   onToggleCleanBackground,
+  onRedoCleanBackground,
   onPreview,
   onDropFiles,
   onDropPhoto,
@@ -1257,6 +1308,7 @@ function PhotoGroup({
   onDelete: (photoId: string) => void;
   onUseInListing?: (photoId: string) => void;
   onToggleCleanBackground?: (photo: ListingPhotoWithUrl) => void;
+  onRedoCleanBackground?: (photo: ListingPhotoWithUrl) => void;
   onPreview: (photo: ListingPhotoWithUrl) => void;
   onDropFiles: (files: File[]) => void;
   onDropPhoto: (photoId: string) => void;
@@ -1390,6 +1442,11 @@ function PhotoGroup({
                   ? () => onToggleCleanBackground(photo)
                   : undefined
               }
+              onRedoCleanBackground={
+                onRedoCleanBackground && photo.replace_background
+                  ? () => onRedoCleanBackground(photo)
+                  : undefined
+              }
               onDelete={() => onDelete(photo.id)}
               onBeginMove={() => onBeginMove(photo.id)}
               onCancelMove={onCancelMove}
@@ -1441,6 +1498,7 @@ function PhotoTile({
   onPreview,
   onUseInListing,
   onToggleCleanBackground,
+  onRedoCleanBackground,
   onDelete,
   onBeginMove,
   onCancelMove,
@@ -1457,6 +1515,7 @@ function PhotoTile({
   onPreview: () => void;
   onUseInListing?: () => void;
   onToggleCleanBackground?: () => void;
+  onRedoCleanBackground?: () => void;
   onDelete: () => void;
   onBeginMove: () => void;
   onCancelMove: () => void;
@@ -1678,6 +1737,20 @@ function PhotoTile({
                 : photo.replace_background
                   ? "Clean bg on"
                   : "Clean bg"}
+            </button>
+          ) : null}
+          {onRedoCleanBackground ? (
+            <button
+              type="button"
+              disabled={disabled || cleaningBg}
+              onClick={(e) => {
+                e.stopPropagation();
+                onRedoCleanBackground();
+              }}
+              title="Re-run clean background from the original photo"
+              className="rounded-md border border-[var(--border)] px-2 py-1 text-sm font-semibold text-[var(--muted)] transition hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)] disabled:opacity-50"
+            >
+              Redo
             </button>
           ) : null}
           <button

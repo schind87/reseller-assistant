@@ -31,6 +31,7 @@ export async function POST(request: Request, context: RouteContext) {
   let body: {
     replaceBackground?: boolean;
     run?: boolean;
+    force?: boolean;
     backgroundColor?: string;
   } = {};
   try {
@@ -59,6 +60,7 @@ export async function POST(request: Request, context: RouteContext) {
       ? body.replaceBackground
       : true;
   const runNow = body.run !== false;
+  const force = body.force === true;
 
   try {
     let updated = await updatePhoto(photoId, {
@@ -74,7 +76,11 @@ export async function POST(request: Request, context: RouteContext) {
       ) {
         await updateListing(id, { cover_processed_path: null });
       }
-    } else if (runNow && isCurrentBgPipeline(updated.processed_path)) {
+    } else if (
+      runNow &&
+      !force &&
+      isCurrentBgPipeline(updated.processed_path)
+    ) {
       // Reuse the previously cleaned image — no fal.ai call.
       if (updated.role === "cover" && updated.processed_path) {
         await updateListing(id, {
@@ -82,6 +88,7 @@ export async function POST(request: Request, context: RouteContext) {
         });
       }
     } else if (runNow) {
+      // Always process from the original capture, never the cleaned version.
       const signedUrl = await getSignedPhotoUrl(updated.storage_path);
       if (!signedUrl) {
         return NextResponse.json(
@@ -96,13 +103,19 @@ export async function POST(request: Request, context: RouteContext) {
       });
 
       if (!processed.ok) {
-        // Don't leave the opt-in flag on if processing failed.
-        updated = await updatePhoto(photoId, { replace_background: false });
         const message =
           processed.reason === "missing_fal_key"
             ? "Clean background needs FAL_KEY on the server. Add it in Vercel → Settings → Environment Variables, then redeploy."
             : processed.detail ||
               "Background replacement failed. Try again in a moment.";
+
+        // Redo failures keep the previous clean result when one exists.
+        if (!(force && photo.processed_path && photo.replace_background)) {
+          updated = await updatePhoto(photoId, { replace_background: false });
+        } else {
+          updated = await updatePhoto(photoId, { replace_background: true });
+        }
+
         return NextResponse.json(
           {
             error: message,
