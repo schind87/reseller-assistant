@@ -4,6 +4,7 @@ import {
   type ListingFieldDef,
   type PlatformListingSchema,
 } from "@/lib/listing-schemas";
+import { getMarketplaceCategoryOptions } from "@/lib/marketplace-categories";
 import {
   getStoredListingSchema,
   upsertListingSchema,
@@ -31,10 +32,39 @@ export async function resolveListingSchema(
   platform: Platform
 ): Promise<PlatformListingSchema> {
   const stored = await getStoredListingSchema(platform).catch(() => null);
-  if (stored && Array.isArray(stored.fields) && stored.fields.length > 0) {
-    return stored;
-  }
-  return getSeedListingSchema(platform);
+  const base =
+    stored && Array.isArray(stored.fields) && stored.fields.length > 0
+      ? stored
+      : getSeedListingSchema(platform);
+
+  return enrichMarketplaceCategoryFields(base);
+}
+
+/** Keep category/subcategory selects aligned with live marketplace trees. */
+function enrichMarketplaceCategoryFields(
+  schema: PlatformListingSchema
+): PlatformListingSchema {
+  const categoryOptions = getMarketplaceCategoryOptions(schema.platform);
+  return {
+    ...schema,
+    fields: schema.fields.map((field) => {
+      if (field.id === "category") {
+        return {
+          ...field,
+          input: "select",
+          options: categoryOptions,
+        };
+      }
+      if (field.id === "subcategory") {
+        return {
+          ...field,
+          input: "select",
+          options: field.options?.length ? field.options : [],
+        };
+      }
+      return field;
+    }),
+  };
 }
 
 function slugifyFieldId(label: string, index: number): string {

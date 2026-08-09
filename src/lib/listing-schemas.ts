@@ -1,4 +1,5 @@
 import type { Platform } from "@/lib/types";
+import { getMarketplaceCategoryOptions } from "@/lib/marketplace-categories";
 
 export type ListingFieldInput =
   | "text"
@@ -59,7 +60,7 @@ const POSHMARK_CONDITION = [
 export const SEED_LISTING_SCHEMAS: Record<Platform, PlatformListingSchema> = {
   mercari: {
     platform: "mercari",
-    version: 1,
+    version: 2,
     sellPageUrl: "https://www.mercari.com/sell/",
     source: "seed",
     syncedAt: null,
@@ -98,19 +99,22 @@ export const SEED_LISTING_SCHEMAS: Record<Platform, PlatformListingSchema> = {
       {
         id: "category",
         label: "Category",
-        input: "text",
+        input: "select",
         required: true,
         source: "structured:category",
-        hint: "Pick the most specific Mercari category path you can.",
+        hint: "Mercari department (same choices as the sell form).",
+        options: getMarketplaceCategoryOptions("mercari"),
         keywords: ["category", "item category", "select a category"],
         copyable: true,
       },
       {
         id: "subcategory",
         label: "Subcategory",
-        input: "text",
+        input: "select",
         required: false,
         source: "structured:subcategory",
+        hint: "Pick the Mercari subcategory under the department you chose.",
+        options: [],
         keywords: ["subcategory", "sub category", "sub-category"],
         copyable: true,
       },
@@ -206,7 +210,7 @@ export const SEED_LISTING_SCHEMAS: Record<Platform, PlatformListingSchema> = {
   },
   poshmark: {
     platform: "poshmark",
-    version: 1,
+    version: 2,
     sellPageUrl: "https://poshmark.com/create-listing",
     source: "seed",
     syncedAt: null,
@@ -236,20 +240,22 @@ export const SEED_LISTING_SCHEMAS: Record<Platform, PlatformListingSchema> = {
       {
         id: "category",
         label: "Category",
-        input: "text",
+        input: "select",
         required: true,
         source: "structured:category",
-        hint: "Women / Men / Kids / Home, then the specific path.",
+        hint: "Poshmark department (Women, Men, Kids, …) — same as the sell form.",
+        options: getMarketplaceCategoryOptions("poshmark"),
         keywords: ["category"],
         copyable: true,
       },
       {
         id: "subcategory",
         label: "Subcategory",
-        input: "text",
+        input: "select",
         required: true,
         source: "structured:subcategory",
-        hint: "Most specific subcategory (e.g. Pants > Leggings).",
+        hint: "Poshmark category under that department (Tops, Dresses, Shoes, …).",
+        options: [],
         keywords: ["subcategory", "sub category"],
         copyable: true,
       },

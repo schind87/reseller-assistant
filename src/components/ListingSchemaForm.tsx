@@ -3,6 +3,10 @@
 import { useMemo, type FormEvent, type ReactNode } from "react";
 import type { ListingFieldDef, PlatformListingSchema } from "@/lib/listing-schemas";
 import { structuredKey } from "@/lib/listing-schemas";
+import {
+  getMarketplaceCategoryOptions,
+  getMarketplaceSubcategoryOptions,
+} from "@/lib/marketplace-categories";
 import type { StructuredFields } from "@/lib/types";
 
 type ListingSchemaFormProps = {
@@ -65,6 +69,17 @@ export function ListingSchemaForm({
   footer,
 }: ListingSchemaFormProps) {
   const fieldNodes = useMemo(() => schema.fields, [schema.fields]);
+  const categoryOptions = useMemo(() => {
+    const fromSchema = schema.fields.find((f) => f.id === "category")?.options;
+    if (fromSchema?.length) return fromSchema;
+    return getMarketplaceCategoryOptions(schema.platform);
+  }, [schema.fields, schema.platform]);
+
+  const subcategoryOptions = useMemo(
+    () =>
+      getMarketplaceSubcategoryOptions(schema.platform, fields.category),
+    [schema.platform, fields.category]
+  );
 
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-5">
@@ -74,11 +89,12 @@ export function ListingSchemaForm({
         {schema.source === "extension" && schema.syncedAt
           ? ` · last synced ${new Date(schema.syncedAt).toLocaleString()}`
           : " · using built-in clothing listing layout"}
-        . Open the sell page with the Chrome extension and tap{" "}
+        . Category choices match the marketplace. Open the sell page with the
+        Chrome extension and tap{" "}
         <span className="font-semibold text-[var(--foreground)]">
           Sync form fields
         </span>{" "}
-        if the marketplace changes.
+        if other fields change.
       </p>
 
       {fieldNodes.map((field) => {
@@ -135,6 +151,79 @@ export function ListingSchemaForm({
         const key = structuredKey(field.source);
         if (!key) return null;
         const value = readStructured(fields, key);
+
+        if (field.id === "category") {
+          const options =
+            field.options?.length ? field.options : categoryOptions;
+          return (
+            <Field key={field.id} label={label} hint={field.hint}>
+              <select
+                value={value}
+                onChange={(e) => {
+                  const nextCategory = e.target.value;
+                  let next = writeStructured(
+                    fields,
+                    key,
+                    nextCategory,
+                    "select"
+                  );
+                  const allowed = getMarketplaceSubcategoryOptions(
+                    schema.platform,
+                    nextCategory || null
+                  );
+                  if (
+                    next.subcategory &&
+                    !allowed.includes(next.subcategory)
+                  ) {
+                    next = { ...next, subcategory: null };
+                  }
+                  onFieldsChange(next);
+                }}
+                className="touch-target w-full rounded-xl border border-[var(--border)] bg-white px-4 text-lg"
+              >
+                <option value="">Select…</option>
+                {options.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          );
+        }
+
+        if (field.id === "subcategory") {
+          const options = subcategoryOptions.length
+            ? subcategoryOptions
+            : field.options ?? [];
+          return (
+            <Field key={field.id} label={label} hint={field.hint}>
+              <select
+                value={value}
+                disabled={!fields.category || options.length === 0}
+                onChange={(e) =>
+                  onFieldsChange(
+                    writeStructured(fields, key, e.target.value, "select")
+                  )
+                }
+                className="touch-target w-full rounded-xl border border-[var(--border)] bg-white px-4 text-lg disabled:opacity-50"
+              >
+                <option value="">
+                  {!fields.category
+                    ? "Select a category first…"
+                    : options.length === 0
+                      ? "No subcategories"
+                      : "Select…"}
+                </option>
+                {options.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          );
+        }
 
         if (field.input === "select" && field.options?.length) {
           return (
