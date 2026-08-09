@@ -198,7 +198,6 @@ export async function POST(request: Request) {
         ? "none"
         : "white";
   const bakeComposite = compositeBackdrop !== "none";
-  const compositeWhite = compositeBackdrop === "white";
 
   if (!photoId) {
     return NextResponse.json({ error: "photoId is required" }, { status: 400 });
