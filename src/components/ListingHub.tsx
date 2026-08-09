@@ -5,6 +5,7 @@ import {
   useEffect,
   useRef,
   useState,
+  type ChangeEvent,
   type FormEvent,
   type DragEvent,
   type PointerEvent as ReactPointerEvent,
@@ -12,7 +13,6 @@ import {
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { BigButton } from "@/components/BigButton";
-import { CameraCapture } from "@/components/CameraCapture";
 import { ListingSchemaForm } from "@/components/ListingSchemaForm";
 import { QrPanel } from "@/components/QrPanel";
 import {
@@ -21,7 +21,6 @@ import {
 } from "@/lib/listing-schemas";
 import {
   PLATFORM_LABELS,
-  PLATFORM_PHOTO_ASPECT,
   photoRoleLabel,
 } from "@/lib/platforms";
 import type {
@@ -45,11 +44,6 @@ type ListingHubProps = {
 type ListingPayload = {
   listing: Listing;
   photos: ListingPhotoWithUrl[];
-};
-
-type AddPhotoTarget = {
-  role: PhotoRole;
-  purpose: "identify" | "inventory" | "listing";
 };
 
 type PhotoSection = "identify" | "inventory" | "listing";
@@ -153,7 +147,6 @@ export function ListingHub({ listingId }: ListingHubProps) {
   const [saving, setSaving] = useState(false);
   const [deletingListing, setDeletingListing] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
-  const [addTarget, setAddTarget] = useState<AddPhotoTarget | null>(null);
   const [uploading, setUploading] = useState(false);
   const [deletingPhotoId, setDeletingPhotoId] = useState<string | null>(null);
   const [pickListingRole, setPickListingRole] = useState(false);
@@ -164,6 +157,8 @@ export function ListingHub({ listingId }: ListingHubProps) {
     null
   );
   const [movingPhoto, setMovingPhoto] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const pendingUploadRoleRef = useRef<PhotoRole | null>(null);
 
   const [schema, setSchema] = useState<PlatformListingSchema | null>(null);
   const [title, setTitle] = useState("");
@@ -257,30 +252,44 @@ export function ListingHub({ listingId }: ListingHubProps) {
     };
   }, [load, ensureJoinToken]);
 
-  async function uploadPhoto(blob: Blob, role: PhotoRole) {
+  function pickFilesForRole(role: PhotoRole) {
+    pendingUploadRoleRef.current = role;
+    setPickListingRole(false);
+    fileInputRef.current?.click();
+  }
+
+  async function onDesktopFilesSelected(event: ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(event.target.files ?? []).filter((file) =>
+      file.type.startsWith("image/")
+    );
+    event.target.value = "";
+    const role = pendingUploadRoleRef.current;
+    pendingUploadRoleRef.current = null;
+    if (!role || files.length === 0) return;
+
     setUploading(true);
     setError(null);
     try {
-      const body = new FormData();
-      body.append(
-        "photo",
-        new File([blob], `${role}.jpg`, { type: blob.type || "image/jpeg" })
-      );
-      body.append("role", role);
-
-      const res = await fetch(`/api/listings/${listingId}/photos`, {
-        method: "POST",
-        body,
-      });
-      const json = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        throw new Error(
-          typeof json.error === "string" ? json.error : "Upload failed"
-        );
+      for (const file of files) {
+        const body = new FormData();
+        body.append("photo", file);
+        body.append("role", role);
+        const res = await fetch(`/api/listings/${listingId}/photos`, {
+          method: "POST",
+          body,
+        });
+        const json = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          throw new Error(
+            typeof json.error === "string" ? json.error : "Upload failed"
+          );
+        }
       }
-      setAddTarget(null);
-      setPickListingRole(false);
-      setStatusMessage(`Added ${photoRoleLabel(role)} photo.`);
+      setStatusMessage(
+        files.length === 1
+          ? `Added ${photoRoleLabel(role)} photo.`
+          : `Added ${files.length} ${photoRoleLabel(role).toLowerCase()} photos.`
+      );
       await load({ syncDraft: false });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Upload failed");
@@ -556,34 +565,20 @@ export function ListingHub({ listingId }: ListingHubProps) {
 
   const { listing, photos } = data;
   const platform = listing.platform as Platform;
-  const aspect = PLATFORM_PHOTO_ASPECT[platform];
   const identifyPhotos = photos.filter((p) => isIdentifyPhotoRole(p.role));
   const inventoryPhotos = photos.filter((p) => p.role === "inventory");
   const listingPhotos = photos.filter((p) => isPostingPhotoRole(p.role));
 
-  if (addTarget) {
-    return (
-      <CameraCapture
-        aspect={aspect}
-        showAspectGuide={addTarget.purpose === "listing"}
-        guideNote={
-          addTarget.purpose === "identify"
-            ? "Brand/care tag — for AI only, not posted"
-            : addTarget.purpose === "inventory"
-              ? "Stocking photo — private by default"
-              : `Listing · ${photoRoleLabel(addTarget.role)}`
-        }
-        onCancel={() => {
-          if (!uploading) setAddTarget(null);
-        }}
-        onCapture={(blob) => void uploadPhoto(blob, addTarget.role)}
-        onFallbackFile={(file) => void uploadPhoto(file, addTarget.role)}
-      />
-    );
-  }
-
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-8 px-4 py-8">
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        multiple
+        className="hidden"
+        onChange={(e) => void onDesktopFilesSelected(e)}
+      />
       <header className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="text-sm font-semibold uppercase tracking-wide text-[var(--accent)]">
@@ -658,9 +653,9 @@ export function ListingHub({ listingId }: ListingHubProps) {
           Photos ({photos.length})
         </h2>
         <p className="text-base text-[var(--muted)]">
-          Drop image files onto a section to upload. Long-press a photo, then
-          drop or tap another section to move it. Or use the QR code for your
-          phone.
+          Drop image files onto a section to upload, or use Add to choose from
+          this computer. Long-press a photo, then drop or tap another section to
+          move it. Use the QR code for guided shooting on your phone.
         </p>
 
         {movingPhotoId ? (
@@ -686,7 +681,7 @@ export function ListingHub({ listingId }: ListingHubProps) {
           empty="No tag photos yet — drop images here or add every label you can read."
           addLabel="Add tag photo"
           section="identify"
-          onAdd={() => setAddTarget({ role: "id_tag", purpose: "identify" })}
+          onAdd={() => pickFilesForRole("id_tag")}
           onDelete={(photoId) => void deletePhoto(photoId)}
           onUseInListing={(photoId) => setPromotePhotoId(photoId)}
           onDropFiles={(files) => void uploadFilesToSection(files, "identify")}
@@ -716,9 +711,7 @@ export function ListingHub({ listingId }: ListingHubProps) {
           empty="No stocking photos yet — drop images here, or skip if you already know where it is."
           addLabel="Add stocking photo"
           section="inventory"
-          onAdd={() =>
-            setAddTarget({ role: "inventory", purpose: "inventory" })
-          }
+          onAdd={() => pickFilesForRole("inventory")}
           onDelete={(photoId) => void deletePhoto(photoId)}
           onUseInListing={(photoId) => setPromotePhotoId(photoId)}
           onDropFiles={(files) => void uploadFilesToSection(files, "inventory")}
@@ -821,8 +814,7 @@ export function ListingHub({ listingId }: ListingHubProps) {
                     type="button"
                     disabled={uploading}
                     onClick={() => {
-                      setPickListingRole(false);
-                      setAddTarget({ role, purpose: "listing" });
+                      pickFilesForRole(role);
                     }}
                     className="touch-target rounded-xl border border-[var(--border)] px-4 py-3 text-left text-base font-semibold hover:bg-[var(--surface-muted)]"
                   >
@@ -846,8 +838,8 @@ export function ListingHub({ listingId }: ListingHubProps) {
 
         <p className="text-base text-[var(--muted)]">
           For the step-by-step photo coach, scan the phone QR above. On this
-          computer, drop files onto sections, long-press to move photos, or use
-          Add.
+          computer, drop files onto sections, choose files with Add, or
+          long-press to move photos — the camera stays on your phone.
         </p>
         <a
           href={`/api/listings/${listingId}/photos/zip`}
