@@ -1107,8 +1107,7 @@ export function ListingHub({ listingId }: ListingHubProps) {
             disabled={
               uploading ||
               Boolean(deletingPhotoId) ||
-              movingPhoto ||
-              Boolean(bgPhotoId)
+              movingPhoto
             }
             tone="listing"
           />
@@ -1431,7 +1430,7 @@ function PhotoGroup({
               moving={movingPhotoId === photo.id}
               movingPhotoId={movingPhotoId ?? null}
               moveArmed={moveArmed}
-              disabled={disabled}
+              disabled={disabled || bgPhotoId === photo.id}
               onPreview={() => onPreview(photo)}
               onUseInListing={
                 onUseInListing
@@ -1658,9 +1657,16 @@ function PhotoTile({
           : dropEdge
             ? "ring-2 ring-[var(--accent)]"
             : "ring-[var(--border)]"
-      } ${moving ? "opacity-80" : ""} ${disabled ? "opacity-60" : "cursor-grab active:cursor-grabbing"}`}
+      } ${moving ? "opacity-80" : ""} ${disabled && !cleaningBg ? "opacity-60" : ""} ${
+        cleaningBg
+          ? "pointer-events-none"
+          : disabled
+            ? ""
+            : "cursor-grab active:cursor-grabbing"
+      }`}
       style={{ touchAction: "manipulation" }}
       title="Drag to reorder · long-press on phone to move · tap to enlarge"
+      aria-busy={cleaningBg || undefined}
     >
       {dropEdge === "before" ? (
         <span
@@ -1685,6 +1691,16 @@ function PhotoTile({
         className="pointer-events-none aspect-square w-full object-cover"
         draggable={false}
       />
+      {cleaningBg ? (
+        <div
+          className="absolute inset-0 z-20 flex items-center justify-center bg-white/65 backdrop-blur-[1px]"
+          aria-hidden
+        >
+          <span className="rounded-md bg-white/90 px-2 py-1 text-sm font-semibold text-[var(--foreground)] shadow-sm">
+            Working…
+          </span>
+        </div>
+      ) : null}
       <div
         className="space-y-1 bg-white px-2 py-1.5"
         onPointerDown={(e) => e.stopPropagation()}
@@ -1734,7 +1750,7 @@ function PhotoTile({
               }`}
             >
               {cleaningBg
-                ? "Working…"
+                ? "Clean bg…"
                 : photo.replace_background
                   ? "Clean bg on"
                   : "Clean bg"}
