@@ -62,17 +62,20 @@ export async function POST(request: Request, context: RouteContext) {
     });
 
     if (!wantReplace) {
-      // Revert to the original capture when turning the feature off.
-      if (updated.processed_path) {
-        const supabase = createAdminClient();
-        await supabase.storage
-          .from("listing-photos")
-          .remove([updated.processed_path])
-          .catch(() => undefined);
-        updated = await updatePhoto(photoId, { processed_path: null });
-        if (access.listing.cover_processed_path === photo.processed_path) {
-          await updateListing(id, { cover_processed_path: null });
-        }
+      // Keep the cleaned file in storage so toggling back on is instant.
+      // Cover preview falls back to the original until Clean bg is on again.
+      if (
+        photo.processed_path &&
+        access.listing.cover_processed_path === photo.processed_path
+      ) {
+        await updateListing(id, { cover_processed_path: null });
+      }
+    } else if (runNow && updated.processed_path) {
+      // Reuse the previously cleaned image — no fal.ai call.
+      if (updated.role === "cover") {
+        await updateListing(id, {
+          cover_processed_path: updated.processed_path,
+        });
       }
     } else if (runNow) {
       const signedUrl = await getSignedPhotoUrl(updated.storage_path);

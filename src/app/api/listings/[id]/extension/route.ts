@@ -57,13 +57,14 @@ export async function GET(request: Request, context: RouteContext) {
           role: photo.role,
           sortOrder: photo.sort_order,
           url:
-            (photo.processed_path
+            (photo.replace_background && photo.processed_path
               ? await getSignedPhotoUrl(photo.processed_path)
               : null) ?? (await getSignedPhotoUrl(photo.storage_path)),
           originalUrl: await getSignedPhotoUrl(photo.storage_path),
-          processedUrl: photo.processed_path
-            ? await getSignedPhotoUrl(photo.processed_path)
-            : null,
+          processedUrl:
+            photo.replace_background && photo.processed_path
+              ? await getSignedPhotoUrl(photo.processed_path)
+              : null,
         }))
     );
 

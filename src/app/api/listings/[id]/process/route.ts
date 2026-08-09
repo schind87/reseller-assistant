@@ -104,6 +104,14 @@ export async function POST(_request: Request, context: RouteContext) {
     );
 
     for (const entry of bgTargets) {
+      // Skip fal when a cleaned version already exists for this photo.
+      if (entry.photo.processed_path) {
+        if (entry.photo.role === "cover") {
+          coverProcessedPath = entry.photo.processed_path;
+        }
+        continue;
+      }
+
       const downloaded = await replaceBackground(entry.url, {
         keepHanger: true,
       });

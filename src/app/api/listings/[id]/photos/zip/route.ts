@@ -60,7 +60,10 @@ export async function GET(_request: Request, context: RouteContext) {
     let added = 0;
 
     for (const photo of posting) {
-      const path = photo.processed_path || photo.storage_path;
+      const path =
+        photo.replace_background && photo.processed_path
+          ? photo.processed_path
+          : photo.storage_path;
       const signed = await getSignedPhotoUrl(path);
       if (!signed) continue;
 

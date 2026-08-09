@@ -590,7 +590,11 @@ export function ListingHub({ listingId }: ListingHubProps) {
     setBgPhotoId(photo.id);
     setError(null);
     setStatusMessage(
-      enable ? "Cleaning background (keeping hangers)…" : "Restoring original…"
+      enable
+        ? photo.processedSignedUrl
+          ? "Restoring clean background…"
+          : "Cleaning background (keeping hangers)…"
+        : "Restoring original…"
     );
     try {
       const res = await fetch(
@@ -625,7 +629,9 @@ export function ListingHub({ listingId }: ListingHubProps) {
       );
       setStatusMessage(
         enable
-          ? "Clean background applied — hanger kept when detected."
+          ? photo.processedSignedUrl
+            ? "Clean background restored."
+            : "Clean background applied — hanger kept when detected."
           : "Original photo restored."
       );
       await load({ syncDraft: false });
@@ -1568,7 +1574,11 @@ function PhotoTile({
       ) : null}
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
-        src={photo.processedSignedUrl ?? photo.signedUrl ?? undefined}
+        src={
+          photo.replace_background && photo.processedSignedUrl
+            ? photo.processedSignedUrl
+            : (photo.signedUrl ?? undefined)
+        }
         alt={photoRoleLabel(photo.role)}
         className="pointer-events-none aspect-square w-full object-cover"
         draggable={false}
@@ -1782,7 +1792,10 @@ function PhotoLightbox({
     };
   }, [onClose]);
 
-  const src = photo.processedSignedUrl ?? photo.signedUrl ?? undefined;
+  const src =
+    photo.replace_background && photo.processedSignedUrl
+      ? photo.processedSignedUrl
+      : (photo.signedUrl ?? undefined);
 
   return (
     <div
