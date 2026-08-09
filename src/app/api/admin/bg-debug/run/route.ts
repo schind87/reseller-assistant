@@ -90,10 +90,13 @@ async function maybeCompositeWhiteBuffer(buf: Buffer): Promise<Buffer> {
 }
 
 function formatCostUsd(value: number | null | undefined): string | null {
-  if (value == null || Number.isNaN(value)) return null;
-  if (value >= 0.01) return `$${value.toFixed(3)}`;
-  if (value > 0) return `$${value.toFixed(5)}`;
-  return "$0";
+  if (value == null || Number.isNaN(value) || !Number.isFinite(value)) {
+    return null;
+  }
+  if (value === 0) return "$0";
+  const precision = Math.abs(value).toPrecision(4);
+  const signed = value < 0 ? `-${precision}` : precision;
+  return `$${signed}`;
 }
 
 function costSourceFromBilling(

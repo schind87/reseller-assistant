@@ -81,12 +81,21 @@ type Props = {
   hasFalKey: boolean;
 };
 
-function formatCost(result: RunResult): string | null {
-  if (result.costLabel) return result.costLabel;
-  if (result.costUsd == null || Number.isNaN(result.costUsd)) return null;
-  if (result.costUsd >= 0.01) return `$${result.costUsd.toFixed(3)}`;
-  if (result.costUsd > 0) return `$${result.costUsd.toFixed(5)}`;
-  return "$0";
+function formatCostUsd(value: number | null | undefined): string | null {
+  if (value == null || Number.isNaN(value) || !Number.isFinite(value)) {
+    return null;
+  }
+  if (value === 0) return "$0";
+  // Always 4 significant figures (e.g. $0.01600, $0.02400).
+  const precision = Math.abs(value).toPrecision(4);
+  const signed = value < 0 ? `-${precision}` : precision;
+  return `$${signed}`;
+}
+
+function formatDurationSeconds(ms: number): string {
+  const seconds = ms / 1000;
+  if (!Number.isFinite(seconds) || seconds < 0) return "—";
+  return `${seconds.toFixed(1)}s`;
 }
 
 function costSourceLabel(source: string | null | undefined): string | null {
@@ -114,7 +123,7 @@ function CostBadge({
   result: RunResult;
   size?: "sm" | "md";
 }) {
-  const cost = formatCost(result);
+  const cost = formatCostUsd(result.costUsd);
   const source = costSourceLabel(result.costSource);
   if (!cost) {
     return (
@@ -757,10 +766,11 @@ export function AiBgDebugConsole({
                         <CostBadge result={result} />
                       </div>
                       <p className="mt-1 text-xs text-[var(--muted)]">
-                        {result.provider} · {result.ms}ms
+                        {result.provider} · {formatDurationSeconds(result.ms)}
                         {result.ok ? "" : " · failed"}
-                        {result.costUnits != null && result.costUnitPrice != null
-                          ? ` · ${result.costUnits} × $${Number(result.costUnitPrice).toFixed(4)}`
+                        {result.costUnits != null &&
+                        result.costUnitPrice != null
+                          ? ` · ${result.costUnits} × ${formatCostUsd(Number(result.costUnitPrice)) ?? ""}`
                           : ""}
                       </p>
                       {when ? (
