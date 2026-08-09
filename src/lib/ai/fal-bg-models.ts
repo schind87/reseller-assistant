@@ -1,7 +1,6 @@
 /**
- * Catalog of fal.ai (and optional PhotoRoom) background models for the
- * admin background model lab. Each entry knows how to build a fal.run body and
- * extract the result image URL.
+ * Catalog of fal.ai background models for the admin background model lab.
+ * Each entry knows how to build a fal.run body and extract the result image URL.
  */
 
 export type FalBgModelId =
@@ -12,15 +11,14 @@ export type FalBgModelId =
   | "birefnet-v2-heavy"
   | "birefnet-v2-light"
   | "birefnet-v2-matting"
-  | "imageutils-rembg"
-  | "photoroom-segment";
+  | "imageutils-rembg";
 
 export type FalBgModelDef = {
   id: FalBgModelId;
   label: string;
-  provider: "fal" | "photoroom";
-  /** fal.run path, or null for PhotoRoom */
-  falPath: string | null;
+  provider: "fal";
+  /** fal.run path */
+  falPath: string;
   description: string;
   approxCost: string;
   /** Output is already on a solid studio color (not transparent). */
@@ -105,15 +103,6 @@ export const FAL_BG_MODELS: readonly FalBgModelDef[] = [
     approxCost: "compute",
     solidBackground: false,
   },
-  {
-    id: "photoroom-segment",
-    label: "PhotoRoom Segment",
-    provider: "photoroom",
-    falPath: null,
-    description: "PhotoRoom proprietary remover (needs PHOTOROOM_API_KEY).",
-    approxCost: "~$0.02",
-    solidBackground: true,
-  },
 ] as const;
 
 export function getFalBgModel(id: string): FalBgModelDef | undefined {
@@ -173,8 +162,6 @@ export function buildFalInput(
         refine_foreground: true,
         output_format: "png",
       };
-    case "photoroom-segment":
-      return {};
     default: {
       const _exhaustive: never = model.id;
       return _exhaustive;

@@ -35,7 +35,7 @@ type ModelRunResult = {
   id?: string;
   modelId: string;
   label: string;
-  provider: "fal" | "photoroom";
+  provider: "fal";
   ok: boolean;
   ms: number;
   imageUrl: string | null;
@@ -55,10 +55,6 @@ function falKey(): string | null {
   return process.env.FAL_KEY?.trim() || null;
 }
 
-function photoroomKey(): string | null {
-  return process.env.PHOTOROOM_API_KEY?.trim() || null;
-}
-
 function bufferToDataUrl(buf: Buffer, mime = "image/png"): string {
   return `data:${mime};base64,${buf.toString("base64")}`;
 }
@@ -69,41 +65,6 @@ async function downloadImageBuffer(imageUrl: string): Promise<Buffer> {
     throw new Error(`Failed to download image (${res.status})`);
   }
   return Buffer.from(await res.arrayBuffer());
-}
-
-async function runPhotoroom(imageUrl: string): Promise<Buffer> {
-  const key = photoroomKey();
-  if (!key) throw new Error("PHOTOROOM_API_KEY is not configured");
-
-  const source = await fetch(imageUrl);
-  if (!source.ok) throw new Error("Could not download source photo");
-  const bytes = await source.arrayBuffer();
-  const contentType = source.headers.get("content-type") ?? "image/jpeg";
-
-  const form = new FormData();
-  form.append(
-    "image_file",
-    new Blob([new Uint8Array(bytes)], { type: contentType }),
-    "photo.jpg",
-  );
-  form.append("format", "png");
-  form.append("bg_color", "FFFFFF");
-  form.append("channels", "rgba");
-  form.append("size", "full");
-  form.append("crop", "false");
-
-  const response = await fetch("https://sdk.photoroom.com/v1/segment", {
-    method: "POST",
-    headers: { "x-api-key": key },
-    body: form,
-  });
-
-  if (!response.ok) {
-    const text = await response.text().catch(() => "");
-    throw new Error(`photoroom ${response.status}: ${text.slice(0, 400)}`);
-  }
-
-  return Buffer.from(await response.arrayBuffer());
 }
 
 async function maybeCompositeWhiteBuffer(buf: Buffer): Promise<Buffer> {
@@ -137,13 +98,10 @@ export async function GET(request: Request) {
 
   const photoId = new URL(request.url).searchParams.get("photoId")?.trim();
   if (!photoId) {
-    return NextResponse.json(
-      {
-        models: FAL_BG_MODELS,
-        hasFalKey: Boolean(falKey()),
-        hasPhotoroomKey: Boolean(photoroomKey()),
-      },
-    );
+    return NextResponse.json({
+      models: FAL_BG_MODELS,
+      hasFalKey: Boolean(falKey()),
+    });
   }
 
   const runs = await listBgLabRunsForPhoto(photoId, 20);
@@ -252,7 +210,7 @@ export async function POST(request: Request) {
       let imageUrl: string | null = null;
       let storagePath: string | null = null;
       let falRequestId: string | null = null;
-      let falEndpoint: string | null = model.falPath;
+      const falEndpoint: string | null = model.falPath;
       let costUsd: number | null = null;
       let costUnitPrice: number | null = null;
       let costUnits: number | null = null;
@@ -260,48 +218,34 @@ export async function POST(request: Request) {
       let costSource: string | null = null;
 
       try {
-        let outBuf: Buffer;
-
-        if (model.provider === "photoroom") {
-          outBuf = await runPhotoroom(photo.signedUrl);
-          costUsd = 0.02;
-          costUnitPrice = 0.02;
-          costUnits = 1;
-          costSource = "catalog_estimate";
-          falEndpoint = null;
-        } else {
-          if (!model.falPath) {
-            throw new Error("Model missing fal path");
-          }
-          const { requestId, data } = await falQueueInfer(
-            model.falPath,
-            buildFalInput(model, photo.signedUrl, width, height),
-          );
-          falRequestId = requestId;
-          const remoteUrl = extractFalImageUrl(data);
-          if (!remoteUrl) {
-            throw new Error("No image URL in fal response");
-          }
-          outBuf = await downloadImageBuffer(remoteUrl);
-          if (compositeWhite && !model.solidBackground) {
-            outBuf = await maybeCompositeWhiteBuffer(outBuf);
-          }
-
-          const billing = await resolveFalCost({
-            requestId,
-            endpointId: model.falPath,
-          });
-          costUsd = billing.costUsd;
-          costUnitPrice = billing.unitPrice;
-          costUnits = billing.units;
-          costCurrency = billing.currency;
-          costSource =
-            billing.source === "billing_event"
-              ? "billing"
-              : billing.source === "pricing_estimate"
-                ? "estimate"
-                : null;
+        const { requestId, data } = await falQueueInfer(
+          model.falPath,
+          buildFalInput(model, photo.signedUrl, width, height),
+        );
+        falRequestId = requestId;
+        const remoteUrl = extractFalImageUrl(data);
+        if (!remoteUrl) {
+          throw new Error("No image URL in fal response");
         }
+        let outBuf = await downloadImageBuffer(remoteUrl);
+        if (compositeWhite && !model.solidBackground) {
+          outBuf = await maybeCompositeWhiteBuffer(outBuf);
+        }
+
+        const billing = await resolveFalCost({
+          requestId,
+          endpointId: model.falPath,
+        });
+        costUsd = billing.costUsd;
+        costUnitPrice = billing.unitPrice;
+        costUnits = billing.units;
+        costCurrency = billing.currency;
+        costSource =
+          billing.source === "billing_event"
+            ? "billing"
+            : billing.source === "pricing_estimate"
+              ? "estimate"
+              : null;
 
         storagePath = await uploadBgLabImage({
           runId: run.id,

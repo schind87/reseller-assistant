@@ -69,7 +69,6 @@ type Props = {
   initialTotal: number;
   models: FalBgModelDef[];
   hasFalKey: boolean;
-  hasPhotoroomKey: boolean;
 };
 
 function formatCost(result: RunResult): string | null {
@@ -116,7 +115,6 @@ export function AiBgDebugConsole({
   initialTotal,
   models,
   hasFalKey,
-  hasPhotoroomKey,
 }: Props) {
   const [photos, setPhotos] = useState(initialPhotos);
   const [total, setTotal] = useState(initialTotal);
@@ -287,9 +285,8 @@ export function AiBgDebugConsole({
             Background model lab
           </h1>
           <p className="mt-2 max-w-2xl text-base text-[var(--muted)]">
-            Compare fal.ai (and PhotoRoom) removers on any listing photo.
-            Results are saved with per-request cost when fal billing data is
-            available.
+            Compare fal.ai removers on any listing photo. Results are saved with
+            per-request cost when fal billing data is available.
           </p>
         </div>
         <Link
@@ -309,15 +306,6 @@ export function AiBgDebugConsole({
           }`}
         >
           FAL_KEY {hasFalKey ? "ready" : "missing"}
-        </span>
-        <span
-          className={`rounded-lg px-2.5 py-1 text-sm font-semibold ${
-            hasPhotoroomKey
-              ? "bg-[var(--accent-soft)] text-[var(--accent)]"
-              : "bg-[var(--surface-muted)] text-[var(--muted)]"
-          }`}
-        >
-          PHOTOROOM_API_KEY {hasPhotoroomKey ? "ready" : "optional"}
         </span>
       </div>
 
@@ -503,20 +491,12 @@ export function AiBgDebugConsole({
                       selectedModels.has(model.id)
                         ? "border-[var(--accent)] bg-[var(--accent-soft)]"
                         : "border-[var(--border)] bg-white"
-                    } ${
-                      (model.provider === "fal" && !hasFalKey) ||
-                      (model.provider === "photoroom" && !hasPhotoroomKey)
-                        ? "opacity-50"
-                        : ""
-                    }`}
+                    } ${!hasFalKey ? "opacity-50" : ""}`}
                   >
                     <input
                       type="checkbox"
                       checked={selectedModels.has(model.id)}
-                      disabled={
-                        (model.provider === "fal" && !hasFalKey) ||
-                        (model.provider === "photoroom" && !hasPhotoroomKey)
-                      }
+                      disabled={!hasFalKey}
                       onChange={() => toggleModel(model.id)}
                       className="mt-1"
                     />

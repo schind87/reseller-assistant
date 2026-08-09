@@ -1,8 +1,7 @@
 /**
  * Background replacement providers (tried in order):
- * 1) PhotoRoom Remove Background API (PHOTOROOM_API_KEY) — best clothing quality
- * 2) Pixelcut Product Photo on fal (FAL_KEY) — e-commerce specialist
- * 3) Pixelcut/BiRefNet cutout + hanger-aware white composite (fallback)
+ * 1) Pixelcut Product Photo on fal (FAL_KEY) — e-commerce specialist
+ * 2) Pixelcut/BiRefNet cutout + hanger-aware white composite (fallback)
  */
 import sharp from "sharp";
 
@@ -27,58 +26,8 @@ function falKey(): string | null {
   return process.env.FAL_KEY?.trim() || null;
 }
 
-function photoroomKey(): string | null {
-  return process.env.PHOTOROOM_API_KEY?.trim() || null;
-}
-
 function hasBgProvider(): boolean {
-  return Boolean(falKey() || photoroomKey());
-}
-
-/**
- * PhotoRoom Remove Background API — proprietary e-commerce quality (~$0.02/img).
- * https://docs.photoroom.com/remove-background-api-basic-plan/quickstart-guide
- */
-async function replaceWithPhotoroom(
-  imageUrl: string,
-  backgroundColor: string
-): Promise<Buffer | null> {
-  const key = photoroomKey();
-  if (!key) return null;
-
-  try {
-    const source = await fetchImageBytes(imageUrl);
-    if (!source) return null;
-
-    const form = new FormData();
-    const blob = new Blob([new Uint8Array(source.bytes)], {
-      type: source.contentType || "image/jpeg",
-    });
-    form.append("image_file", blob, "photo.jpg");
-    form.append("format", "png");
-    // Solid studio backdrop (no alpha leftovers / soft wall fringes).
-    form.append("bg_color", backgroundColor.replace("#", "").toUpperCase());
-    form.append("channels", "rgba");
-    form.append("size", "full");
-    form.append("crop", "false");
-
-    const response = await fetch("https://sdk.photoroom.com/v1/segment", {
-      method: "POST",
-      headers: { "x-api-key": key },
-      body: form,
-    });
-
-    if (!response.ok) {
-      const text = await response.text().catch(() => "");
-      console.error("photoroom segment error:", response.status, text);
-      return null;
-    }
-
-    return Buffer.from(await response.arrayBuffer());
-  } catch (err) {
-    console.error("photoroom replace failed:", err);
-    return null;
-  }
+  return Boolean(falKey());
 }
 
 /**
@@ -706,8 +655,7 @@ export async function replaceBackground(
     return {
       ok: false,
       reason: "missing_fal_key",
-      detail:
-        "Set PHOTOROOM_API_KEY (preferred) and/or FAL_KEY for Clean background.",
+      detail: "Set FAL_KEY for Clean background.",
     };
   }
 
@@ -736,13 +684,7 @@ export async function replaceBackground(
       };
     }
 
-    // 1) PhotoRoom — closest quality to the consumer Photoroom app.
-    const photoroom = await replaceWithPhotoroom(imageUrl, backgroundColor);
-    if (photoroom) {
-      return { ok: true, bytes: photoroom, contentType: "image/png" };
-    }
-
-    // 2) Pixelcut Product Photo — e-commerce specialist on fal (~$0.024).
+    // 1) Pixelcut Product Photo — e-commerce specialist on fal (~$0.024).
     const pixelcut = await replaceWithPixelcut(
       imageUrl,
       backgroundColor,
@@ -753,7 +695,7 @@ export async function replaceBackground(
       return { ok: true, bytes: pixelcut, contentType: "image/png" };
     }
 
-    // 3) Fallback: Pixelcut/BiRefNet cutout + hanger-aware composite.
+    // 2) Fallback: Pixelcut/BiRefNet cutout + hanger-aware composite.
     return await replaceWithCutoutComposite({
       imageUrl,
       originalBytes: originalBytes.bytes,
@@ -788,8 +730,7 @@ async function replaceWithCutoutComposite(params: {
     return {
       ok: false,
       reason: "fal_failed",
-      detail:
-        "PhotoRoom/Pixelcut unavailable and FAL_KEY is missing for fallback.",
+      detail: "FAL_KEY is missing for background fallback.",
     };
   }
 
@@ -808,7 +749,7 @@ async function replaceWithCutoutComposite(params: {
         ok: false,
         reason: "fal_failed",
         detail:
-          "Background cutout failed (PhotoRoom, Pixelcut, and BiRefNet). Check API keys.",
+          "Background cutout failed (Pixelcut and BiRefNet). Check FAL_KEY.",
       };
     }
 

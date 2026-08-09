@@ -21,7 +21,6 @@ export default async function AdminAiDebugPage() {
       initialTotal={total}
       models={[...FAL_BG_MODELS]}
       hasFalKey={Boolean(process.env.FAL_KEY?.trim())}
-      hasPhotoroomKey={Boolean(process.env.PHOTOROOM_API_KEY?.trim())}
     />
   );
 }

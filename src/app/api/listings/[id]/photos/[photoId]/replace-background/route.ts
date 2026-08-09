@@ -105,7 +105,7 @@ export async function POST(request: Request, context: RouteContext) {
       if (!processed.ok) {
         const message =
           processed.reason === "missing_fal_key"
-            ? "Clean background needs PHOTOROOM_API_KEY (preferred) or FAL_KEY. Add it in Vercel → Settings → Environment Variables, then redeploy."
+            ? "Clean background needs FAL_KEY. Add it in Vercel → Settings → Environment Variables, then redeploy."
             : processed.detail ||
               "Background replacement failed. Try again in a moment.";
 
