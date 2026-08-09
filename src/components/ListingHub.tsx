@@ -141,7 +141,7 @@ function applyListingToDraft(listing: Listing) {
 export function ListingHub({ listingId }: ListingHubProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [tweakOpen, setTweakOpen] = useState(false);
+  const tweakOpen = searchParams.get("tweak") === "1";
   const [data, setData] = useState<ListingPayload | null>(null);
   const [joinUrl, setJoinUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -238,24 +238,18 @@ export function ListingHub({ listingId }: ListingHubProps) {
     schemaLoadedFor.current = null;
   }, [listingId]);
 
-  useEffect(() => {
-    if (searchParams.get("tweak") === "1") {
-      setTweakOpen(true);
-    }
-  }, [searchParams]);
-
   const closeTweak = useCallback(() => {
-    setTweakOpen(false);
     if (searchParams.get("tweak") === "1") {
-      router.replace(`/app/listings/${listingId}`, { scroll: false });
+      const popup = searchParams.get("popup") === "1" ? "?popup=1" : "";
+      router.replace(`/app/listings/${listingId}${popup}`, { scroll: false });
     }
   }, [listingId, router, searchParams]);
 
   const openTweak = useCallback(() => {
-    setTweakOpen(true);
-    if (searchParams.get("tweak") !== "1") {
-      router.replace(`/app/listings/${listingId}?tweak=1`, { scroll: false });
-    }
+    const popup = searchParams.get("popup") === "1" ? "&popup=1" : "";
+    router.replace(`/app/listings/${listingId}?tweak=1${popup}`, {
+      scroll: false,
+    });
   }, [listingId, router, searchParams]);
 
   useEffect(() => {
@@ -502,7 +496,7 @@ export function ListingHub({ listingId }: ListingHubProps) {
     }
   }
 
-  async function usePhotoInListing(photoId: string, role: PhotoRole) {
+  async function addPhotoToListing(photoId: string, role: PhotoRole) {
     setPromotingPhoto(true);
     setError(null);
     try {
@@ -792,7 +786,7 @@ export function ListingHub({ listingId }: ListingHubProps) {
                   type="button"
                   disabled={promotingPhoto}
                   onClick={() =>
-                    void usePhotoInListing(promotePhotoId, role)
+                    void addPhotoToListing(promotePhotoId, role)
                   }
                   className="touch-target rounded-xl border border-[var(--border)] px-4 py-3 text-left text-base font-semibold hover:bg-[var(--surface-muted)] disabled:opacity-50"
                 >
