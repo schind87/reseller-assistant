@@ -1,6 +1,6 @@
 "use client";
 
-import { startTransition, useState } from "react";
+import { startTransition, useEffect, useState } from "react";
 import Link from "next/link";
 import { BigButton } from "@/components/BigButton";
 import type { FalBgModelDef, FalBgModelId } from "@/lib/ai/fal-bg-models";
@@ -29,6 +29,18 @@ type RunResult = {
   imageUrl: string | null;
   error?: string;
 };
+
+type PreviewImage = {
+  src: string;
+  label: string;
+};
+
+const CHECKERBOARD_STYLE = {
+  backgroundImage:
+    "linear-gradient(45deg,#eee 25%,transparent 25%),linear-gradient(-45deg,#eee 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#eee 75%),linear-gradient(-45deg,transparent 75%,#eee 75%)",
+  backgroundSize: "16px 16px",
+  backgroundPosition: "0 0,0 8px,8px -8px,-8px 0",
+} as const;
 
 const ROLE_FILTERS: Array<PhotoRole | "all"> = [
   "all",
@@ -69,9 +81,15 @@ export function AiBgDebugConsole({
   );
   const [compositeWhite, setCompositeWhite] = useState(true);
   const [results, setResults] = useState<RunResult[] | null>(null);
+  const [preview, setPreview] = useState<PreviewImage | null>(null);
 
   const selectedPhoto =
     photos.find((p) => p.id === selectedPhotoId) ?? photos[0] ?? null;
+
+  function openPreview(src: string | null | undefined, label: string) {
+    if (!src) return;
+    setPreview({ src, label });
+  }
 
   async function loadPhotos(nextRole = role, nextQ = q) {
     setLoading(true);
@@ -235,25 +253,41 @@ export function AiBgDebugConsole({
               const active = photo.id === selectedPhoto?.id;
               return (
                 <li key={photo.id}>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSelectedPhotoId(photo.id);
-                      setResults(null);
-                    }}
-                    className={`w-full overflow-hidden rounded-xl text-left ring-1 transition ${
+                  <div
+                    className={`overflow-hidden rounded-xl ring-1 transition ${
                       active
                         ? "ring-2 ring-[var(--accent)]"
-                        : "ring-[var(--border)] hover:ring-[var(--accent)]"
+                        : "ring-[var(--border)]"
                     }`}
                   >
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={photo.signedUrl ?? undefined}
-                      alt=""
-                      className="aspect-square w-full bg-[var(--surface-muted)] object-cover"
-                    />
-                    <div className="space-y-0.5 px-2.5 py-2">
+                    <button
+                      type="button"
+                      title="View full size"
+                      onClick={() => {
+                        setSelectedPhotoId(photo.id);
+                        setResults(null);
+                        openPreview(
+                          photo.signedUrl,
+                          photo.listing_title || photoRoleLabel(photo.role)
+                        );
+                      }}
+                      className="block w-full cursor-zoom-in"
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={photo.signedUrl ?? undefined}
+                        alt=""
+                        className="aspect-square w-full bg-[var(--surface-muted)] object-cover"
+                      />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedPhotoId(photo.id);
+                        setResults(null);
+                      }}
+                      className="w-full space-y-0.5 px-2.5 py-2 text-left hover:bg-[var(--surface-muted)]"
+                    >
                       <p className="truncate text-sm font-semibold text-[var(--foreground)]">
                         {photoRoleLabel(photo.role)}
                         {photo.replace_background ? " · clean" : ""}
@@ -265,8 +299,8 @@ export function AiBgDebugConsole({
                       <p className="truncate text-xs text-[var(--muted)]">
                         {photo.owner_email || "no email"}
                       </p>
-                    </div>
-                  </button>
+                    </button>
+                  </div>
                 </li>
               );
             })}
@@ -280,18 +314,26 @@ export function AiBgDebugConsole({
             </h2>
             {selectedPhoto ? (
               <div className="mt-3 flex flex-col gap-3 sm:flex-row">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={selectedPhoto.signedUrl ?? undefined}
-                  alt=""
-                  className="max-h-64 w-full max-w-xs rounded-xl object-contain ring-1 ring-[var(--border)]"
-                  style={{
-                    backgroundImage:
-                      "linear-gradient(45deg,#eee 25%,transparent 25%),linear-gradient(-45deg,#eee 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#eee 75%),linear-gradient(-45deg,transparent 75%,#eee 75%)",
-                    backgroundSize: "16px 16px",
-                    backgroundPosition: "0 0,0 8px,8px -8px,-8px 0",
-                  }}
-                />
+                <button
+                  type="button"
+                  title="View full size"
+                  onClick={() =>
+                    openPreview(
+                      selectedPhoto.signedUrl,
+                      selectedPhoto.listing_title ||
+                        photoRoleLabel(selectedPhoto.role)
+                    )
+                  }
+                  className="cursor-zoom-in"
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={selectedPhoto.signedUrl ?? undefined}
+                    alt=""
+                    className="max-h-64 w-full max-w-xs rounded-xl object-contain ring-1 ring-[var(--border)]"
+                    style={CHECKERBOARD_STYLE}
+                  />
+                </button>
                 <div className="space-y-2 text-sm text-[var(--muted)]">
                   <p>
                     <span className="font-semibold text-[var(--foreground)]">
@@ -316,6 +358,7 @@ export function AiBgDebugConsole({
                     </span>{" "}
                     {selectedPhoto.owner_email || "—"}
                   </p>
+                  <p className="text-xs">Click the image to view full size.</p>
                 </div>
               </div>
             ) : (
@@ -414,18 +457,20 @@ export function AiBgDebugConsole({
                   </p>
                 </div>
                 {result.ok && result.imageUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={result.imageUrl}
-                    alt={result.label}
-                    className="aspect-square w-full object-contain"
-                    style={{
-                      backgroundImage:
-                        "linear-gradient(45deg,#eee 25%,transparent 25%),linear-gradient(-45deg,#eee 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#eee 75%),linear-gradient(-45deg,transparent 75%,#eee 75%)",
-                      backgroundSize: "16px 16px",
-                      backgroundPosition: "0 0,0 8px,8px -8px,-8px 0",
-                    }}
-                  />
+                  <button
+                    type="button"
+                    title="View full size"
+                    onClick={() => openPreview(result.imageUrl, result.label)}
+                    className="block w-full cursor-zoom-in"
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={result.imageUrl}
+                      alt={result.label}
+                      className="aspect-square w-full object-contain"
+                      style={CHECKERBOARD_STYLE}
+                    />
+                  </button>
                 ) : (
                   <p className="bg-red-50 px-3 py-6 text-sm text-red-800">
                     {result.error || "No image"}
@@ -436,6 +481,70 @@ export function AiBgDebugConsole({
           </div>
         </section>
       ) : null}
+
+      {preview ? (
+        <ImageLightbox
+          src={preview.src}
+          label={preview.label}
+          onClose={() => setPreview(null)}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function ImageLightbox({
+  src,
+  label,
+  onClose,
+}: {
+  src: string;
+  label: string;
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+    }
+    window.addEventListener("keydown", onKeyDown);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      document.body.style.overflow = prev;
+    };
+  }, [onClose]);
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={label}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
+      onClick={onClose}
+    >
+      <button
+        type="button"
+        onClick={onClose}
+        className="absolute right-4 top-4 touch-target rounded-xl bg-white/95 px-4 text-base font-semibold text-[var(--foreground)]"
+      >
+        Close
+      </button>
+      <div
+        className="flex max-h-full max-w-full flex-col items-center gap-3"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={src}
+          alt={label}
+          className="max-h-[min(90vh,1100px)] max-w-[min(96vw,1100px)] rounded-lg object-contain shadow-2xl"
+          style={CHECKERBOARD_STYLE}
+        />
+        <p className="rounded-lg bg-black/50 px-3 py-1 text-sm font-medium text-white">
+          {label}
+        </p>
+      </div>
     </div>
   );
 }
