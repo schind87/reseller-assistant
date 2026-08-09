@@ -754,8 +754,9 @@ export function ListingHub({ listingId }: ListingHubProps) {
             Finish with AI
           </h2>
           <p className="text-base text-[var(--muted)]">
-            Fills the editable fields below from your photos. You can change
-            anything afterward.
+            Fills the editable fields below from your photos. Listing photos
+            marked Clean bg also get a white studio backdrop (hangers kept).
+            You can change anything afterward.
           </p>
           <BigButton
             disabled={processing || photos.length === 0}
