@@ -238,7 +238,7 @@ function fillForegroundHoles(
     }
   }
 
-  const filled = Buffer.from(alpha);
+  const filled = alpha;
   for (let i = 0; i < n; i++) {
     // Background pixels not reachable from the border are holes in the garment.
     if (filled[i] <= 127 && !outside[i]) filled[i] = 255;
@@ -369,7 +369,7 @@ function pruneOrphanForeground(
     if (minY[label] <= topBand && areas[label] >= minTopArea) keep.add(label);
   }
 
-  const cleaned = Buffer.from(alpha);
+  const cleaned = alpha;
   for (let i = 0; i < n; i++) {
     const label = labels[i];
     if (label && !keep.has(label)) cleaned[i] = 0;
@@ -424,7 +424,7 @@ async function buildUnionAlpha(params: {
     }
   }
 
-  alpha = fillForegroundHoles(alpha, width, height);
+  fillForegroundHoles(alpha, width, height);
   return pruneOrphanForeground(alpha, width, height, hangerGray);
 }
 
