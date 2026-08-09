@@ -34,21 +34,31 @@ export function isRealFalRequestId(requestId?: string | null): boolean {
 }
 
 /**
- * Best public fal URL for a lab result.
- * fal does not expose a stable deep-link to a single Model API request
- * (`/dashboard/requests?requestId=` is not a real page), so we open the
- * model page when we know the endpoint, otherwise Usage & Billing.
+ * Deep-link into fal's Recent History for a Model API request
+ * (shows billed cost when fal has recorded it).
+ * Example:
+ * https://fal.ai/dashboard/recent-history?s_requestId=…&s_endpointId=fal-ai%2Fimageutils%2Frembg
  */
 export function falDashboardUrl(
   requestId?: string | null,
   endpointId?: string | null
 ): string {
-  const endpoint = endpointId?.trim();
-  if (endpoint) return falModelPageUrl(endpoint);
-  if (isRealFalRequestId(requestId)) {
-    return "https://fal.ai/dashboard/usage-billing";
+  const id = requestId?.trim() || null;
+  const endpoint = endpointId?.trim() || null;
+
+  if (id && isRealFalRequestId(id) && endpoint) {
+    const params = new URLSearchParams({
+      s_requestId: id,
+      s_endpointId: endpoint,
+    });
+    return `https://fal.ai/dashboard/recent-history?${params.toString()}`;
   }
-  return "https://fal.ai/dashboard/usage-billing";
+  if (id && isRealFalRequestId(id)) {
+    const params = new URLSearchParams({ s_requestId: id });
+    return `https://fal.ai/dashboard/recent-history?${params.toString()}`;
+  }
+  if (endpoint) return falModelPageUrl(endpoint);
+  return "https://fal.ai/dashboard/recent-history";
 }
 
 /**

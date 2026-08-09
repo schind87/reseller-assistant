@@ -1278,9 +1278,9 @@ function FalRequestMeta({ result }: { result: RunResult }) {
           target="_blank"
           rel="noreferrer"
           className="font-semibold text-[var(--accent)] hover:underline"
-          title="fal does not deep-link Model API requests; opens the model page or usage billing"
+          title="Opens this request in fal Recent History (includes billed cost when available)"
         >
-          Open on fal →
+          fal request →
         </a>
       ) : null}
       {realId ? (
