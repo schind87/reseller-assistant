@@ -97,6 +97,30 @@ export async function insertBgLabResult(params: {
   if (error) throw new Error(`insertBgLabResult: ${error.message}`);
 }
 
+export async function updateBgLabResultCost(params: {
+  runId: string;
+  modelId: string;
+  costUsd: number | null;
+  costUnitPrice: number | null;
+  costUnits: number | null;
+  costCurrency: string | null;
+  costSource: string | null;
+}): Promise<void> {
+  const supabase = createAdminClient();
+  const { error } = await supabase
+    .from("bg_lab_results")
+    .update({
+      cost_usd: params.costUsd,
+      cost_unit_price: params.costUnitPrice,
+      cost_units: params.costUnits,
+      cost_currency: params.costCurrency ?? "USD",
+      cost_source: params.costSource,
+    })
+    .eq("run_id", params.runId)
+    .eq("model_id", params.modelId);
+  if (error) throw new Error(`updateBgLabResultCost: ${error.message}`);
+}
+
 export async function uploadBgLabImage(params: {
   runId: string;
   modelId: string;

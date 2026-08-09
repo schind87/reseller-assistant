@@ -33,6 +33,8 @@ type RunResult = {
   falRequestId?: string | null;
   falDashboardUrl?: string | null;
   costUsd?: number | null;
+  costUnitPrice?: number | null;
+  costUnits?: number | null;
   costSource?: string | null;
   costLabel?: string | null;
   createdAt?: string;
@@ -83,19 +85,19 @@ function formatCost(result: RunResult): string | null {
   if (result.costLabel) return result.costLabel;
   if (result.costUsd == null || Number.isNaN(result.costUsd)) return null;
   if (result.costUsd >= 0.01) return `$${result.costUsd.toFixed(3)}`;
-  return `$${result.costUsd.toFixed(5)}`;
+  if (result.costUsd > 0) return `$${result.costUsd.toFixed(5)}`;
+  return "$0";
 }
 
 function costSourceLabel(source: string | null | undefined): string | null {
   switch (source) {
     case "billing":
     case "billing_event":
-      return "fal billed";
+      return "actual";
     case "estimate":
     case "pricing_estimate":
-      return "catalog estimate";
     case "catalog_estimate":
-      return "catalog estimate";
+      return "estimate";
     case null:
     case undefined:
     case "":
@@ -103,6 +105,49 @@ function costSourceLabel(source: string | null | undefined): string | null {
     default:
       return source;
   }
+}
+
+function CostBadge({
+  result,
+  size = "md",
+}: {
+  result: RunResult;
+  size?: "sm" | "md";
+}) {
+  const cost = formatCost(result);
+  const source = costSourceLabel(result.costSource);
+  if (!cost) {
+    return (
+      <span
+        className={`inline-flex items-center rounded-md border border-dashed border-[var(--border)] bg-white/90 font-semibold text-[var(--muted)] ${
+          size === "sm" ? "px-1.5 py-0.5 text-[10px]" : "px-2 py-1 text-xs"
+        }`}
+        title="fal has not returned a billed amount for this request yet"
+      >
+        Cost pending
+      </span>
+    );
+  }
+  const isActual = source === "actual";
+  return (
+    <span
+      className={`inline-flex items-center gap-1 rounded-md font-bold tabular-nums shadow-sm ${
+        isActual
+          ? "bg-[var(--accent)] text-white"
+          : "bg-amber-100 text-amber-950 ring-1 ring-amber-200"
+      } ${size === "sm" ? "px-1.5 py-0.5 text-[10px]" : "px-2 py-1 text-sm"}`}
+      title={
+        isActual
+          ? "Actual amount charged by fal for this request"
+          : "Catalog unit price estimate — refresh for actual billing"
+      }
+    >
+      {cost}
+      <span className="font-semibold opacity-80">
+        {isActual ? "actual" : "est."}
+      </span>
+    </span>
+  );
 }
 
 function formatRunTime(iso: string | undefined): string {
@@ -178,6 +223,7 @@ export function AiBgDebugConsole({
   const [compositeWhite, setCompositeWhite] = useState(true);
   const [history, setHistory] = useState<SavedRun[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [refreshingCosts, setRefreshingCosts] = useState(false);
   /** Index into each model's saved versions (0 = newest). */
   const [versionIndexByModel, setVersionIndexByModel] = useState<
     Record<string, number>
@@ -331,6 +377,34 @@ export function AiBgDebugConsole({
       setError(err instanceof Error ? err.message : "Run failed");
     } finally {
       setRunning(false);
+    }
+  }
+
+  async function refreshCosts() {
+    if (!selectedPhoto) return;
+    setRefreshingCosts(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/admin/bg-debug/run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          photoId: selectedPhoto.id,
+          refreshCosts: true,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "Could not refresh costs");
+      const runs = (json.runs as SavedRun[]) ?? [];
+      startTransition(() => {
+        applyHistory(runs, false);
+      });
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Could not refresh costs",
+      );
+    } finally {
+      setRefreshingCosts(false);
     }
   }
 
@@ -628,12 +702,28 @@ export function AiBgDebugConsole({
                 Saved results by model
               </h2>
               <p className="mt-1 text-sm text-[var(--muted)]">
-                Flip older/newer versions per model without re-running.
+                Flip older/newer versions per model without re-running. Cost
+                badges show fal&apos;s actual billed amount when available.
               </p>
             </div>
-            {historyLoading ? (
-              <span className="text-sm text-[var(--muted)]">Loading…</span>
-            ) : null}
+            <div className="flex flex-wrap items-center gap-2">
+              {historyLoading ? (
+                <span className="text-sm text-[var(--muted)]">Loading…</span>
+              ) : null}
+              <button
+                type="button"
+                disabled={
+                  !selectedPhoto ||
+                  refreshingCosts ||
+                  historyLoading ||
+                  modelHistories.length === 0
+                }
+                onClick={() => void refreshCosts()}
+                className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-sm font-semibold text-[var(--foreground)] transition hover:bg-[var(--surface-muted)] disabled:opacity-40"
+              >
+                {refreshingCosts ? "Refreshing costs…" : "Refresh costs"}
+              </button>
+            </div>
           </div>
 
           {modelHistories.length === 0 && !historyLoading ? (
@@ -650,8 +740,6 @@ export function AiBgDebugConsole({
                 );
                 const result = entry.versions[index];
                 if (!result) return null;
-                const cost = formatCost(result);
-                const source = costSourceLabel(result.costSource);
                 const when = formatRunTime(result.createdAt);
                 const canNewer = index > 0;
                 const canOlder = index < entry.versions.length - 1;
@@ -662,14 +750,18 @@ export function AiBgDebugConsole({
                     className="overflow-hidden rounded-xl ring-1 ring-[var(--border)]"
                   >
                     <div className="border-b border-[var(--border)] px-3 py-2">
-                      <p className="font-semibold text-[var(--foreground)]">
-                        {entry.label}
-                      </p>
-                      <p className="text-xs text-[var(--muted)]">
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="font-semibold text-[var(--foreground)]">
+                          {entry.label}
+                        </p>
+                        <CostBadge result={result} />
+                      </div>
+                      <p className="mt-1 text-xs text-[var(--muted)]">
                         {result.provider} · {result.ms}ms
                         {result.ok ? "" : " · failed"}
-                        {cost ? ` · ${cost}` : ""}
-                        {source ? ` (${source})` : ""}
+                        {result.costUnits != null && result.costUnitPrice != null
+                          ? ` · ${result.costUnits} × $${Number(result.costUnitPrice).toFixed(4)}`
+                          : ""}
                       </p>
                       {when ? (
                         <p className="text-xs text-[var(--muted)]">{when}</p>
@@ -719,6 +811,9 @@ export function AiBgDebugConsole({
                           className="aspect-square w-full object-contain"
                           style={CHECKERBOARD_STYLE}
                         />
+                        <div className="pointer-events-none absolute left-2 top-2 z-10">
+                          <CostBadge result={result} size="sm" />
+                        </div>
                         <MagnifyButton
                           onClick={() =>
                             openPreview(result.imageUrl, entry.label)

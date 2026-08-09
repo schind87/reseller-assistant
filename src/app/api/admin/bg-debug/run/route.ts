@@ -18,6 +18,7 @@ import {
   createBgLabRun,
   insertBgLabResult,
   listBgLabRunsForPhoto,
+  updateBgLabResultCost,
   uploadBgLabImage,
 } from "@/lib/supabase/bg-lab";
 
@@ -29,6 +30,8 @@ type RunBody = {
   modelIds?: string[];
   /** Composite transparent results onto white for easier comparison. */
   compositeWhite?: boolean;
+  /** Re-fetch fal billing for saved results that are missing actual cost. */
+  refreshCosts?: boolean;
 };
 
 type ModelRunResult = {
@@ -89,7 +92,31 @@ async function maybeCompositeWhiteBuffer(buf: Buffer): Promise<Buffer> {
 function formatCostUsd(value: number | null | undefined): string | null {
   if (value == null || Number.isNaN(value)) return null;
   if (value >= 0.01) return `$${value.toFixed(3)}`;
-  return `$${value.toFixed(5)}`;
+  if (value > 0) return `$${value.toFixed(5)}`;
+  return "$0";
+}
+
+function costSourceFromBilling(
+  source: "billing_event" | "pricing_estimate" | null
+): string | null {
+  if (source === "billing_event") return "billing";
+  if (source === "pricing_estimate") return "estimate";
+  return null;
+}
+
+function applyBillingToResult(
+  result: ModelRunResult,
+  billing: Awaited<ReturnType<typeof resolveFalCost>>
+): ModelRunResult {
+  return {
+    ...result,
+    costUsd: billing.costUsd,
+    costUnitPrice: billing.unitPrice,
+    costUnits: billing.units,
+    costCurrency: billing.currency,
+    costSource: costSourceFromBilling(billing.source),
+    falDashboardUrl: billing.dashboardUrl,
+  };
 }
 
 export async function GET(request: Request) {
@@ -154,6 +181,89 @@ export async function POST(request: Request) {
   if (!photoId) {
     return NextResponse.json({ error: "photoId is required" }, { status: 400 });
   }
+
+  if (body.refreshCosts) {
+    try {
+      const runs = await listBgLabRunsForPhoto(photoId, 50);
+      let updated = 0;
+      for (const run of runs) {
+        for (const result of run.results) {
+          if (
+            !result.ok ||
+            !result.fal_request_id ||
+            !result.fal_endpoint ||
+            result.cost_source === "billing"
+          ) {
+            continue;
+          }
+          const billing = await resolveFalCost({
+            requestId: result.fal_request_id,
+            endpointId: result.fal_endpoint,
+          });
+          if (billing.source !== "billing_event" && billing.costUsd == null) {
+            continue;
+          }
+          if (
+            billing.costUsd === result.cost_usd &&
+            costSourceFromBilling(billing.source) === result.cost_source
+          ) {
+            continue;
+          }
+          await updateBgLabResultCost({
+            runId: run.id,
+            modelId: result.model_id,
+            costUsd: billing.costUsd,
+            costUnitPrice: billing.unitPrice,
+            costUnits: billing.units,
+            costCurrency: billing.currency,
+            costSource: costSourceFromBilling(billing.source),
+          });
+          updated += 1;
+        }
+      }
+      const refreshed = await listBgLabRunsForPhoto(photoId, 50);
+      return NextResponse.json({
+        updated,
+        runs: refreshed.map((run) => ({
+          id: run.id,
+          createdAt: run.created_at,
+          compositeWhite: run.composite_white,
+          results: run.results.map((r) => ({
+            id: r.id,
+            runId: r.run_id,
+            modelId: r.model_id,
+            label: r.model_label,
+            provider: r.provider,
+            ok: r.ok,
+            ms: r.ms,
+            imageUrl: r.imageUrl,
+            error: r.error ?? undefined,
+            falRequestId: r.fal_request_id,
+            falEndpoint: r.fal_endpoint,
+            falDashboardUrl: r.dashboardUrl,
+            costUsd: r.cost_usd,
+            costUnitPrice: r.cost_unit_price,
+            costUnits: r.cost_units,
+            costCurrency: r.cost_currency,
+            costSource: r.cost_source,
+            storagePath: r.storage_path,
+            costLabel: formatCostUsd(r.cost_usd),
+            createdAt: r.created_at,
+          })),
+        })),
+      });
+    } catch (err) {
+      console.error("admin bg-debug refresh costs error:", err);
+      return NextResponse.json(
+        {
+          error:
+            err instanceof Error ? err.message : "Could not refresh costs",
+        },
+        { status: 500 },
+      );
+    }
+  }
+
   if (modelIds.length === 0) {
     return NextResponse.json(
       { error: "Select at least one model" },
@@ -237,17 +347,13 @@ export async function POST(request: Request) {
         const billing = await resolveFalCost({
           requestId,
           endpointId: model.falPath,
+          settleMs: 1200,
         });
         costUsd = billing.costUsd;
         costUnitPrice = billing.unitPrice;
         costUnits = billing.units;
         costCurrency = billing.currency;
-        costSource =
-          billing.source === "billing_event"
-            ? "billing"
-            : billing.source === "pricing_estimate"
-              ? "estimate"
-              : null;
+        costSource = costSourceFromBilling(billing.source);
 
         storagePath = await uploadBgLabImage({
           runId: run.id,
@@ -297,6 +403,40 @@ export async function POST(request: Request) {
         costSource,
         storagePath,
       });
+    }
+
+    // Second pass: upgrade catalog estimates to actual fal billing when ready.
+    for (let i = 0; i < results.length; i++) {
+      const result = results[i];
+      if (
+        !result.ok ||
+        !result.falRequestId ||
+        !result.falEndpoint ||
+        result.costSource === "billing"
+      ) {
+        continue;
+      }
+      try {
+        const billing = await resolveFalCost({
+          requestId: result.falRequestId,
+          endpointId: result.falEndpoint,
+          settleMs: i === 0 ? 1500 : 0,
+        });
+        if (billing.source !== "billing_event") continue;
+        const next = applyBillingToResult(result, billing);
+        results[i] = next;
+        await updateBgLabResultCost({
+          runId: run.id,
+          modelId: result.modelId,
+          costUsd: next.costUsd ?? null,
+          costUnitPrice: next.costUnitPrice ?? null,
+          costUnits: next.costUnits ?? null,
+          costCurrency: next.costCurrency ?? "USD",
+          costSource: next.costSource ?? null,
+        });
+      } catch {
+        /* keep prior cost */
+      }
     }
 
     return NextResponse.json({

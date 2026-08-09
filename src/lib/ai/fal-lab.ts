@@ -247,49 +247,73 @@ async function fetchBillingEvent(
   if (!key) return null;
   if (requestId.startsWith("sync-")) return null;
 
-  // Billing events can lag a second or two after completion.
-  for (let attempt = 0; attempt < 6; attempt++) {
-    if (attempt > 0) await sleep(900);
+  // Billing events can lag several seconds after completion.
+  for (let attempt = 0; attempt < 10; attempt++) {
+    if (attempt > 0) await sleep(1000 + attempt * 250);
     try {
       const url = new URL("https://api.fal.ai/v1/models/billing-events");
       url.searchParams.set("request_id", requestId);
+      url.searchParams.set("limit", "10");
       const res = await fetch(url, {
         headers: { Authorization: `Key ${key}` },
       });
       if (!res.ok) continue;
       const data = (await res.json()) as {
         billing_events?: Array<{
+          request_id?: string;
           cost_total?: number | null;
           cost_subtotal?: number | null;
+          cost_discount?: number | null;
           cost_estimate_nano_usd?: number | null;
           unit_price?: number | null;
           output_units?: number | null;
+          percent_discount?: number | null;
           currency?: string;
         }>;
       };
-      const event = data.billing_events?.[0];
+      const event =
+        data.billing_events?.find((e) => e.request_id === requestId) ??
+        data.billing_events?.[0];
       if (!event) continue;
+
+      const unitPrice =
+        typeof event.unit_price === "number" ? event.unit_price : null;
+      const units =
+        typeof event.output_units === "number" ? event.output_units : null;
 
       let costUsd: number | null =
         typeof event.cost_total === "number"
           ? event.cost_total
           : typeof event.cost_subtotal === "number"
-            ? event.cost_subtotal
+            ? event.cost_subtotal -
+              (typeof event.cost_discount === "number"
+                ? event.cost_discount
+                : 0)
             : null;
+
       if (
         costUsd == null &&
         typeof event.cost_estimate_nano_usd === "number"
       ) {
         costUsd = event.cost_estimate_nano_usd / 1_000_000_000;
       }
+
+      if (costUsd == null && unitPrice != null && units != null) {
+        costUsd = unitPrice * units;
+        if (
+          typeof event.percent_discount === "number" &&
+          event.percent_discount > 0
+        ) {
+          costUsd *= 1 - event.percent_discount / 100;
+        }
+      }
+
       if (costUsd == null) continue;
 
       return {
         costUsd,
-        unitPrice:
-          typeof event.unit_price === "number" ? event.unit_price : null,
-        units:
-          typeof event.output_units === "number" ? event.output_units : null,
+        unitPrice,
+        units,
         currency: "USD",
       };
     } catch {
@@ -301,11 +325,18 @@ async function fetchBillingEvent(
 
 /**
  * Resolve charged (or estimated) cost for a completed fal request.
+ * Prefer billing_event (actual) over catalog pricing_estimate.
  */
 export async function resolveFalCost(params: {
   requestId: string;
   endpointId: string;
+  /** Extra wait before first billing poll — useful right after inference. */
+  settleMs?: number;
 }): Promise<FalBillingInfo> {
+  if (params.settleMs && params.settleMs > 0) {
+    await sleep(params.settleMs);
+  }
+
   const billed = await fetchBillingEvent(params.requestId);
   if (billed) {
     return {
@@ -321,7 +352,7 @@ export async function resolveFalCost(params: {
   }
 
   const estimate = await fetchPricingEstimate(params.endpointId);
-  if (estimate) {
+  if (estimate && estimate.unitPrice > 0) {
     return {
       requestId: params.requestId,
       endpointId: params.endpointId,
@@ -338,7 +369,7 @@ export async function resolveFalCost(params: {
     requestId: params.requestId,
     endpointId: params.endpointId,
     costUsd: null,
-    unitPrice: null,
+    unitPrice: estimate?.unitPrice ?? null,
     units: null,
     currency: "USD",
     source: null,
