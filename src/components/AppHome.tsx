@@ -24,6 +24,7 @@ type AppHomeProps = {
   preferencesCompleted: boolean;
   initialPreferences: ListingPreferences | null;
   userEmail?: string | null;
+  isAdmin?: boolean;
 };
 
 export function AppHome({
@@ -31,6 +32,7 @@ export function AppHome({
   preferencesCompleted,
   initialPreferences,
   userEmail = null,
+  isAdmin = false,
 }: AppHomeProps) {
   const router = useRouter();
   const [listings, setListings] = useState(initialListings);
@@ -176,6 +178,23 @@ export function AppHome({
         </section>
 
         <PinSetupCard />
+
+        {isAdmin ? (
+          <section className="rounded-2xl border border-dashed border-[var(--border)] bg-[var(--surface-muted)] p-4">
+            <h2 className="text-lg font-semibold text-[var(--foreground)]">
+              Admin
+            </h2>
+            <p className="mt-1 text-sm text-[var(--muted)]">
+              Compare fal.ai background models on any listing photo.
+            </p>
+            <Link
+              href="/app/admin/ai-debug"
+              className="mt-3 inline-block text-base font-semibold text-[var(--accent)] hover:underline"
+            >
+              Open AI background debug →
+            </Link>
+          </section>
+        ) : null}
 
         <BigButton variant="ghost" onClick={() => void logout()}>
           Sign out

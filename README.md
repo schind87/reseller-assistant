@@ -50,6 +50,7 @@ Open [http://localhost:3000](http://localhost:3000) → email code sign-in (or e
 | `OPENAI_API_KEY` | no | Fallback if OpenRouter is unset |
 | `FAL_KEY` | no* | Pixelcut / BiRefNet Clean bg when PhotoRoom is unset |
 | `PHOTOROOM_API_KEY` | no* | Preferred Clean bg (PhotoRoom quality for clothing) |
+| `ADMIN_EMAILS` | no | Comma-separated emails for `/app/admin/ai-debug` |
 
 ## Domain
 
