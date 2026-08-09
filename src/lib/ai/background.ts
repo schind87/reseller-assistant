@@ -3,22 +3,14 @@
  * 1) BiRefNet v2 for a high-quality garment cutout / mask
  * 2) EVF-SAM hanger mask unioned in so hooks/hangers are not clipped
  * 3) Drop disconnected leftover backdrop islands (wrinkles/folds)
- * 4) Composite onto a solid studio color
+ * 4) Keep large enclosed gaps (hanger triangle) as studio background
+ * 5) Composite onto a solid studio color
  */
 import sharp from "sharp";
 
+export { BG_PIPELINE_TAG, isCurrentBgPipeline } from "@/lib/ai/bg-pipeline";
+
 const DEFAULT_BACKGROUND = "#FFFFFF";
-
-/** Filename marker so older cleaned files are regenerated after pipeline fixes. */
-export const BG_PIPELINE_TAG = "bgv3";
-
-export function isCurrentBgPipeline(
-  processedPath: string | null | undefined
-): boolean {
-  return Boolean(
-    processedPath && processedPath.includes(`-${BG_PIPELINE_TAG}-`)
-  );
-}
 
 type FalImagePayload = {
   image?: { url?: string };
@@ -91,17 +83,18 @@ export async function removeBackground(
 
 /**
  * Segment a clothes hanger (hook + body) with text-prompted EVF-SAM.
- * Returns a mask image URL, or null when none / unavailable.
+ * Thin mask only — never fill the open triangle in the middle of the hanger.
  */
 async function segmentHangerMask(imageUrl: string): Promise<string | null> {
   const data = await falPost("fal-ai/evf-sam", {
     image_url: imageUrl,
-    prompt: "clothes hanger",
-    negative_prompt: "background, wall, floor, person, mannequin",
+    prompt: "clothes hanger hook and arms",
+    negative_prompt:
+      "background, wall, floor, empty space inside hanger, shirt, garment",
     mask_only: true,
     use_grounding_dino: true,
-    fill_holes: true,
-    expand_mask: 3,
+    fill_holes: false,
+    expand_mask: 1,
   });
   return firstImageUrl(data);
 }
@@ -187,10 +180,11 @@ async function maskHasForeground(
 }
 
 /**
- * Fill enclosed holes inside the foreground so soft/noisy BiRefNet masks
- * don't punch white gaps through the garment.
+ * Fill only *small* enclosed holes inside the foreground (noisy BiRefNet gaps
+ * in fabric). Large enclosed regions — especially the open triangle in the
+ * middle of a hanger — stay background so they pick up the studio color.
  */
-function fillForegroundHoles(
+function fillSmallForegroundHoles(
   alpha: Buffer,
   width: number,
   height: number
@@ -204,7 +198,7 @@ function fillForegroundHoles(
   let head = 0;
   let tail = 0;
 
-  const enqueue = (x: number, y: number) => {
+  const enqueueOutside = (x: number, y: number) => {
     const i = y * width + x;
     if (alpha[i] > 127 || outside[i]) return;
     outside[i] = 1;
@@ -214,12 +208,12 @@ function fillForegroundHoles(
   };
 
   for (let x = 0; x < width; x++) {
-    enqueue(x, 0);
-    enqueue(x, height - 1);
+    enqueueOutside(x, 0);
+    enqueueOutside(x, height - 1);
   }
   for (let y = 0; y < height; y++) {
-    enqueue(0, y);
-    enqueue(width - 1, y);
+    enqueueOutside(0, y);
+    enqueueOutside(width - 1, y);
   }
 
   while (head < tail) {
@@ -234,16 +228,168 @@ function fillForegroundHoles(
     ] as const;
     for (const [nx, ny] of neighbors) {
       if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue;
-      enqueue(nx, ny);
+      enqueueOutside(nx, ny);
     }
   }
 
-  const filled = alpha;
-  for (let i = 0; i < n; i++) {
-    // Background pixels not reachable from the border are holes in the garment.
-    if (filled[i] <= 127 && !outside[i]) filled[i] = 255;
+  // Label enclosed background components (holes).
+  const labels = new Int32Array(n);
+  const areas: number[] = [0];
+  let nextLabel = 0;
+  head = 0;
+  tail = 0;
+
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const start = y * width + x;
+      if (alpha[start] > 127 || outside[start] || labels[start] !== 0) continue;
+
+      nextLabel += 1;
+      let area = 0;
+      qx[tail] = x;
+      qy[tail] = y;
+      tail += 1;
+      labels[start] = nextLabel;
+
+      while (head < tail) {
+        const cx = qx[head];
+        const cy = qy[head];
+        head += 1;
+        area += 1;
+        const neighbors = [
+          [cx + 1, cy],
+          [cx - 1, cy],
+          [cx, cy + 1],
+          [cx, cy - 1],
+        ] as const;
+        for (const [nx, ny] of neighbors) {
+          if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue;
+          const ni = ny * width + nx;
+          if (alpha[ni] > 127 || outside[ni] || labels[ni] !== 0) continue;
+          labels[ni] = nextLabel;
+          qx[tail] = nx;
+          qy[tail] = ny;
+          tail += 1;
+        }
+      }
+      areas[nextLabel] = area;
+    }
   }
-  return filled;
+
+  // Hanger gaps are typically large; fabric speckles are tiny.
+  const maxHoleArea = Math.max(400, Math.floor(n * 0.004));
+  const fillLabel = new Uint8Array(nextLabel + 1);
+  for (let label = 1; label <= nextLabel; label++) {
+    if (areas[label] <= maxHoleArea) fillLabel[label] = 1;
+  }
+
+  for (let i = 0; i < n; i++) {
+    const label = labels[i];
+    if (label && fillLabel[label]) alpha[i] = 255;
+  }
+  return alpha;
+}
+
+/**
+ * Hard matte: kill soft shadow fringes that leave the original wall color.
+ */
+function hardenAlpha(alpha: Buffer, threshold = 160): Buffer {
+  for (let i = 0; i < alpha.length; i++) {
+    alpha[i] = alpha[i] >= threshold ? 255 : 0;
+  }
+  return alpha;
+}
+
+/**
+ * Punch leftover original backdrop that BiRefNet/hanger-fill trapped as
+ * "foreground" (classic: wall color inside the hanger triangle). Never punches
+ * the eroded garment core or thin hanger plastic.
+ */
+function punchTrappedBackdrop(params: {
+  alpha: Buffer;
+  rgba: Buffer;
+  width: number;
+  height: number;
+  hangerGray: Buffer | null;
+}): void {
+  const { alpha, rgba, width, height, hangerGray } = params;
+  const n = width * height;
+  if (alpha.length < n || rgba.length < n * 4) return;
+
+  // Median-ish background sample from the outer border.
+  const samples: number[] = [];
+  const pushSample = (x: number, y: number) => {
+    const i = y * width + x;
+    if (alpha[i] > 127) return;
+    const p = i * 4;
+    samples.push(rgba[p], rgba[p + 1], rgba[p + 2]);
+  };
+  const border = Math.max(2, Math.floor(Math.min(width, height) * 0.02));
+  for (let x = 0; x < width; x++) {
+    for (let t = 0; t < border; t++) {
+      pushSample(x, t);
+      pushSample(x, height - 1 - t);
+    }
+  }
+  for (let y = 0; y < height; y++) {
+    for (let t = 0; t < border; t++) {
+      pushSample(t, y);
+      pushSample(width - 1 - t, y);
+    }
+  }
+  if (samples.length < 30) return;
+
+  const channel = (offset: number) => {
+    const vals: number[] = [];
+    for (let i = offset; i < samples.length; i += 3) vals.push(samples[i]);
+    vals.sort((a, b) => a - b);
+    return vals[Math.floor(vals.length / 2)] ?? 255;
+  };
+  const bgR = channel(0);
+  const bgG = channel(1);
+  const bgB = channel(2);
+
+  // Protect solid garment: erode the current mask a few times.
+  const core = Buffer.from(alpha);
+  const erodeOnce = (src: Buffer, dest: Buffer) => {
+    for (let y = 1; y < height - 1; y++) {
+      for (let x = 1; x < width - 1; x++) {
+        const i = y * width + x;
+        if (
+          src[i] > 127 &&
+          src[i - 1] > 127 &&
+          src[i + 1] > 127 &&
+          src[i - width] > 127 &&
+          src[i + width] > 127
+        ) {
+          dest[i] = 255;
+        } else {
+          dest[i] = 0;
+        }
+      }
+    }
+  };
+  const tmp = Buffer.alloc(n);
+  const erodePasses = Math.max(3, Math.floor(Math.min(width, height) * 0.008));
+  for (let pass = 0; pass < erodePasses; pass++) {
+    erodeOnce(core, tmp);
+    core.set(tmp);
+  }
+
+  const maxDist = 42; // ≈ wall / soft-shadow match; blue shirts stay far away
+  for (let i = 0; i < n; i++) {
+    if (alpha[i] <= 127) continue;
+    if (core[i] > 127) continue;
+    if (hangerGray && hangerGray[i] > 127) continue;
+
+    const p = i * 4;
+    const dr = rgba[p] - bgR;
+    const dg = rgba[p + 1] - bgG;
+    const db = rgba[p + 2] - bgB;
+    if (dr * dr + dg * dg + db * db <= maxDist * maxDist) {
+      alpha[i] = 0;
+    }
+  }
 }
 
 /**
@@ -378,8 +524,9 @@ function pruneOrphanForeground(
 }
 
 /**
- * Build a single alpha channel: refined BiRefNet cutout ∪ hanger mask,
- * with hole-fill and gentle orphan cleanup for leftover backdrop folds.
+ * Build a single alpha channel: refined BiRefNet cutout ∪ thin hanger mask,
+ * with small hole-fill and gentle orphan cleanup for leftover backdrop folds.
+ * Large hanger interiors are left open so they take the studio color.
  */
 async function buildUnionAlpha(params: {
   width: number;
@@ -387,11 +534,11 @@ async function buildUnionAlpha(params: {
   cutoutBytes: ArrayBuffer;
   birefnetMaskBytes: ArrayBuffer | null;
   hangerMaskBytes: ArrayBuffer | null;
-}): Promise<Buffer> {
+}): Promise<{ alpha: Buffer; hangerGray: Buffer | null }> {
   const { width, height } = params;
 
   // Refined cutout alpha is the primary subject mask (better garment coverage).
-  let alpha = await sharp(Buffer.from(params.cutoutBytes))
+  const alpha = await sharp(Buffer.from(params.cutoutBytes))
     .ensureAlpha()
     .extractChannel(3)
     .resize(width, height, { fit: "fill" })
@@ -409,6 +556,10 @@ async function buildUnionAlpha(params: {
     }
   }
 
+  // Fill tiny fabric speckles before adding the hanger, so we never flood-fill
+  // the open triangle in the middle of the hanger.
+  fillSmallForegroundHoles(alpha, width, height);
+
   let hangerGray: Buffer | null = null;
   if (params.hangerMaskBytes) {
     const usable = await maskHasForeground(params.hangerMaskBytes);
@@ -424,8 +575,9 @@ async function buildUnionAlpha(params: {
     }
   }
 
-  fillForegroundHoles(alpha, width, height);
-  return pruneOrphanForeground(alpha, width, height, hangerGray);
+  pruneOrphanForeground(alpha, width, height, hangerGray);
+  hardenAlpha(alpha);
+  return { alpha, hangerGray };
 }
 
 /**
@@ -513,7 +665,7 @@ export async function replaceBackground(
       };
     }
 
-    const alpha = await buildUnionAlpha({
+    const { alpha, hangerGray } = await buildUnionAlpha({
       width,
       height,
       cutoutBytes: cutout.bytes,
@@ -527,6 +679,15 @@ export async function replaceBackground(
       .resize(width, height, { fit: "fill" })
       .raw()
       .toBuffer();
+
+    // Clear wall color trapped inside the hanger triangle / soft shadows.
+    punchTrappedBackdrop({
+      alpha,
+      rgba,
+      width,
+      height,
+      hangerGray,
+    });
 
     for (let i = 0, p = 0; i < alpha.length; i++, p += 4) {
       rgba[p + 3] = alpha[i];

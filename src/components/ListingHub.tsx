@@ -29,6 +29,7 @@ import {
   requestExtensionPair,
   waitForExtensionPairAck,
 } from "@/lib/extension-bridge";
+import { isCurrentBgPipeline } from "@/lib/ai/bg-pipeline";
 import type {
   Listing,
   ListingPhotoWithUrl,
@@ -623,7 +624,7 @@ export function ListingHub({ listingId }: ListingHubProps) {
     setError(null);
     setStatusMessage(
       enable
-        ? photo.processed_path?.includes("-bgv3-")
+        ? isCurrentBgPipeline(photo.processed_path)
           ? "Restoring clean background…"
           : "Cleaning background (keeping hangers)…"
         : "Restoring original…"
@@ -661,7 +662,7 @@ export function ListingHub({ listingId }: ListingHubProps) {
       );
       setStatusMessage(
         enable
-          ? photo.processed_path?.includes("-bgv3-")
+          ? isCurrentBgPipeline(photo.processed_path)
             ? "Clean background restored."
             : "Clean background applied — hanger kept when detected."
           : "Original photo restored."
