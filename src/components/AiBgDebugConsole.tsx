@@ -264,6 +264,14 @@ export function AiBgDebugConsole({
     useState<RecentRunSummary[]>(initialRecentRuns);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [refreshingCosts, setRefreshingCosts] = useState(false);
+  const [runProgress, setRunProgress] = useState<{
+    completed: number;
+    total: number;
+  } | null>(null);
+  const [pendingModelIds, setPendingModelIds] = useState<FalBgModelId[]>([]);
+  const [freshModelIds, setFreshModelIds] = useState<Set<string>>(
+    () => new Set(),
+  );
   /** Index into each model's saved versions (0 = newest). */
   const [versionIndexByModel, setVersionIndexByModel] = useState<
     Record<string, number>
@@ -338,7 +346,7 @@ export function AiBgDebugConsole({
   }
 
   useEffect(() => {
-    if (!selectedPhotoId) return;
+    if (!selectedPhotoId || running) return;
     let cancelled = false;
     void (async () => {
       try {
@@ -365,7 +373,7 @@ export function AiBgDebugConsole({
     return () => {
       cancelled = true;
     };
-  }, [selectedPhotoId]);
+  }, [selectedPhotoId, running]);
 
   async function loadPhotos(nextRole = role, nextQ = q) {
     setLoading(true);
@@ -449,24 +457,174 @@ export function AiBgDebugConsole({
 
   async function runModels() {
     if (!selectedPhoto || selectedModels.size === 0) return;
+    const modelIds = [...selectedModels] as FalBgModelId[];
+    const total = modelIds.length;
     setRunning(true);
     setError(null);
+    setRunProgress({ completed: 0, total });
+    setPendingModelIds(modelIds);
+    setFreshModelIds(new Set());
+
+    const appendResult = (runId: string, result: RunResult) => {
+      setHistory((prev) => {
+        const idx = prev.findIndex((r) => r.id === runId);
+        if (idx === -1) {
+          return [
+            {
+              id: runId,
+              createdAt: result.createdAt ?? new Date().toISOString(),
+              compositeWhite: false,
+              results: [result],
+            },
+            ...prev,
+          ];
+        }
+        const next = [...prev];
+        const existing = next[idx];
+        const withoutDup = existing.results.filter(
+          (r) => r.modelId !== result.modelId,
+        );
+        next[idx] = {
+          ...existing,
+          results: [...withoutDup, result],
+        };
+        return next;
+      });
+      setVersionIndexByModel((prev) => ({ ...prev, [result.modelId]: 0 }));
+      setPendingModelIds((prev) =>
+        prev.filter((id) => id !== result.modelId),
+      );
+      setFreshModelIds((prev) => {
+        const next = new Set(prev);
+        next.add(result.modelId);
+        return next;
+      });
+    };
+
+    const patchCost = (
+      runId: string,
+      modelId: string,
+      patch: Partial<RunResult>,
+    ) => {
+      setHistory((prev) =>
+        prev.map((run) => {
+          if (run.id !== runId) return run;
+          return {
+            ...run,
+            results: run.results.map((r) =>
+              r.modelId === modelId ? { ...r, ...patch } : r,
+            ),
+          };
+        }),
+      );
+    };
+
     try {
       const res = await fetch("/api/admin/bg-debug/run", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           photoId: selectedPhoto.id,
-          modelIds: [...selectedModels],
+          modelIds,
         }),
       });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error ?? "Run failed");
-      await loadHistory(selectedPhoto.id);
+
+      const contentType = res.headers.get("content-type") ?? "";
+      if (!res.ok) {
+        const json = (await res.json().catch(() => null)) as {
+          error?: string;
+        } | null;
+        throw new Error(json?.error ?? "Run failed");
+      }
+
+      if (!contentType.includes("ndjson") || !res.body) {
+        // Legacy JSON fallback
+        const json = await res.json();
+        await loadHistory(selectedPhoto.id);
+        if (json.error) throw new Error(json.error);
+        return;
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed) continue;
+          let event: {
+            type?: string;
+            runId?: string;
+            completed?: number;
+            total?: number;
+            error?: string;
+            result?: RunResult & {
+              costCurrency?: string | null;
+            };
+          };
+          try {
+            event = JSON.parse(trimmed) as typeof event;
+          } catch {
+            continue;
+          }
+
+          switch (event.type) {
+            case "start":
+              if (typeof event.total === "number") {
+                setRunProgress({ completed: 0, total: event.total });
+              }
+              break;
+            case "result":
+              if (event.result && event.runId) {
+                appendResult(event.runId, event.result);
+              }
+              if (
+                typeof event.completed === "number" &&
+                typeof event.total === "number"
+              ) {
+                setRunProgress({
+                  completed: event.completed,
+                  total: event.total,
+                });
+              }
+              break;
+            case "cost":
+              if (event.runId && event.result?.modelId) {
+                patchCost(event.runId, event.result.modelId, {
+                  costUsd: event.result.costUsd,
+                  costUnitPrice: event.result.costUnitPrice,
+                  costUnits: event.result.costUnits,
+                  costSource: event.result.costSource,
+                  falDashboardUrl: event.result.falDashboardUrl,
+                  costLabel: event.result.costLabel,
+                });
+              }
+              break;
+            case "error":
+              throw new Error(event.error ?? "Run failed");
+            case "done":
+              break;
+            default:
+              break;
+          }
+        }
+      }
+
+      await loadRecentRuns();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Run failed");
     } finally {
       setRunning(false);
+      setRunProgress(null);
+      setPendingModelIds([]);
+      // Keep fresh highlights briefly until user starts another run / leaves.
     }
   }
 
@@ -878,9 +1036,11 @@ export function AiBgDebugConsole({
                 }
                 onClick={() => void runModels()}
               >
-                {running
-                  ? "Running models…"
-                  : `Run ${selectedModels.size} model${selectedModels.size === 1 ? "" : "s"}`}
+                {running && runProgress
+                  ? `Running ${runProgress.completed}/${runProgress.total}…`
+                  : running
+                    ? "Running…"
+                    : `Run ${selectedModels.size} model${selectedModels.size === 1 ? "" : "s"}`}
               </BigButton>
             </div>
             <p className="mt-2 text-xs text-[var(--muted)]">
@@ -944,13 +1104,49 @@ export function AiBgDebugConsole({
             </div>
           </div>
 
-          {modelHistories.length === 0 && !historyLoading ? (
+          {modelHistories.length === 0 &&
+          pendingModelIds.length === 0 &&
+          !historyLoading ? (
             <p className="mt-4 text-sm text-[var(--muted)]">
               No saved comparisons for this photo yet. Select models and run
               once to start building history.
             </p>
           ) : (
             <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {pendingModelIds.map((modelId) => {
+                const model = models.find((m) => m.id === modelId);
+                const label = model?.label ?? modelId;
+                return (
+                  <article
+                    key={`pending-${modelId}`}
+                    className="overflow-hidden rounded-xl ring-1 ring-[var(--border)]"
+                  >
+                    <div className="border-b border-[var(--border)] px-3 py-2">
+                      <p className="font-semibold text-[var(--foreground)]">
+                        {label}
+                      </p>
+                      <p className="mt-1 text-xs text-[var(--muted)]">
+                        Running…
+                        {runProgress
+                          ? ` · ${runProgress.completed}/${runProgress.total} done`
+                          : ""}
+                      </p>
+                    </div>
+                    <div
+                      className="flex aspect-square w-full items-center justify-center"
+                      style={resultBackdropStyle(labBackdrop)}
+                    >
+                      <span className="inline-flex items-center gap-2 text-sm font-semibold text-[var(--muted)]">
+                        <span
+                          className="h-4 w-4 animate-spin rounded-full border-2 border-[var(--border)] border-t-[var(--accent)]"
+                          aria-hidden
+                        />
+                        Waiting for result
+                      </span>
+                    </div>
+                  </article>
+                );
+              })}
               {modelHistories.map((entry) => {
                 const index = Math.min(
                   versionIndexByModel[entry.modelId] ?? 0,
@@ -961,16 +1157,26 @@ export function AiBgDebugConsole({
                 const when = formatRunTime(result.createdAt);
                 const canNewer = index > 0;
                 const canOlder = index < entry.versions.length - 1;
+                const isFresh = freshModelIds.has(entry.modelId);
 
                 return (
                   <article
                     key={entry.modelId}
-                    className="overflow-hidden rounded-xl ring-1 ring-[var(--border)]"
+                    className={`overflow-hidden rounded-xl ring-1 ${
+                      isFresh
+                        ? "ring-[var(--accent)]"
+                        : "ring-[var(--border)]"
+                    }`}
                   >
                     <div className="border-b border-[var(--border)] px-3 py-2">
                       <div className="flex items-start justify-between gap-2">
                         <p className="font-semibold text-[var(--foreground)]">
                           {entry.label}
+                          {isFresh ? (
+                            <span className="ml-2 text-xs font-semibold text-[var(--accent)]">
+                              just in
+                            </span>
+                          ) : null}
                         </p>
                         <CostBadge result={result} />
                       </div>
@@ -998,7 +1204,7 @@ export function AiBgDebugConsole({
                       <div className="mt-2 flex items-center justify-between gap-2">
                         <button
                           type="button"
-                          disabled={!canNewer}
+                          disabled={!canNewer || running}
                           onClick={() =>
                             stepVersion(entry.modelId, -1, entry.versions.length)
                           }
@@ -1011,7 +1217,7 @@ export function AiBgDebugConsole({
                         </span>
                         <button
                           type="button"
-                          disabled={!canOlder}
+                          disabled={!canOlder || running}
                           onClick={() =>
                             stepVersion(entry.modelId, 1, entry.versions.length)
                           }
