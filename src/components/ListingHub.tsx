@@ -591,7 +591,7 @@ export function ListingHub({ listingId }: ListingHubProps) {
     setError(null);
     setStatusMessage(
       enable
-        ? photo.processed_path?.includes("-bgv2-")
+        ? photo.processed_path?.includes("-bgv3-")
           ? "Restoring clean background…"
           : "Cleaning background (keeping hangers)…"
         : "Restoring original…"
@@ -629,7 +629,7 @@ export function ListingHub({ listingId }: ListingHubProps) {
       );
       setStatusMessage(
         enable
-          ? photo.processed_path?.includes("-bgv2-")
+          ? photo.processed_path?.includes("-bgv3-")
             ? "Clean background restored."
             : "Clean background applied — hanger kept when detected."
           : "Original photo restored."

@@ -10,7 +10,7 @@ import sharp from "sharp";
 const DEFAULT_BACKGROUND = "#FFFFFF";
 
 /** Filename marker so older cleaned files are regenerated after pipeline fixes. */
-export const BG_PIPELINE_TAG = "bgv2";
+export const BG_PIPELINE_TAG = "bgv3";
 
 export function isCurrentBgPipeline(
   processedPath: string | null | undefined
@@ -187,8 +187,68 @@ async function maskHasForeground(
 }
 
 /**
- * Drop disconnected leftover islands (backdrop folds, sheet wrinkles) while
- * keeping the main garment blob and any hanger pieces near the top.
+ * Fill enclosed holes inside the foreground so soft/noisy BiRefNet masks
+ * don't punch white gaps through the garment.
+ */
+function fillForegroundHoles(
+  alpha: Buffer,
+  width: number,
+  height: number
+): Buffer {
+  const n = width * height;
+  if (alpha.length < n) return alpha;
+
+  const outside = new Uint8Array(n);
+  const qx = new Int32Array(n);
+  const qy = new Int32Array(n);
+  let head = 0;
+  let tail = 0;
+
+  const enqueue = (x: number, y: number) => {
+    const i = y * width + x;
+    if (alpha[i] > 127 || outside[i]) return;
+    outside[i] = 1;
+    qx[tail] = x;
+    qy[tail] = y;
+    tail += 1;
+  };
+
+  for (let x = 0; x < width; x++) {
+    enqueue(x, 0);
+    enqueue(x, height - 1);
+  }
+  for (let y = 0; y < height; y++) {
+    enqueue(0, y);
+    enqueue(width - 1, y);
+  }
+
+  while (head < tail) {
+    const cx = qx[head];
+    const cy = qy[head];
+    head += 1;
+    const neighbors = [
+      [cx + 1, cy],
+      [cx - 1, cy],
+      [cx, cy + 1],
+      [cx, cy - 1],
+    ] as const;
+    for (const [nx, ny] of neighbors) {
+      if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue;
+      enqueue(nx, ny);
+    }
+  }
+
+  const filled = Buffer.from(alpha);
+  for (let i = 0; i < n; i++) {
+    // Background pixels not reachable from the border are holes in the garment.
+    if (filled[i] <= 127 && !outside[i]) filled[i] = 255;
+  }
+  return filled;
+}
+
+/**
+ * Drop only small, far-away leftover islands (backdrop folds) while keeping
+ * garment fragments near the main subject and hanger pieces.
  */
 function pruneOrphanForeground(
   alpha: Buffer,
@@ -201,6 +261,10 @@ function pruneOrphanForeground(
 
   const labels = new Int32Array(n);
   const areas: number[] = [0];
+  const minX: number[] = [0];
+  const minY: number[] = [0];
+  const maxX: number[] = [0];
+  const maxY: number[] = [0];
   let nextLabel = 0;
 
   const qx = new Int32Array(n);
@@ -215,6 +279,10 @@ function pruneOrphanForeground(
       let area = 0;
       let head = 0;
       let tail = 0;
+      let x0 = x;
+      let y0 = y;
+      let x1 = x;
+      let y1 = y;
       qx[tail] = x;
       qy[tail] = y;
       tail += 1;
@@ -225,6 +293,10 @@ function pruneOrphanForeground(
         const cy = qy[head];
         head += 1;
         area += 1;
+        if (cx < x0) x0 = cx;
+        if (cy < y0) y0 = cy;
+        if (cx > x1) x1 = cx;
+        if (cy > y1) y1 = cy;
 
         const neighbors = [
           [cx + 1, cy],
@@ -244,6 +316,10 @@ function pruneOrphanForeground(
       }
 
       areas[nextLabel] = area;
+      minX[nextLabel] = x0;
+      minY[nextLabel] = y0;
+      maxX[nextLabel] = x1;
+      maxY[nextLabel] = y1;
     }
   }
 
@@ -255,6 +331,11 @@ function pruneOrphanForeground(
   }
 
   const keep = new Set<number>([best]);
+  // Keep any sizable fragment — only tiny leftovers are candidates for removal.
+  const smallLimit = Math.max(80, Math.floor(areas[best] * 0.015));
+  for (let label = 1; label <= nextLabel; label++) {
+    if (areas[label] >= smallLimit) keep.add(label);
+  }
 
   if (protectGray && protectGray.length >= n) {
     const overlap = new Array<number>(nextLabel + 1).fill(0);
@@ -268,19 +349,24 @@ function pruneOrphanForeground(
     }
   }
 
-  // Thin hanger hooks sometimes separate from the garment — keep sizable
-  // blobs that touch the top of the frame.
+  // Keep blobs near the main garment (sleeve tips, straps) even if small.
+  const pad = Math.max(24, Math.floor(Math.min(width, height) * 0.04));
+  const nearMain = (label: number) => {
+    const gapX =
+      Math.max(0, minX[label] - maxX[best], minX[best] - maxX[label]) - pad;
+    const gapY =
+      Math.max(0, minY[label] - maxY[best], minY[best] - maxY[label]) - pad;
+    return gapX <= 0 && gapY <= 0;
+  };
+  for (let label = 1; label <= nextLabel; label++) {
+    if (nearMain(label)) keep.add(label);
+  }
+
+  // Thin hanger hooks sometimes separate — keep blobs that touch the top.
   const topBand = Math.max(8, Math.floor(height * 0.14));
   const minTopArea = Math.max(40, Math.floor(areas[best] * 0.005));
-  const touchesTop = new Array<boolean>(nextLabel + 1).fill(false);
-  for (let y = 0; y < topBand; y++) {
-    for (let x = 0; x < width; x++) {
-      const label = labels[y * width + x];
-      if (label) touchesTop[label] = true;
-    }
-  }
   for (let label = 1; label <= nextLabel; label++) {
-    if (touchesTop[label] && areas[label] >= minTopArea) keep.add(label);
+    if (minY[label] <= topBand && areas[label] >= minTopArea) keep.add(label);
   }
 
   const cleaned = Buffer.from(alpha);
@@ -292,8 +378,8 @@ function pruneOrphanForeground(
 }
 
 /**
- * Build a single alpha channel: BiRefNet garment ∪ hanger mask.
- * Falls back to the cutout's existing alpha when no separate mask exists.
+ * Build a single alpha channel: refined BiRefNet cutout ∪ hanger mask,
+ * with hole-fill and gentle orphan cleanup for leftover backdrop folds.
  */
 async function buildUnionAlpha(params: {
   width: number;
@@ -304,24 +390,23 @@ async function buildUnionAlpha(params: {
 }): Promise<Buffer> {
   const { width, height } = params;
 
-  const cutoutAlpha = await sharp(Buffer.from(params.cutoutBytes))
+  // Refined cutout alpha is the primary subject mask (better garment coverage).
+  let alpha = await sharp(Buffer.from(params.cutoutBytes))
     .ensureAlpha()
     .extractChannel(3)
     .resize(width, height, { fit: "fill" })
     .raw()
     .toBuffer();
 
-  // Prefer the dedicated mask when present; otherwise use cutout alpha.
-  // Do not expand with MAX of both — that keeps false-positive backdrop bits.
-  let alpha: Buffer;
   if (params.birefnetMaskBytes) {
-    alpha = await sharp(Buffer.from(params.birefnetMaskBytes))
+    const maskGray = await sharp(Buffer.from(params.birefnetMaskBytes))
       .greyscale()
       .resize(width, height, { fit: "fill" })
       .raw()
       .toBuffer();
-  } else {
-    alpha = Buffer.from(cutoutAlpha);
+    for (let i = 0; i < alpha.length; i++) {
+      if (maskGray[i] > alpha[i]) alpha[i] = maskGray[i];
+    }
   }
 
   let hangerGray: Buffer | null = null;
@@ -339,6 +424,7 @@ async function buildUnionAlpha(params: {
     }
   }
 
+  alpha = fillForegroundHoles(alpha, width, height);
   return pruneOrphanForeground(alpha, width, height, hangerGray);
 }
 
