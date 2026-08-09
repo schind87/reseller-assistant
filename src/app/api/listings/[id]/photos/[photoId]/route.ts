@@ -16,6 +16,7 @@ const PHOTO_ROLES: PhotoRole[] = [
   "front",
   "back",
   "detail",
+  "tag",
   "flaw",
 ];
 

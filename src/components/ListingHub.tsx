@@ -79,12 +79,13 @@ const LISTING_ROLES: PhotoRole[] = [
   "front",
   "back",
   "detail",
+  "tag",
   "flaw",
 ];
 
 function nextListingRole(photos: ListingPhotoWithUrl[]): PhotoRole {
   for (const role of LISTING_ROLES) {
-    if (role === "flaw") continue;
+    if (role === "flaw" || role === "tag") continue;
     if (!photos.some((p) => p.role === role)) return role;
   }
   return "detail";
@@ -137,7 +138,7 @@ function roleCountLabel(
 ): string | null {
   const count = photos.filter((p) => p.role === role).length;
   if (count === 0) {
-    return role === "flaw" ? "Optional" : "Needed";
+    return role === "flaw" || role === "tag" ? "Optional" : "Needed";
   }
   return `${count} added · add another`;
 }

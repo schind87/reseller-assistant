@@ -16,6 +16,7 @@ export type PhotoRole =
   | "front"
   | "back"
   | "detail"
+  | "tag"
   | "flaw";
 
 /** Photos for AI/ID or stocking — private by default (not auto-posted). */

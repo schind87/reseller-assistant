@@ -87,6 +87,15 @@ const SHARED_PHOTO_STEPS: PhotoStepDef[] = [
     allowMultiple: true,
   },
   {
+    role: "tag",
+    title: "Tag",
+    instruction:
+      "Clear shot of the brand, size, or care tag for shoppers. Add more tag close-ups if helpful, or skip if already covered elsewhere.",
+    optional: true,
+    purpose: "listing",
+    allowMultiple: true,
+  },
+  {
     role: "flaw",
     title: "Flaws",
     instruction:
@@ -178,6 +187,8 @@ export function photoRoleLabel(role: PhotoRole): string {
       return "Back";
     case "detail":
       return "Detail";
+    case "tag":
+      return "Tag";
     case "flaw":
       return "Flaw";
     default: {

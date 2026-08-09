@@ -17,6 +17,7 @@ const ROLE_ORDER: PhotoRole[] = [
   "front",
   "back",
   "detail",
+  "tag",
   "flaw",
 ];
 

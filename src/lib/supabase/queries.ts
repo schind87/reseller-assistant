@@ -308,7 +308,8 @@ const ROLE_SORT: Record<PhotoRole, number> = {
   front: 5,
   back: 6,
   detail: 7,
-  flaw: 8,
+  tag: 8,
+  flaw: 9,
 };
 
 export async function addPhoto(params: {

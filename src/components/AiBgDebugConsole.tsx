@@ -99,6 +99,7 @@ const ROLE_FILTERS: Array<PhotoRole | "all"> = [
   "front",
   "back",
   "detail",
+  "tag",
   "flaw",
 ];
 
