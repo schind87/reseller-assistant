@@ -6,6 +6,8 @@ import {
   useRef,
   useState,
   type FormEvent,
+  type DragEvent,
+  type PointerEvent as ReactPointerEvent,
 } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -50,6 +52,11 @@ type AddPhotoTarget = {
   purpose: "identify" | "inventory" | "listing";
 };
 
+type PhotoSection = "identify" | "inventory" | "listing";
+
+const PHOTO_DND_TYPE = "application/x-ra-photo-id";
+const LONG_PRESS_MS = 450;
+
 const LISTING_ROLES: PhotoRole[] = [
   "cover",
   "front",
@@ -66,6 +73,47 @@ function nextListingRole(photos: ListingPhotoWithUrl[]): PhotoRole {
   return "detail";
 }
 
+function roleForSection(
+  section: PhotoSection,
+  photos: ListingPhotoWithUrl[],
+  currentRole?: PhotoRole
+): PhotoRole {
+  switch (section) {
+    case "identify":
+      return "id_tag";
+    case "inventory":
+      return "inventory";
+    case "listing":
+      if (currentRole && isPostingPhotoRole(currentRole)) return currentRole;
+      return nextListingRole(photos);
+    default: {
+      const _exhaustive: never = section;
+      return _exhaustive;
+    }
+  }
+}
+
+function sectionForRole(role: PhotoRole): PhotoSection {
+  if (isIdentifyPhotoRole(role)) return "identify";
+  if (role === "inventory") return "inventory";
+  return "listing";
+}
+
+function sectionLabel(section: PhotoSection): string {
+  switch (section) {
+    case "identify":
+      return "brand & care tags";
+    case "inventory":
+      return "stocking photos";
+    case "listing":
+      return "listing photos";
+    default: {
+      const _exhaustive: never = section;
+      return _exhaustive;
+    }
+  }
+}
+
 function roleCountLabel(
   photos: ListingPhotoWithUrl[],
   role: PhotoRole
@@ -75,6 +123,13 @@ function roleCountLabel(
     return role === "flaw" ? "Optional" : "Needed";
   }
   return `${count} added · add another`;
+}
+
+function imageFilesFromDataTransfer(dt: DataTransfer | null): File[] {
+  if (!dt) return [];
+  return Array.from(dt.files).filter((file) =>
+    file.type.startsWith("image/")
+  );
 }
 
 function applyListingToDraft(listing: Listing) {
@@ -104,6 +159,11 @@ export function ListingHub({ listingId }: ListingHubProps) {
   const [pickListingRole, setPickListingRole] = useState(false);
   const [promotePhotoId, setPromotePhotoId] = useState<string | null>(null);
   const [promotingPhoto, setPromotingPhoto] = useState(false);
+  const [movingPhotoId, setMovingPhotoId] = useState<string | null>(null);
+  const [dragOverSection, setDragOverSection] = useState<PhotoSection | null>(
+    null
+  );
+  const [movingPhoto, setMovingPhoto] = useState(false);
 
   const [schema, setSchema] = useState<PlatformListingSchema | null>(null);
   const [title, setTitle] = useState("");
@@ -226,6 +286,90 @@ export function ListingHub({ listingId }: ListingHubProps) {
       setError(err instanceof Error ? err.message : "Upload failed");
     } finally {
       setUploading(false);
+    }
+  }
+
+  async function uploadFilesToSection(files: File[], section: PhotoSection) {
+    const images = files.filter((file) => file.type.startsWith("image/"));
+    if (images.length === 0) {
+      setError("Drop image files (JPEG, PNG, WebP, etc.).");
+      return;
+    }
+
+    setUploading(true);
+    setError(null);
+    setMovingPhotoId(null);
+    try {
+      let working = data?.photos ?? [];
+      for (const file of images) {
+        const role = roleForSection(section, working);
+        const body = new FormData();
+        body.append("photo", file);
+        body.append("role", role);
+        const res = await fetch(`/api/listings/${listingId}/photos`, {
+          method: "POST",
+          body,
+        });
+        const json = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          throw new Error(
+            typeof json.error === "string" ? json.error : "Upload failed"
+          );
+        }
+        if (json.photo) {
+          working = [...working, json.photo as ListingPhotoWithUrl];
+        }
+      }
+      setStatusMessage(
+        images.length === 1
+          ? `Added photo to ${sectionLabel(section)}.`
+          : `Added ${images.length} photos to ${sectionLabel(section)}.`
+      );
+      await load({ syncDraft: false });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Upload failed");
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  async function movePhotoToSection(photoId: string, section: PhotoSection) {
+    const photo = data?.photos.find((p) => p.id === photoId);
+    if (!photo) return;
+
+    if (sectionForRole(photo.role) === section) {
+      setMovingPhotoId(null);
+      setStatusMessage("Photo is already in that section.");
+      return;
+    }
+
+    const targetRole = roleForSection(section, data?.photos ?? [], photo.role);
+    setMovingPhoto(true);
+    setError(null);
+    try {
+      const res = await fetch(
+        `/api/listings/${listingId}/photos/${photoId}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ role: targetRole }),
+        }
+      );
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(
+          typeof json.error === "string" ? json.error : "Could not move photo"
+        );
+      }
+      setMovingPhotoId(null);
+      setStatusMessage(
+        `Moved to ${sectionLabel(section)} as ${photoRoleLabel(targetRole)}.`
+      );
+      await load({ syncDraft: false });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not move photo");
+    } finally {
+      setMovingPhoto(false);
     }
   }
 
@@ -514,24 +658,52 @@ export function ListingHub({ listingId }: ListingHubProps) {
           Photos ({photos.length})
         </h2>
         <p className="text-base text-[var(--muted)]">
-          Add photos in each section on this computer, or use the QR code for
-          your phone.
+          Drop image files onto a section to upload. Long-press a photo, then
+          drop or tap another section to move it. Or use the QR code for your
+          phone.
         </p>
+
+        {movingPhotoId ? (
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--accent)] bg-[var(--accent-soft)] px-4 py-3">
+            <p className="text-base font-semibold text-[var(--accent)]">
+              Moving photo — drop or tap a section below
+            </p>
+            <button
+              type="button"
+              className="text-base font-semibold text-[var(--accent)] underline"
+              onClick={() => setMovingPhotoId(null)}
+            >
+              Cancel
+            </button>
+          </div>
+        ) : null}
 
         <PhotoGroup
           title="Brand & care tags"
           badge="For AI · private by default"
           description="Close-ups of brand, size, care, and style/SKU tags so the AI can read the garment. Private by default — tap Use in listing on any shot you also want shoppers to see."
           photos={identifyPhotos}
-          empty="No tag photos yet — add every label you can read."
+          empty="No tag photos yet — drop images here or add every label you can read."
           addLabel="Add tag photo"
+          section="identify"
           onAdd={() => setAddTarget({ role: "id_tag", purpose: "identify" })}
           onDelete={(photoId) => void deletePhoto(photoId)}
           onUseInListing={(photoId) => setPromotePhotoId(photoId)}
+          onDropFiles={(files) => void uploadFilesToSection(files, "identify")}
+          onDropPhoto={(photoId) => void movePhotoToSection(photoId, "identify")}
+          onBeginMove={(photoId) => setMovingPhotoId(photoId)}
+          movingPhotoId={movingPhotoId}
           promotePhotoId={promotePhotoId}
+          dragOver={dragOverSection === "identify"}
+          onDragOverChange={(over) =>
+            setDragOverSection(over ? "identify" : null)
+          }
           deletingPhotoId={deletingPhotoId}
           disabled={
-            uploading || Boolean(deletingPhotoId) || promotingPhoto
+            uploading ||
+            Boolean(deletingPhotoId) ||
+            promotingPhoto ||
+            movingPhoto
           }
           tone="private"
         />
@@ -541,17 +713,31 @@ export function ListingHub({ listingId }: ListingHubProps) {
           badge="Private stocking · not posted by default"
           description="Optional photo of this piece where you stock it (closet, bin, or rack) so you can find it later. Add as many as you need. Private by default — use in the listing if you want."
           photos={inventoryPhotos}
-          empty="No stocking photos yet — optional if you already know where it is."
+          empty="No stocking photos yet — drop images here, or skip if you already know where it is."
           addLabel="Add stocking photo"
+          section="inventory"
           onAdd={() =>
             setAddTarget({ role: "inventory", purpose: "inventory" })
           }
           onDelete={(photoId) => void deletePhoto(photoId)}
           onUseInListing={(photoId) => setPromotePhotoId(photoId)}
+          onDropFiles={(files) => void uploadFilesToSection(files, "inventory")}
+          onDropPhoto={(photoId) =>
+            void movePhotoToSection(photoId, "inventory")
+          }
+          onBeginMove={(photoId) => setMovingPhotoId(photoId)}
+          movingPhotoId={movingPhotoId}
           promotePhotoId={promotePhotoId}
+          dragOver={dragOverSection === "inventory"}
+          onDragOverChange={(over) =>
+            setDragOverSection(over ? "inventory" : null)
+          }
           deletingPhotoId={deletingPhotoId}
           disabled={
-            uploading || Boolean(deletingPhotoId) || promotingPhoto
+            uploading ||
+            Boolean(deletingPhotoId) ||
+            promotingPhoto ||
+            movingPhoto
           }
           tone="private"
         />
@@ -599,12 +785,25 @@ export function ListingHub({ listingId }: ListingHubProps) {
             badge="Listing photos · posted"
             description="Cover, front, back, details, and flaws for the marketplace listing. You can add multiple photos of each type. These are the only photos that get uploaded when you post."
             photos={listingPhotos}
-            empty="No listing photos yet — start with a clean cover shot."
+            empty="No listing photos yet — drop images here or start with a clean cover shot."
             addLabel={`Add ${photoRoleLabel(nextListingRole(photos)).toLowerCase()} photo`}
+            section="listing"
             onAdd={() => setPickListingRole((open) => !open)}
             onDelete={(photoId) => void deletePhoto(photoId)}
+            onDropFiles={(files) => void uploadFilesToSection(files, "listing")}
+            onDropPhoto={(photoId) =>
+              void movePhotoToSection(photoId, "listing")
+            }
+            onBeginMove={(photoId) => setMovingPhotoId(photoId)}
+            movingPhotoId={movingPhotoId}
+            dragOver={dragOverSection === "listing"}
+            onDragOverChange={(over) =>
+              setDragOverSection(over ? "listing" : null)
+            }
             deletingPhotoId={deletingPhotoId}
-            disabled={uploading || Boolean(deletingPhotoId)}
+            disabled={
+              uploading || Boolean(deletingPhotoId) || movingPhoto
+            }
             tone="listing"
           />
           {pickListingRole ? (
@@ -647,7 +846,8 @@ export function ListingHub({ listingId }: ListingHubProps) {
 
         <p className="text-base text-[var(--muted)]">
           For the step-by-step photo coach, scan the phone QR above. On this
-          computer, add or delete photos in the sections here.
+          computer, drop files onto sections, long-press to move photos, or use
+          Add.
         </p>
         <a
           href={`/api/listings/${listingId}/photos/zip`}
@@ -738,10 +938,17 @@ function PhotoGroup({
   photos,
   empty,
   addLabel,
+  section,
   onAdd,
   onDelete,
   onUseInListing,
+  onDropFiles,
+  onDropPhoto,
+  onBeginMove,
+  movingPhotoId,
   promotePhotoId,
+  dragOver,
+  onDragOverChange,
   deletingPhotoId,
   disabled,
   tone = "listing",
@@ -752,10 +959,17 @@ function PhotoGroup({
   photos: ListingPhotoWithUrl[];
   empty: string;
   addLabel: string;
+  section: PhotoSection;
   onAdd: () => void;
   onDelete: (photoId: string) => void;
   onUseInListing?: (photoId: string) => void;
+  onDropFiles: (files: File[]) => void;
+  onDropPhoto: (photoId: string) => void;
+  onBeginMove: (photoId: string) => void;
+  movingPhotoId?: string | null;
   promotePhotoId?: string | null;
+  dragOver?: boolean;
+  onDragOverChange: (over: boolean) => void;
   deletingPhotoId?: string | null;
   disabled?: boolean;
   tone?: "private" | "listing";
@@ -764,14 +978,62 @@ function PhotoGroup({
     tone === "private"
       ? "bg-amber-50 text-amber-950"
       : "bg-[var(--accent-soft)] text-[var(--accent)]";
+  const moveArmed = Boolean(movingPhotoId);
+  const isDropTarget = dragOver || (moveArmed && !disabled);
+
+  function handleDragOver(e: DragEvent<HTMLDivElement>) {
+    if (disabled) return;
+    const hasFiles = Array.from(e.dataTransfer.types).includes("Files");
+    const hasPhoto = Array.from(e.dataTransfer.types).includes(PHOTO_DND_TYPE);
+    if (!hasFiles && !hasPhoto && !moveArmed) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = hasFiles ? "copy" : "move";
+    onDragOverChange(true);
+  }
+
+  function handleDragLeave(e: DragEvent<HTMLDivElement>) {
+    if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
+    onDragOverChange(false);
+  }
+
+  function handleDrop(e: DragEvent<HTMLDivElement>) {
+    e.preventDefault();
+    onDragOverChange(false);
+    if (disabled) return;
+
+    const photoId =
+      e.dataTransfer.getData(PHOTO_DND_TYPE) || movingPhotoId || "";
+    const files = imageFilesFromDataTransfer(e.dataTransfer);
+
+    if (photoId) {
+      onDropPhoto(photoId);
+      return;
+    }
+    if (files.length > 0) {
+      onDropFiles(files);
+    }
+  }
+
+  function handleSectionActivate() {
+    if (disabled || !movingPhotoId) return;
+    onDropPhoto(movingPhotoId);
+  }
 
   return (
     <div
-      className={`rounded-2xl border p-4 ${
-        tone === "private"
-          ? "border-amber-200/80 bg-amber-50/40"
-          : "border-[var(--border)] bg-white"
-      }`}
+      role="region"
+      aria-label={title}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+      onClick={moveArmed ? handleSectionActivate : undefined}
+      className={`rounded-2xl border p-4 transition ${
+        isDropTarget
+          ? "border-[var(--accent)] bg-[var(--accent-soft)] ring-2 ring-[var(--accent)]"
+          : tone === "private"
+            ? "border-amber-200/80 bg-amber-50/40"
+            : "border-[var(--border)] bg-white"
+      } ${moveArmed ? "cursor-pointer" : ""}`}
     >
       <div className="mb-2 flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0 flex-1 space-y-1">
@@ -790,11 +1052,19 @@ function PhotoGroup({
               {description}
             </p>
           ) : null}
+          <p className="text-xs text-[var(--muted)]">
+            {moveArmed
+              ? "Tap or drop here to move the photo"
+              : "Drop images here to upload"}
+          </p>
         </div>
         <button
           type="button"
           disabled={disabled}
-          onClick={onAdd}
+          onClick={(e) => {
+            e.stopPropagation();
+            onAdd();
+          }}
           className="shrink-0 rounded-lg border border-[var(--accent)] bg-white px-3 py-2 text-sm font-semibold text-[var(--accent)] hover:bg-[var(--accent-soft)] disabled:opacity-50"
         >
           {addLabel}
@@ -804,57 +1074,24 @@ function PhotoGroup({
         <p className="text-sm text-[var(--muted)]">{empty}</p>
       ) : (
         <ul className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
-          {photos.map((photo) => {
-            const deleting = deletingPhotoId === photo.id;
-            const promoting = promotePhotoId === photo.id;
-            return (
-              <li
-                key={photo.id}
-                className={`relative overflow-hidden rounded-xl ring-1 ${
-                  promoting
-                    ? "ring-2 ring-[var(--accent)]"
-                    : "ring-[var(--border)]"
-                }`}
-              >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={
-                    photo.processedSignedUrl ?? photo.signedUrl ?? undefined
-                  }
-                  alt={photoRoleLabel(photo.role)}
-                  className="aspect-square w-full object-cover"
-                />
-                <div className="space-y-1 bg-white px-2 py-1.5">
-                  <p className="min-w-0 truncate text-sm text-[var(--muted)]">
-                    {photoRoleLabel(photo.role)}
-                    {isNonPostingPhotoRole(photo.role) ? " · private" : ""}
-                  </p>
-                  <div className="flex flex-wrap items-center gap-1">
-                    {onUseInListing ? (
-                      <button
-                        type="button"
-                        disabled={disabled}
-                        onClick={() => onUseInListing(photo.id)}
-                        className="rounded-md px-2 py-1 text-sm font-semibold text-[var(--accent)] hover:bg-[var(--accent-soft)] disabled:opacity-50"
-                      >
-                        {promoting ? "Choosing…" : "Use in listing"}
-                      </button>
-                    ) : null}
-                    <button
-                      type="button"
-                      disabled={disabled}
-                      onClick={() => onDelete(photo.id)}
-                      className="rounded-md px-2 py-1 text-sm font-semibold text-[var(--danger)] hover:bg-red-50 disabled:opacity-50"
-                      aria-label={`Delete ${photoRoleLabel(photo.role)} photo`}
-                    >
-                      {deleting ? "…" : "Delete"}
-                    </button>
-                  </div>
-                </div>
-              </li>
-            );
-          })}
-          <li>
+          {photos.map((photo) => (
+            <PhotoTile
+              key={photo.id}
+              photo={photo}
+              deleting={deletingPhotoId === photo.id}
+              promoting={promotePhotoId === photo.id}
+              moving={movingPhotoId === photo.id}
+              disabled={disabled}
+              onUseInListing={
+                onUseInListing
+                  ? () => onUseInListing(photo.id)
+                  : undefined
+              }
+              onDelete={() => onDelete(photo.id)}
+              onBeginMove={() => onBeginMove(photo.id)}
+            />
+          ))}
+          <li onClick={(e) => e.stopPropagation()}>
             <button
               type="button"
               disabled={disabled}
@@ -870,12 +1107,167 @@ function PhotoGroup({
         <button
           type="button"
           disabled={disabled}
-          onClick={onAdd}
+          onClick={(e) => {
+            e.stopPropagation();
+            onAdd();
+          }}
           className="mt-3 flex min-h-28 w-full flex-col items-center justify-center rounded-xl border-2 border-dashed border-[var(--border)] bg-white text-base font-semibold text-[var(--accent)] hover:border-[var(--accent)] disabled:opacity-50"
         >
           + {addLabel}
         </button>
       ) : null}
+      {/* section id kept for debugging / a11y context */}
+      <span className="sr-only">{section}</span>
     </div>
+  );
+}
+
+function PhotoTile({
+  photo,
+  deleting,
+  promoting,
+  moving,
+  disabled,
+  onUseInListing,
+  onDelete,
+  onBeginMove,
+}: {
+  photo: ListingPhotoWithUrl;
+  deleting: boolean;
+  promoting: boolean;
+  moving: boolean;
+  disabled?: boolean;
+  onUseInListing?: () => void;
+  onDelete: () => void;
+  onBeginMove: () => void;
+}) {
+  const longPressTimer = useRef<number | null>(null);
+  const longPressTriggered = useRef(false);
+  const [draggable, setDraggable] = useState(false);
+
+  function clearLongPress() {
+    if (longPressTimer.current != null) {
+      window.clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+  }
+
+  function handlePointerDown(e: ReactPointerEvent<HTMLLIElement>) {
+    if (disabled) return;
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+    longPressTriggered.current = false;
+    clearLongPress();
+    longPressTimer.current = window.setTimeout(() => {
+      longPressTriggered.current = true;
+      setDraggable(true);
+      onBeginMove();
+      try {
+        if (typeof navigator !== "undefined" && "vibrate" in navigator) {
+          navigator.vibrate(12);
+        }
+      } catch {
+        /* ignore */
+      }
+    }, LONG_PRESS_MS);
+  }
+
+  function handlePointerUp() {
+    clearLongPress();
+  }
+
+  function handlePointerCancel() {
+    clearLongPress();
+  }
+
+  function handleDragStart(e: DragEvent<HTMLLIElement>) {
+    if (!draggable && !moving) {
+      e.preventDefault();
+      return;
+    }
+    e.dataTransfer.setData(PHOTO_DND_TYPE, photo.id);
+    e.dataTransfer.effectAllowed = "move";
+    onBeginMove();
+  }
+
+  function handleDragEnd() {
+    setDraggable(false);
+  }
+
+  return (
+    <li
+      draggable={draggable || moving}
+      onPointerDown={handlePointerDown}
+      onPointerUp={handlePointerUp}
+      onPointerCancel={handlePointerCancel}
+      onDragStart={handleDragStart}
+      onDragEnd={handleDragEnd}
+      onClick={(e) => {
+        if (moving) {
+          e.stopPropagation();
+          if (longPressTriggered.current) {
+            longPressTriggered.current = false;
+          }
+          return;
+        }
+        // While another photo is being moved, let the click hit the section drop target.
+        if (!longPressTriggered.current) {
+          return;
+        }
+        e.stopPropagation();
+        longPressTriggered.current = false;
+      }}
+      className={`relative overflow-hidden rounded-xl ring-1 select-none ${
+        moving || promoting
+          ? "ring-2 ring-[var(--accent)]"
+          : "ring-[var(--border)]"
+      } ${moving ? "opacity-80" : ""} ${disabled ? "opacity-60" : "cursor-grab active:cursor-grabbing"}`}
+      style={{ touchAction: "manipulation" }}
+      title="Long-press, then drop on another section to move"
+    >
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={photo.processedSignedUrl ?? photo.signedUrl ?? undefined}
+        alt={photoRoleLabel(photo.role)}
+        className="pointer-events-none aspect-square w-full object-cover"
+        draggable={false}
+      />
+      <div
+        className="space-y-1 bg-white px-2 py-1.5"
+        onPointerDown={(e) => e.stopPropagation()}
+      >
+        <p className="min-w-0 truncate text-sm text-[var(--muted)]">
+          {photoRoleLabel(photo.role)}
+          {isNonPostingPhotoRole(photo.role) ? " · private" : ""}
+          {moving ? " · moving" : ""}
+        </p>
+        <div className="flex flex-wrap items-center gap-1">
+          {onUseInListing ? (
+            <button
+              type="button"
+              disabled={disabled}
+              onClick={(e) => {
+                e.stopPropagation();
+                onUseInListing();
+              }}
+              className="rounded-md px-2 py-1 text-sm font-semibold text-[var(--accent)] hover:bg-[var(--accent-soft)] disabled:opacity-50"
+            >
+              {promoting ? "Choosing…" : "Use in listing"}
+            </button>
+          ) : null}
+          <button
+            type="button"
+            disabled={disabled}
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete();
+            }}
+            className="rounded-md px-2 py-1 text-sm font-semibold text-[var(--danger)] hover:bg-red-50 disabled:opacity-50"
+            aria-label={`Delete ${photoRoleLabel(photo.role)} photo`}
+          >
+            {deleting ? "…" : "Delete"}
+          </button>
+        </div>
+      </div>
+    </li>
   );
 }

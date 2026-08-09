@@ -363,6 +363,47 @@ export async function updatePhoto(
   return data as ListingPhoto;
 }
 
+export async function moveListingPhoto(
+  listingId: string,
+  photoId: string,
+  role: PhotoRole
+): Promise<ListingPhoto> {
+  const photo = await getListingPhoto(listingId, photoId);
+  if (!photo) {
+    throw new Error("Photo not found");
+  }
+  if (photo.role === role) {
+    return photo;
+  }
+
+  const supabase = createAdminClient();
+  const { count, error: countError } = await supabase
+    .from("listing_photos")
+    .select("id", { count: "exact", head: true })
+    .eq("listing_id", listingId)
+    .eq("role", role);
+
+  if (countError) throw new Error(`moveListingPhoto count: ${countError.message}`);
+
+  const base = (ROLE_SORT[role] ?? 99) * 1000;
+  const updated = await updatePhoto(photoId, {
+    role,
+    sort_order: base + (count ?? 0),
+  });
+
+  const listing = await getListing(listingId);
+  if (
+    listing?.cover_processed_path &&
+    photo.role === "cover" &&
+    role !== "cover" &&
+    listing.cover_processed_path === photo.processed_path
+  ) {
+    await updateListing(listingId, { cover_processed_path: null });
+  }
+
+  return updated;
+}
+
 export async function getListingPhoto(
   listingId: string,
   photoId: string
