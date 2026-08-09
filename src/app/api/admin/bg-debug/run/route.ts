@@ -28,8 +28,10 @@ export const maxDuration = 300;
 type RunBody = {
   photoId?: string;
   modelIds?: string[];
-  /** Composite transparent results onto white for easier comparison. */
+  /** Composite transparent results onto a solid color for comparison. */
   compositeWhite?: boolean;
+  /** Preferred over compositeWhite when set: none | white | dark */
+  compositeBackdrop?: "none" | "white" | "dark";
   /** Re-fetch fal billing for saved results that are missing actual cost. */
   refreshCosts?: boolean;
 };
@@ -70,7 +72,10 @@ async function downloadImageBuffer(imageUrl: string): Promise<Buffer> {
   return Buffer.from(await res.arrayBuffer());
 }
 
-async function maybeCompositeWhiteBuffer(buf: Buffer): Promise<Buffer> {
+async function maybeCompositeBuffer(
+  buf: Buffer,
+  background: { r: number; g: number; b: number }
+): Promise<Buffer> {
   const meta = await sharp(buf).metadata();
   if (!meta.hasAlpha || !meta.width || !meta.height) {
     return buf;
@@ -81,13 +86,18 @@ async function maybeCompositeWhiteBuffer(buf: Buffer): Promise<Buffer> {
       width: meta.width,
       height: meta.height,
       channels: 3,
-      background: { r: 255, g: 255, b: 255 },
+      background,
     },
   })
     .composite([{ input: await sharp(buf).png().toBuffer(), blend: "over" }])
     .png()
     .toBuffer();
 }
+
+const LAB_BACKDROPS = {
+  white: { r: 255, g: 255, b: 255 },
+  dark: { r: 63, g: 63, b: 70 }, // zinc-700 — dark grey for edge review
+} as const;
 
 function formatCostUsd(value: number | null | undefined): string | null {
   if (value == null || Number.isNaN(value) || !Number.isFinite(value)) {
@@ -179,7 +189,16 @@ export async function POST(request: Request) {
 
   const photoId = body.photoId?.trim();
   const modelIds = Array.isArray(body.modelIds) ? body.modelIds : [];
-  const compositeWhite = body.compositeWhite !== false;
+  const compositeBackdrop: "none" | "white" | "dark" =
+    body.compositeBackdrop === "none" ||
+    body.compositeBackdrop === "white" ||
+    body.compositeBackdrop === "dark"
+      ? body.compositeBackdrop
+      : body.compositeWhite === false
+        ? "none"
+        : "white";
+  const bakeComposite = compositeBackdrop !== "none";
+  const compositeWhite = compositeBackdrop === "white";
 
   if (!photoId) {
     return NextResponse.json({ error: "photoId is required" }, { status: 400 });
@@ -298,7 +317,7 @@ export async function POST(request: Request) {
       photoId,
       listingId: photo.listing_id,
       runByUserId: auth.user.id,
-      compositeWhite,
+      compositeWhite: bakeComposite && compositeBackdrop === "white",
     });
 
     const results: ModelRunResult[] = [];
@@ -343,8 +362,11 @@ export async function POST(request: Request) {
           throw new Error("No image URL in fal response");
         }
         let outBuf = await downloadImageBuffer(remoteUrl);
-        if (compositeWhite && !model.solidBackground) {
-          outBuf = await maybeCompositeWhiteBuffer(outBuf);
+        if (bakeComposite && !model.solidBackground) {
+          outBuf = await maybeCompositeBuffer(
+            outBuf,
+            LAB_BACKDROPS[compositeBackdrop === "dark" ? "dark" : "white"]
+          );
         }
 
         const billing = await resolveFalCost({

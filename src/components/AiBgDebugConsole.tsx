@@ -1,6 +1,6 @@
 "use client";
 
-import { startTransition, useEffect, useMemo, useState } from "react";
+import { startTransition, useEffect, useMemo, useState, type CSSProperties } from "react";
 import Link from "next/link";
 import { BigButton } from "@/components/BigButton";
 import type { FalBgModelDef, FalBgModelId } from "@/lib/ai/fal-bg-models";
@@ -58,12 +58,25 @@ type PreviewImage = {
   label: string;
 };
 
+type LabBackdrop = "white" | "dark";
+
+const LAB_BACKDROP_CSS: Record<LabBackdrop, string> = {
+  white: "#ffffff",
+  dark: "#3f3f46",
+};
+
 const CHECKERBOARD_STYLE = {
   backgroundImage:
     "linear-gradient(45deg,#eee 25%,transparent 25%),linear-gradient(-45deg,#eee 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#eee 75%),linear-gradient(-45deg,transparent 75%,#eee 75%)",
   backgroundSize: "16px 16px",
   backgroundPosition: "0 0,0 8px,8px -8px,-8px 0",
 } as const;
+
+function resultBackdropStyle(backdrop: LabBackdrop): CSSProperties {
+  return {
+    backgroundColor: LAB_BACKDROP_CSS[backdrop],
+  };
+}
 
 const ROLE_FILTERS: Array<PhotoRole | "all"> = [
   "all",
@@ -229,7 +242,8 @@ export function AiBgDebugConsole({
   const [selectedModels, setSelectedModels] = useState<Set<FalBgModelId>>(
     () => new Set(models.filter((m) => m.defaultSelected).map((m) => m.id)),
   );
-  const [compositeWhite, setCompositeWhite] = useState(true);
+  const [labBackdrop, setLabBackdrop] = useState<LabBackdrop>("white");
+  const [bakeComposite, setBakeComposite] = useState(true);
   const [history, setHistory] = useState<SavedRun[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [refreshingCosts, setRefreshingCosts] = useState(false);
@@ -376,7 +390,7 @@ export function AiBgDebugConsole({
         body: JSON.stringify({
           photoId: selectedPhoto.id,
           modelIds: [...selectedModels],
-          compositeWhite,
+          compositeBackdrop: bakeComposite ? labBackdrop : "none",
         }),
       });
       const json = await res.json();
@@ -674,14 +688,45 @@ export function AiBgDebugConsole({
               })}
             </ul>
 
-            <label className="mt-4 flex items-center gap-2 text-sm text-[var(--foreground)]">
-              <input
-                type="checkbox"
-                checked={compositeWhite}
-                onChange={(e) => setCompositeWhite(e.target.checked)}
-              />
-              Composite transparent cutouts onto white for comparison
-            </label>
+            <div className="mt-4 space-y-3">
+              <div>
+                <p className="text-sm font-semibold text-[var(--foreground)]">
+                  Edge review backdrop
+                </p>
+                <p className="mt-1 text-xs text-[var(--muted)]">
+                  Dark grey makes soft/jagged cut edges easier to see.
+                </p>
+                <div className="mt-2 inline-flex rounded-lg border border-[var(--border)] p-0.5">
+                  {(
+                    [
+                      { id: "white", label: "White" },
+                      { id: "dark", label: "Dark grey" },
+                    ] as const
+                  ).map((option) => (
+                    <button
+                      key={option.id}
+                      type="button"
+                      onClick={() => setLabBackdrop(option.id)}
+                      className={`rounded-md px-3 py-1.5 text-sm font-semibold transition ${
+                        labBackdrop === option.id
+                          ? "bg-[var(--accent)] text-white"
+                          : "text-[var(--foreground)] hover:bg-[var(--surface-muted)]"
+                      }`}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <label className="flex items-center gap-2 text-sm text-[var(--foreground)]">
+                <input
+                  type="checkbox"
+                  checked={bakeComposite}
+                  onChange={(e) => setBakeComposite(e.target.checked)}
+                />
+                Bake this backdrop into saved transparent cutouts
+              </label>
+            </div>
 
             <div className="mt-4 max-w-sm">
               <BigButton
@@ -716,6 +761,27 @@ export function AiBgDebugConsole({
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
+              <div className="inline-flex rounded-lg border border-[var(--border)] p-0.5">
+                {(
+                  [
+                    { id: "white", label: "White" },
+                    { id: "dark", label: "Dark grey" },
+                  ] as const
+                ).map((option) => (
+                  <button
+                    key={option.id}
+                    type="button"
+                    onClick={() => setLabBackdrop(option.id)}
+                    className={`rounded-md px-2.5 py-1 text-xs font-semibold transition ${
+                      labBackdrop === option.id
+                        ? "bg-[var(--accent)] text-white"
+                        : "text-[var(--foreground)] hover:bg-[var(--surface-muted)]"
+                    }`}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
               {historyLoading ? (
                 <span className="text-sm text-[var(--muted)]">Loading…</span>
               ) : null}
@@ -819,7 +885,7 @@ export function AiBgDebugConsole({
                           src={result.imageUrl}
                           alt={entry.label}
                           className="aspect-square w-full object-contain"
-                          style={CHECKERBOARD_STYLE}
+                          style={resultBackdropStyle(labBackdrop)}
                         />
                         <div className="pointer-events-none absolute left-2 top-2 z-10">
                           <CostBadge result={result} size="sm" />
@@ -847,6 +913,7 @@ export function AiBgDebugConsole({
         <ImageLightbox
           src={preview.src}
           label={preview.label}
+          backdrop={labBackdrop}
           onClose={() => setPreview(null)}
         />
       ) : null}
@@ -895,10 +962,12 @@ function MagnifyButton({
 function ImageLightbox({
   src,
   label,
+  backdrop = "white",
   onClose,
 }: {
   src: string;
   label: string;
+  backdrop?: LabBackdrop;
   onClose: () => void;
 }) {
   useEffect(() => {
@@ -938,7 +1007,7 @@ function ImageLightbox({
           src={src}
           alt={label}
           className="max-h-[min(90vh,1100px)] max-w-[min(96vw,1100px)] rounded-lg object-contain shadow-2xl"
-          style={CHECKERBOARD_STYLE}
+          style={resultBackdropStyle(backdrop)}
         />
         <p className="rounded-lg bg-black/50 px-3 py-1 text-sm font-medium text-white">
           {label}
