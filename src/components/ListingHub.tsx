@@ -832,40 +832,15 @@ export function ListingHub({ listingId }: ListingHubProps) {
         />
 
         {promotePhotoId ? (
-          <div className="rounded-2xl border border-[var(--border)] bg-white p-4">
-            <p className="mb-3 text-base font-semibold text-[var(--foreground)]">
-              Use this photo in the listing as…
-            </p>
-            <p className="mb-3 text-sm text-[var(--muted)]">
-              Keeps the original private photo and adds a copy for shoppers.
-            </p>
-            <div className="grid gap-2 sm:grid-cols-2 md:grid-cols-3">
-              {LISTING_ROLES.map((role) => (
-                <button
-                  key={role}
-                  type="button"
-                  disabled={promotingPhoto}
-                  onClick={() =>
-                    void addPhotoToListing(promotePhotoId, role)
-                  }
-                  className="touch-target rounded-xl border border-[var(--border)] px-4 py-3 text-left text-base font-semibold hover:bg-[var(--surface-muted)] disabled:opacity-50"
-                >
-                  {photoRoleLabel(role)}
-                  <span className="mt-1 block text-sm font-normal text-[var(--muted)]">
-                    {roleCountLabel(photos, role)}
-                  </span>
-                </button>
-              ))}
-            </div>
-            <button
-              type="button"
-              disabled={promotingPhoto}
-              className="mt-3 text-base font-semibold text-[var(--muted)] disabled:opacity-50"
-              onClick={() => setPromotePhotoId(null)}
-            >
-              Cancel
-            </button>
-          </div>
+          <PhotoRolePickerDialog
+            title="Use this photo in the listing as…"
+            description="Keeps the original private photo and adds a copy for shoppers. Pick a type below."
+            roles={LISTING_ROLES}
+            roleHint={(role) => roleCountLabel(photos, role)}
+            disabled={promotingPhoto}
+            onPick={(role) => void addPhotoToListing(promotePhotoId, role)}
+            onClose={() => setPromotePhotoId(null)}
+          />
         ) : null}
 
         <div className="space-y-3">
@@ -876,7 +851,7 @@ export function ListingHub({ listingId }: ListingHubProps) {
             photos={listingPhotos}
             empty="No listing photos yet — drop images here or start with a clean cover shot."
             section="listing"
-            onAdd={() => setPickListingRole((open) => !open)}
+            onAdd={() => setPickListingRole(true)}
             onDelete={(photoId) => void deletePhoto(photoId)}
             onPreview={setPreviewPhoto}
             onDropFiles={(files) => void uploadFilesToSection(files, "listing")}
@@ -895,42 +870,19 @@ export function ListingHub({ listingId }: ListingHubProps) {
             }
             tone="listing"
           />
-          {pickListingRole ? (
-            <div className="rounded-2xl border border-[var(--border)] bg-white p-4">
-              <p className="mb-3 text-base font-semibold text-[var(--foreground)]">
-                Which listing photo?
-              </p>
-              <p className="mb-3 text-sm text-[var(--muted)]">
-                Pick a type — you can add as many of each as you want.
-              </p>
-              <div className="grid gap-2 sm:grid-cols-2 md:grid-cols-3">
-                {LISTING_ROLES.map((role) => (
-                  <button
-                    key={role}
-                    type="button"
-                    disabled={uploading}
-                    onClick={() => {
-                      pickFilesForRole(role);
-                    }}
-                    className="touch-target rounded-xl border border-[var(--border)] px-4 py-3 text-left text-base font-semibold hover:bg-[var(--surface-muted)]"
-                  >
-                    {photoRoleLabel(role)}
-                    <span className="mt-1 block text-sm font-normal text-[var(--muted)]">
-                      {roleCountLabel(photos, role)}
-                    </span>
-                  </button>
-                ))}
-              </div>
-              <button
-                type="button"
-                className="mt-3 text-base font-semibold text-[var(--muted)]"
-                onClick={() => setPickListingRole(false)}
-              >
-                Cancel
-              </button>
-            </div>
-          ) : null}
         </div>
+
+        {pickListingRole ? (
+          <PhotoRolePickerDialog
+            title="Which listing photo?"
+            description="Pick a type for the photo you’re adding — you can add as many of each as you want."
+            roles={LISTING_ROLES}
+            roleHint={(role) => roleCountLabel(photos, role)}
+            disabled={uploading}
+            onPick={(role) => pickFilesForRole(role)}
+            onClose={() => setPickListingRole(false)}
+          />
+        ) : null}
 
         <p className="text-base text-[var(--muted)]">
           For the step-by-step photo coach, scan the phone QR above. On this
@@ -1429,6 +1381,96 @@ function PhotoTile({
         </div>
       </div>
     </li>
+  );
+}
+
+function PhotoRolePickerDialog({
+  title,
+  description,
+  roles,
+  roleHint,
+  disabled,
+  onPick,
+  onClose,
+}: {
+  title: string;
+  description: string;
+  roles: PhotoRole[];
+  roleHint: (role: PhotoRole) => string | null;
+  disabled?: boolean;
+  onPick: (role: PhotoRole) => void;
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape" && !disabled) onClose();
+    }
+    window.addEventListener("keydown", onKeyDown);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      document.body.style.overflow = prev;
+    };
+  }, [disabled, onClose]);
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="photo-role-picker-title"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-[2px]"
+      onClick={() => {
+        if (!disabled) onClose();
+      }}
+    >
+      <div
+        className="ra-focus-pop w-full max-w-lg rounded-2xl border-2 border-[var(--accent)] bg-[var(--surface)] p-5 shadow-2xl sm:p-6"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <p className="text-sm font-semibold uppercase tracking-wide text-[var(--accent)]">
+          Choose photo type
+        </p>
+        <h2
+          id="photo-role-picker-title"
+          className="mt-1 font-[family-name:var(--font-brand)] text-3xl text-[var(--foreground)]"
+        >
+          {title}
+        </h2>
+        <p className="mt-2 text-base text-[var(--muted)]">{description}</p>
+
+        <div className="mt-5 grid gap-2 sm:grid-cols-2">
+          {roles.map((role) => {
+            const hint = roleHint(role);
+            return (
+              <button
+                key={role}
+                type="button"
+                disabled={disabled}
+                onClick={() => onPick(role)}
+                className="touch-target rounded-xl border-2 border-[var(--border)] bg-white px-4 py-3 text-left text-base font-semibold text-[var(--foreground)] transition hover:border-[var(--accent)] hover:bg-[var(--accent-soft)] disabled:opacity-50"
+              >
+                {photoRoleLabel(role)}
+                {hint ? (
+                  <span className="mt-1 block text-sm font-normal text-[var(--muted)]">
+                    {hint}
+                  </span>
+                ) : null}
+              </button>
+            );
+          })}
+        </div>
+
+        <button
+          type="button"
+          disabled={disabled}
+          className="mt-5 touch-target w-full rounded-xl border border-[var(--border)] bg-white px-4 py-3 text-base font-semibold text-[var(--muted)] disabled:opacity-50"
+          onClick={onClose}
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
   );
 }
 
