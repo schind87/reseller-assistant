@@ -88,14 +88,21 @@ export async function POST(request: Request, context: RouteContext) {
         keepHanger: true,
       });
 
-      if (!processed) {
+      if (!processed.ok) {
+        // Don't leave the opt-in flag on if processing failed.
+        updated = await updatePhoto(photoId, { replace_background: false });
+        const message =
+          processed.reason === "missing_fal_key"
+            ? "Clean background needs FAL_KEY on the server. Add it in Vercel → Settings → Environment Variables, then redeploy."
+            : processed.detail ||
+              "Background replacement failed. Try again in a moment.";
         return NextResponse.json(
           {
-            error:
-              "Background replacement unavailable. Check FAL_KEY, or try again.",
+            error: message,
+            reason: processed.reason,
             photo: await withUrls(updated),
           },
-          { status: 502 }
+          { status: processed.reason === "missing_fal_key" ? 503 : 502 }
         );
       }
 

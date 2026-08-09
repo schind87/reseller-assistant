@@ -48,7 +48,7 @@ Open [http://localhost:3000](http://localhost:3000) → email code sign-in (or e
 | `OPENROUTER_IDENTIFY_MODEL` | no | Default `google/gemini-2.5-pro` |
 | `OPENROUTER_DRAFT_MODEL` | no | Default `openai/gpt-4o` |
 | `OPENAI_API_KEY` | no | Fallback if OpenRouter is unset |
-| `FAL_KEY` | no | Without it, per-photo Clean bg is skipped |
+| `FAL_KEY` | **yes for Clean bg** | fal.ai API key — without it, Clean background returns an error |
 
 ## Domain
 

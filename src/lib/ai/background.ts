@@ -230,11 +230,33 @@ async function buildUnionAlpha(params: {
  * Replace the photo background with a solid color while keeping the garment
  * (and optionally the full hanger) intact.
  */
+export type ReplaceBackgroundSuccess = {
+  ok: true;
+  bytes: Buffer;
+  contentType: string;
+};
+
+export type ReplaceBackgroundFailure = {
+  ok: false;
+  reason: "missing_fal_key" | "fal_failed" | "process_failed";
+  detail?: string;
+};
+
+export type ReplaceBackgroundResult =
+  | ReplaceBackgroundSuccess
+  | ReplaceBackgroundFailure;
+
 export async function replaceBackground(
   imageUrl: string,
   options: ReplaceBackgroundOptions = {}
-): Promise<{ bytes: Buffer; contentType: string } | null> {
-  if (!falKey()) return null;
+): Promise<ReplaceBackgroundResult> {
+  if (!falKey()) {
+    return {
+      ok: false,
+      reason: "missing_fal_key",
+      detail: "FAL_KEY is not configured on the server.",
+    };
+  }
 
   const backgroundColor = normalizeHexColor(options.backgroundColor);
   const keepHanger = options.keepHanger !== false;
@@ -242,17 +264,35 @@ export async function replaceBackground(
 
   try {
     const originalBytes = await fetchImageBytes(imageUrl);
-    if (!originalBytes) return null;
+    if (!originalBytes) {
+      return {
+        ok: false,
+        reason: "process_failed",
+        detail: "Could not download the original photo.",
+      };
+    }
 
     const [{ cutoutUrl, maskUrl }, hangerMaskUrl] = await Promise.all([
       birefnetCutoutAndMask(imageUrl),
       keepHanger ? segmentHangerMask(imageUrl) : Promise.resolve(null),
     ]);
 
-    if (!cutoutUrl) return null;
+    if (!cutoutUrl) {
+      return {
+        ok: false,
+        reason: "fal_failed",
+        detail: "fal.ai garment cutout failed. Check FAL_KEY and fal.ai status.",
+      };
+    }
 
     const cutout = await fetchImageBytes(cutoutUrl);
-    if (!cutout) return null;
+    if (!cutout) {
+      return {
+        ok: false,
+        reason: "fal_failed",
+        detail: "Could not download the fal.ai cutout.",
+      };
+    }
 
     const [birefnetMask, hangerMask] = await Promise.all([
       maskUrl ? fetchImageBytes(maskUrl) : Promise.resolve(null),
@@ -262,7 +302,13 @@ export async function replaceBackground(
     const meta = await sharp(Buffer.from(originalBytes.bytes)).metadata();
     const width = meta.width ?? 0;
     const height = meta.height ?? 0;
-    if (!width || !height) return null;
+    if (!width || !height) {
+      return {
+        ok: false,
+        reason: "process_failed",
+        detail: "Photo has no readable dimensions.",
+      };
+    }
 
     const alpha = await buildUnionAlpha({
       width,
@@ -302,11 +348,16 @@ export async function replaceBackground(
       .toBuffer();
 
     return {
+      ok: true,
       bytes: composed,
       contentType: "image/png",
     };
   } catch (err) {
     console.error("replaceBackground failed:", err);
-    return null;
+    return {
+      ok: false,
+      reason: "process_failed",
+      detail: err instanceof Error ? err.message : "Background compose failed.",
+    };
   }
 }

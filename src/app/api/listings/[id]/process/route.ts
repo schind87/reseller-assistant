@@ -107,7 +107,15 @@ export async function POST(_request: Request, context: RouteContext) {
       const downloaded = await replaceBackground(entry.url, {
         keepHanger: true,
       });
-      if (!downloaded) continue;
+      if (!downloaded.ok) {
+        console.warn(
+          "replaceBackground skipped:",
+          entry.photo.id,
+          downloaded.reason,
+          downloaded.detail
+        );
+        continue;
+      }
 
       const processedPath = `${id}/${entry.photo.role}-bg-${uuidv4()}.png`;
       const { error: uploadError } = await supabase.storage
