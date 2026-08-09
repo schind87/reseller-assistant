@@ -31,7 +31,26 @@ export function falDashboardUrl(requestId?: string | null): string {
 }
 
 /**
+ * fal queue status/result URLs are rooted at owner/alias (first two segments),
+ * even when the submit path is deeper (e.g. fal-ai/birefnet/v2).
+ */
+function queueAppRoot(endpointId: string): string {
+  const parts = endpointId.split("/").filter(Boolean);
+  if (parts.length >= 2) return `${parts[0]}/${parts[1]}`;
+  return endpointId;
+}
+
+type QueueSubmitResponse = {
+  request_id?: string;
+  status_url?: string;
+  response_url?: string;
+  // Older responses sometimes omit the trailing /response
+  // and only expose request_id for us to build URLs.
+};
+
+/**
  * Submit via fal queue so we always get a request_id for billing lookup.
+ * Uses status_url / response_url from the submit payload when present.
  */
 export async function falQueueInfer(
   path: string,
@@ -40,42 +59,76 @@ export async function falQueueInfer(
   const key = falKey();
   if (!key) throw new Error("FAL_KEY is not configured");
 
+  const authHeaders = {
+    Authorization: `Key ${key}`,
+    "Content-Type": "application/json",
+  };
+
   const submit = await fetch(`https://queue.fal.run/${path}`, {
     method: "POST",
-    headers: {
-      Authorization: `Key ${key}`,
-      "Content-Type": "application/json",
-    },
+    headers: authHeaders,
     body: JSON.stringify(body),
   });
 
   if (!submit.ok) {
     const text = await submit.text().catch(() => "");
-    throw new Error(`fal queue submit ${path} ${submit.status}: ${text.slice(0, 400)}`);
+    // Fall back to sync fal.run when queue submit is unavailable for the model.
+    if (submit.status === 404 || submit.status === 405) {
+      return falSyncInfer(path, body);
+    }
+    throw new Error(
+      `fal queue submit ${path} ${submit.status}: ${text.slice(0, 400)}`
+    );
   }
 
-  const submitted = (await submit.json()) as { request_id?: string };
+  const submitted = (await submit.json()) as QueueSubmitResponse;
   const requestId = submitted.request_id;
   if (!requestId) {
     throw new Error(`fal queue submit missing request_id for ${path}`);
   }
 
+  const appRoot = queueAppRoot(path);
+  const statusCandidates = [
+    submitted.status_url?.trim(),
+    `https://queue.fal.run/${appRoot}/requests/${requestId}/status`,
+    // Full endpoint path — works for 2-segment apps; nested apps often 405 here.
+    `https://queue.fal.run/${path}/requests/${requestId}/status`,
+  ].filter((u, i, arr): u is string => Boolean(u) && arr.indexOf(u) === i);
+
+  const responseCandidates = [
+    submitted.response_url?.trim(),
+    `https://queue.fal.run/${appRoot}/requests/${requestId}`,
+    `https://queue.fal.run/${appRoot}/requests/${requestId}/response`,
+    `https://queue.fal.run/${path}/requests/${requestId}`,
+    `https://queue.fal.run/${path}/requests/${requestId}/response`,
+  ].filter((u, i, arr): u is string => Boolean(u) && arr.indexOf(u) === i);
+
+  let statusUrl = statusCandidates[0]!;
   const started = Date.now();
-  const timeoutMs = 90_000;
+  const timeoutMs = 120_000;
+  let statusUrlIndex = 0;
 
   while (Date.now() - started < timeoutMs) {
-    const statusRes = await fetch(
-      `https://queue.fal.run/${path}/requests/${requestId}/status`,
-      {
-        headers: { Authorization: `Key ${key}` },
-      }
-    );
+    const statusRes = await fetch(statusUrl, {
+      method: "GET",
+      headers: { Authorization: `Key ${key}` },
+    });
+
     if (!statusRes.ok) {
       const text = await statusRes.text().catch(() => "");
+      if (
+        (statusRes.status === 404 || statusRes.status === 405) &&
+        statusUrlIndex < statusCandidates.length - 1
+      ) {
+        statusUrlIndex += 1;
+        statusUrl = statusCandidates[statusUrlIndex]!;
+        continue;
+      }
       throw new Error(
         `fal queue status ${path} ${statusRes.status}: ${text.slice(0, 400)}`
       );
     }
+
     const status = (await statusRes.json()) as {
       status?: string;
       error?: string;
@@ -83,20 +136,26 @@ export async function falQueueInfer(
 
     switch (status.status) {
       case "COMPLETED": {
-        const resultRes = await fetch(
-          `https://queue.fal.run/${path}/requests/${requestId}`,
-          { headers: { Authorization: `Key ${key}` } }
-        );
-        if (!resultRes.ok) {
+        let lastError = "No response URL worked";
+        for (const responseUrl of responseCandidates) {
+          const resultRes = await fetch(responseUrl, {
+            method: "GET",
+            headers: { Authorization: `Key ${key}` },
+          });
+          if (resultRes.ok) {
+            return { requestId, data: await resultRes.json() };
+          }
           const text = await resultRes.text().catch(() => "");
-          throw new Error(
-            `fal queue result ${path} ${resultRes.status}: ${text.slice(0, 400)}`
-          );
+          lastError = `fal queue result ${path} ${resultRes.status}: ${text.slice(0, 400)}`;
+          if (resultRes.status !== 404 && resultRes.status !== 405) {
+            throw new Error(lastError);
+          }
         }
-        return { requestId, data: await resultRes.json() };
+        throw new Error(lastError);
       }
       case "FAILED":
       case "CANCELLED":
+      case "CANCELED":
         throw new Error(
           status.error || `fal queue ${status.status?.toLowerCase()} for ${path}`
         );
@@ -109,6 +168,39 @@ export async function falQueueInfer(
   }
 
   throw new Error(`fal queue timed out for ${path} (${requestId})`);
+}
+
+/**
+ * Sync fal.run fallback. Still returns request_id from response headers when
+ * available so billing lookup can work.
+ */
+async function falSyncInfer(
+  path: string,
+  body: Record<string, unknown>
+): Promise<{ requestId: string; data: unknown }> {
+  const key = falKey();
+  if (!key) throw new Error("FAL_KEY is not configured");
+
+  const response = await fetch(`https://fal.run/${path}`, {
+    method: "POST",
+    headers: {
+      Authorization: `Key ${key}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    throw new Error(`fal.run ${path} ${response.status}: ${text.slice(0, 400)}`);
+  }
+
+  const requestId =
+    response.headers.get("x-fal-request-id") ||
+    response.headers.get("X-Fal-Request-Id") ||
+    `sync-${path}-${Date.now()}`;
+
+  return { requestId, data: await response.json() };
 }
 
 async function fetchPricingEstimate(
@@ -153,6 +245,7 @@ async function fetchBillingEvent(
 } | null> {
   const key = falKey();
   if (!key) return null;
+  if (requestId.startsWith("sync-")) return null;
 
   // Billing events can lag a second or two after completion.
   for (let attempt = 0; attempt < 6; attempt++) {
