@@ -106,13 +106,13 @@ function PhotosPageInner() {
           Take photos on your phone
         </h1>
         <p className="text-lg text-[var(--muted)]">
-          The guided photo coach is built for your phone camera. Scan the QR
+          The Phone Companion is built for your phone camera. Scan the QR
           code, or add photos from the listing hub on this computer.
         </p>
         {joinUrl ? (
           <QrPanel
             value={joinUrl}
-            title="Phone photo coach"
+            title="Phone Companion"
             hint="Scan anytime with your phone — this QR stays valid. Opens the step-by-step clothing photo guide."
             code={listing.join_code}
           />

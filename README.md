@@ -70,7 +70,7 @@ See [`extension/README.md`](extension/README.md).
 
 1. **Sign in** with email code (or email + your PIN)
 2. **Start listing** → choose Mercari or Poshmark
-3. Scan the **QR** on the laptop hub to open the phone photo coach
+3. Scan the **QR** on the laptop hub to open the Phone Companion
 4. Tag-first photos (brand/care optional) → item shots
 5. **Finish with AI** on the hub
 6. **Review** editable title/description/fields

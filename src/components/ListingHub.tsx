@@ -886,8 +886,8 @@ export function ListingHub({ listingId }: ListingHubProps) {
         {joinUrl ? (
           <QrPanel
             value={joinUrl}
-            title="Phone photo coach"
-            hint="Scan anytime with your phone to open the guided photo steps — this QR stays valid. Keep this computer on the listing hub."
+            title="Phone Companion"
+            hint="Scan anytime with your phone to open the Phone Companion — this QR stays valid. Keep this computer on the listing hub."
             code={listing.join_code}
           />
         ) : (
@@ -1045,7 +1045,7 @@ export function ListingHub({ listingId }: ListingHubProps) {
         ) : null}
 
         <p className="text-base text-[var(--muted)]">
-          For the step-by-step photo coach, scan the phone QR above. On this
+          For the Phone Companion, scan the QR above. On this
           computer, drop files onto sections, choose files with Add, or
           long-press to move photos — the camera stays on your phone.
         </p>

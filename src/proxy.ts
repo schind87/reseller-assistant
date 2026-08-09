@@ -40,7 +40,7 @@ export async function proxy(request: NextRequest) {
   const signedIn = isUserSession(session);
   const joinOk = isUnlocked(session) && session?.kind === "join";
 
-  // Phone QR sessions may only use the photo coach + its APIs (not the laptop hub).
+  // Phone QR sessions may only use the Phone Companion + its APIs (not the laptop hub).
   if (joinOk && !signedIn) {
     const photosPage = pathname.match(/^\/app\/listings\/([^/]+)\/photos\/?$/);
     const listingApi = pathname.match(

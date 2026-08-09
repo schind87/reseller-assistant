@@ -132,7 +132,7 @@ export function JoinTokenClient() {
         <p className="text-lg text-[var(--muted)]">
           {purpose === "extension"
             ? "Handing this listing to your Chrome extension."
-            : "Unlocking this phone and opening the photo coach."}
+            : "Unlocking this phone and opening the Phone Companion."}
         </p>
       )}
     </main>
