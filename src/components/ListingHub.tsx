@@ -641,7 +641,6 @@ export function ListingHub({ listingId }: ListingHubProps) {
   const { listing, photos } = data;
   const platform = listing.platform as Platform;
   const identifyPhotos = photos.filter((p) => isIdentifyPhotoRole(p.role));
-  const inventoryPhotos = photos.filter((p) => p.role === "inventory");
   const listingPhotos = photos.filter((p) => isPostingPhotoRole(p.role));
 
   return (
@@ -750,8 +749,8 @@ export function ListingHub({ listingId }: ListingHubProps) {
 
         <PhotoGroup
           title="Brand & care tags"
-          badge="For AI · private by default"
-          description="Close-ups of brand, size, care, and style/SKU tags so the AI can read the garment. Private by default — tap Use in listing on any shot you also want shoppers to see."
+          badge="For Product Identification, not shown in listing."
+          description="Close-ups of brand, size, care, and style/SKU tags. Private by default — tap Use in listing on any shot you also want shoppers to see."
           photos={identifyPhotos}
           empty="No tag photos yet — drop images here or add every label you can read."
           section="identify"
@@ -767,38 +766,6 @@ export function ListingHub({ listingId }: ListingHubProps) {
           dragOver={dragOverSection === "identify"}
           onDragOverChange={(over) =>
             setDragOverSection(over ? "identify" : null)
-          }
-          deletingPhotoId={deletingPhotoId}
-          disabled={
-            uploading ||
-            Boolean(deletingPhotoId) ||
-            promotingPhoto ||
-            movingPhoto
-          }
-          tone="private"
-        />
-
-        <PhotoGroup
-          title="Stocking photo"
-          badge="Private stocking · not posted by default"
-          description="Optional photo of this piece where you stock it (closet, bin, or rack) so you can find it later. Add as many as you need. Private by default — use in the listing if you want."
-          photos={inventoryPhotos}
-          empty="No stocking photos yet — drop images here, or skip if you already know where it is."
-          section="inventory"
-          onAdd={() => pickFilesForRole("inventory")}
-          onDelete={(photoId) => void deletePhoto(photoId)}
-          onUseInListing={(photoId) => setPromotePhotoId(photoId)}
-          onPreview={setPreviewPhoto}
-          onDropFiles={(files) => void uploadFilesToSection(files, "inventory")}
-          onDropPhoto={(photoId) =>
-            void movePhotoToSection(photoId, "inventory")
-          }
-          onBeginMove={(photoId) => setMovingPhotoId(photoId)}
-          movingPhotoId={movingPhotoId}
-          promotePhotoId={promotePhotoId}
-          dragOver={dragOverSection === "inventory"}
-          onDragOverChange={(over) =>
-            setDragOverSection(over ? "inventory" : null)
           }
           deletingPhotoId={deletingPhotoId}
           disabled={
@@ -1372,7 +1339,7 @@ function PhotoTile({
           {photoRoleLabel(photo.role)}
           {moving ? " · moving" : ""}
         </p>
-        <div className="flex flex-wrap items-center gap-1">
+        <div className="flex items-center gap-2">
           {onUseInListing ? (
             <button
               type="button"
@@ -1381,7 +1348,12 @@ function PhotoTile({
                 e.stopPropagation();
                 onUseInListing();
               }}
-              className="rounded-md px-2 py-1 text-sm font-semibold text-[var(--accent)] hover:bg-[var(--accent-soft)] disabled:opacity-50"
+              aria-pressed={promoting}
+              className={`rounded-md border px-2 py-1 text-sm font-semibold transition disabled:opacity-50 ${
+                promoting
+                  ? "border-[var(--accent)] bg-[var(--accent)] text-white"
+                  : "border-[var(--accent)] bg-transparent text-[var(--accent)] hover:bg-[var(--accent-soft)]"
+              }`}
             >
               {promoting ? "Choosing…" : "Use in listing"}
             </button>
@@ -1393,14 +1365,40 @@ function PhotoTile({
               e.stopPropagation();
               onDelete();
             }}
-            className="rounded-md px-2 py-1 text-sm font-semibold text-[var(--danger)] hover:bg-red-50 disabled:opacity-50"
+            className="ml-auto inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-[var(--danger)] hover:bg-red-50 disabled:opacity-50"
             aria-label={`Delete ${photoRoleLabel(photo.role)} photo`}
+            title="Delete photo"
           >
-            {deleting ? "…" : "Delete"}
+            {deleting ? (
+              <span className="text-sm font-semibold">…</span>
+            ) : (
+              <TrashIcon className="h-4 w-4" />
+            )}
           </button>
         </div>
       </div>
     </li>
+  );
+}
+
+function TrashIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden="true"
+    >
+      <path d="M3 6h18" />
+      <path d="M8 6V4h8v2" />
+      <path d="M19 6l-1 14H6L5 6" />
+      <path d="M10 11v6" />
+      <path d="M14 11v6" />
+    </svg>
   );
 }
 
