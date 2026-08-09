@@ -208,9 +208,6 @@ export function UnlockForm() {
               setPin(e.target.value.replace(/\D/g, "").slice(0, 8))
             }
           />
-          <span className="text-sm text-[var(--muted)]">
-            Optional — 4 to 8 digits if you already set a PIN.
-          </span>
         </label>
 
         {codeSent ? (
@@ -230,7 +227,11 @@ export function UnlockForm() {
               required
             />
           </label>
-        ) : null}
+        ) : (
+          <p className="text-center text-base font-semibold uppercase tracking-wide text-[var(--muted)]">
+            — or —
+          </p>
+        )}
 
         {hint ? (
           <p className="rounded-xl bg-[var(--accent-soft)] px-4 py-3 text-center text-base text-[var(--foreground)]">
