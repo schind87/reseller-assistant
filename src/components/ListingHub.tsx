@@ -252,13 +252,6 @@ export function ListingHub({ listingId }: ListingHubProps) {
     }
   }, [listingId, router, searchParams]);
 
-  const openTweak = useCallback(() => {
-    const popup = searchParams.get("popup") === "1" ? "&popup=1" : "";
-    router.replace(`/app/listings/${listingId}?tweak=1${popup}`, {
-      scroll: false,
-    });
-  }, [listingId, router, searchParams]);
-
   useEffect(() => {
     let cancelled = false;
 
@@ -1058,23 +1051,18 @@ export function ListingHub({ listingId }: ListingHubProps) {
       </section>
 
       <section className="flex flex-col gap-4 rounded-2xl border border-[var(--border)] bg-white p-6">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <h2 className="font-[family-name:var(--font-brand)] text-2xl">
-              {PLATFORM_LABELS[platform]} listing fields
-            </h2>
-            <p className="mt-2 text-base text-[var(--muted)]">
-              Edit these directly — same fields you will enter on{" "}
-              {PLATFORM_LABELS[platform]}.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={openTweak}
-            className="touch-target shrink-0 rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] px-4 text-base font-semibold text-[var(--foreground)]"
-          >
-            Open large editor
-          </button>
+        <div>
+          <h2 className="font-[family-name:var(--font-brand)] text-2xl">
+            {PLATFORM_LABELS[platform]} listing fields
+          </h2>
+          <p className="mt-2 text-base text-[var(--muted)]">
+            Edit these directly — same fields you will enter on{" "}
+            {PLATFORM_LABELS[platform]}. While posting, use{" "}
+            <span className="font-semibold text-[var(--foreground)]">
+              Tweak listing fields
+            </span>{" "}
+            in the Chrome extension for a larger editor popup.
+          </p>
         </div>
 
         {schema ? (
