@@ -1,51 +1,65 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useCallback, useState, useSyncExternalStore, type FormEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { BigButton } from "@/components/BigButton";
 
 const REMEMBER_EMAIL_KEY = "ra-remember-email";
 
+function readRememberedEmail(): string {
+  try {
+    return window.localStorage.getItem(REMEMBER_EMAIL_KEY) ?? "";
+  } catch {
+    return "";
+  }
+}
+
+function subscribeRememberedEmail(onStoreChange: () => void) {
+  window.addEventListener("storage", onStoreChange);
+  return () => window.removeEventListener("storage", onStoreChange);
+}
+
 export function UnlockForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const rememberedEmail = useSyncExternalStore(
+    subscribeRememberedEmail,
+    readRememberedEmail,
+    () => ""
+  );
   const [email, setEmail] = useState("");
+  const [emailTouched, setEmailTouched] = useState(false);
   const [rememberEmail, setRememberEmail] = useState(false);
+  const [rememberTouched, setRememberTouched] = useState(false);
   const [pin, setPin] = useState("");
   const [code, setCode] = useState("");
   const [codeSent, setCodeSent] = useState(false);
   const [hint, setHint] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [hydrated, setHydrated] = useState(false);
 
-  useEffect(() => {
-    try {
-      const saved = window.localStorage.getItem(REMEMBER_EMAIL_KEY);
-      if (saved) {
-        setEmail(saved);
-        setRememberEmail(true);
-      }
-    } catch {
-      // ignore storage failures
-    }
-    setHydrated(true);
-  }, []);
+  const displayEmail = emailTouched ? email : rememberedEmail || email;
+  const displayRemember =
+    rememberTouched ? rememberEmail : Boolean(rememberedEmail);
 
-  function persistEmailPreference(nextEmail: string, remember: boolean) {
-    try {
-      if (remember && nextEmail.includes("@")) {
-        window.localStorage.setItem(REMEMBER_EMAIL_KEY, nextEmail.trim());
-      } else {
-        window.localStorage.removeItem(REMEMBER_EMAIL_KEY);
+  const persistEmailPreference = useCallback(
+    (nextEmail: string, remember: boolean) => {
+      try {
+        if (remember && nextEmail.includes("@")) {
+          window.localStorage.setItem(REMEMBER_EMAIL_KEY, nextEmail.trim());
+        } else {
+          window.localStorage.removeItem(REMEMBER_EMAIL_KEY);
+        }
+        window.dispatchEvent(new Event("storage"));
+      } catch {
+        // ignore storage failures
       }
-    } catch {
-      // ignore storage failures
-    }
-  }
+    },
+    []
+  );
 
   function goApp() {
-    persistEmailPreference(email, rememberEmail);
+    persistEmailPreference(displayEmail, displayRemember);
     const next = searchParams.get("next") || "/app";
     router.replace(next.startsWith("/") ? next : "/app");
     router.refresh();
@@ -55,11 +69,11 @@ export function UnlockForm() {
     setBusy(true);
     setError(null);
     try {
-      persistEmailPreference(email, rememberEmail);
+      persistEmailPreference(displayEmail, displayRemember);
       const res = await fetch("/api/auth/otp/start", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ email: displayEmail }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "Could not send code");
@@ -80,7 +94,7 @@ export function UnlockForm() {
       const res = await fetch("/api/auth/otp/verify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, token: code }),
+        body: JSON.stringify({ email: displayEmail, token: code }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "That code did not work");
@@ -96,11 +110,11 @@ export function UnlockForm() {
     setBusy(true);
     setError(null);
     try {
-      persistEmailPreference(email, rememberEmail);
+      persistEmailPreference(displayEmail, displayRemember);
       const res = await fetch("/api/auth/pin/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, pin }),
+        body: JSON.stringify({ email: displayEmail, pin }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "Could not sign in");
@@ -125,7 +139,7 @@ export function UnlockForm() {
     void sendCode();
   }
 
-  const emailReady = email.includes("@");
+  const emailReady = displayEmail.includes("@");
   const pinReady = pin.length >= 4;
 
   return (
@@ -156,8 +170,11 @@ export function UnlockForm() {
             name="email"
             className="touch-target rounded-xl border border-[var(--border)] bg-white px-4 text-xl"
             placeholder="you@email.com"
-            value={hydrated ? email : ""}
-            onChange={(e) => setEmail(e.target.value)}
+            value={displayEmail}
+            onChange={(e) => {
+              setEmailTouched(true);
+              setEmail(e.target.value);
+            }}
             required
           />
         </label>
@@ -166,11 +183,12 @@ export function UnlockForm() {
           <input
             type="checkbox"
             className="h-5 w-5 accent-[var(--accent)]"
-            checked={rememberEmail}
+            checked={displayRemember}
             onChange={(e) => {
               const next = e.target.checked;
+              setRememberTouched(true);
               setRememberEmail(next);
-              persistEmailPreference(email, next);
+              persistEmailPreference(displayEmail, next);
             }}
           />
           <span>Remember this email on this device</span>
