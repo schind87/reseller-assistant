@@ -98,6 +98,8 @@ export type ListingPhoto = {
   role: PhotoRole;
   storage_path: string;
   processed_path: string | null;
+  /** When true, Finish with AI / clean-bg action replaces the backdrop. */
+  replace_background: boolean;
   sort_order: number;
   created_at: string;
 };

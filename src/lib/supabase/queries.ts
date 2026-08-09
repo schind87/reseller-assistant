@@ -348,7 +348,14 @@ export async function addPhoto(params: {
 export async function updatePhoto(
   photoId: string,
   patch: Partial<
-    Pick<ListingPhoto, "processed_path" | "storage_path" | "role" | "sort_order">
+    Pick<
+      ListingPhoto,
+      | "processed_path"
+      | "storage_path"
+      | "role"
+      | "sort_order"
+      | "replace_background"
+    >
   >
 ): Promise<ListingPhoto> {
   const supabase = createAdminClient();

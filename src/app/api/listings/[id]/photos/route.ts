@@ -140,6 +140,7 @@ export async function POST(request: Request, context: RouteContext) {
       {
         photo: {
           ...photo,
+          replace_background: photo.replace_background ?? false,
           signedUrl,
           processedSignedUrl: null,
         },
