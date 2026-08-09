@@ -22,7 +22,7 @@ var RA_COACH_STEPS = [
   {
     key: "details",
     label: "Other details",
-    help: "Fill brand, size, color, condition, prices, and tags — then we move on.",
+    help: "Fill size, color, condition, and prices. Brand and style tags need a quick tap on the green tips — type, then pick from the site’s suggestions.",
     actionLabel: "Fill the rest",
   },
   {
@@ -47,6 +47,47 @@ var RA_DETAIL_FIELDS = [
   "packageWeight",
   "shippingPayer",
 ];
+
+/** Fields that must be chosen from the site’s autocomplete (not pasted in). */
+var RA_AUTOCOMPLETE_FIELDS = {
+  poshmark: ["brand", "styleTags"],
+  mercari: [],
+};
+
+function raIsAutocompleteField(platform, fieldKey) {
+  var list = RA_AUTOCOMPLETE_FIELDS[platform] || [];
+  return list.indexOf(fieldKey) !== -1;
+}
+
+function raAutocompleteValues(listing, fieldKey) {
+  var raw = raFieldValueFromListing(listing, fieldKey);
+  if (!raw) return [];
+  if (fieldKey === "styleTags") {
+    return String(raw)
+      .split(",")
+      .map(function (part) {
+        return part.trim();
+      })
+      .filter(Boolean);
+  }
+  return [String(raw).trim()].filter(Boolean);
+}
+
+function raAutocompleteTip(fieldKey) {
+  if (fieldKey === "styleTags") {
+    return "Type each tag, then select it from Poshmark’s suggestions (up to 3).";
+  }
+  if (fieldKey === "brand") {
+    return "Start typing this brand, then select the matching suggestion from the list.";
+  }
+  return "Start typing, then select the matching suggestion from the list.";
+}
+
+function raAutocompleteLabel(fieldKey) {
+  if (fieldKey === "styleTags") return "Style tags";
+  if (fieldKey === "brand") return "Brand";
+  return fieldKey;
+}
 
 function raIsMarketplaceUrl(url) {
   try {

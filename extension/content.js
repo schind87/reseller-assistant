@@ -18,6 +18,8 @@ const FIELD_KEYWORDS = {
 };
 
 const HIGHLIGHT_STYLE_ID = "reseller-assistant-highlight-style";
+const HELPER_STYLE_ID = "reseller-assistant-helper-style";
+const HELPER_ROOT_ID = "reseller-assistant-field-helpers";
 
 function ensureHighlightStyle() {
   if (document.getElementById(HIGHLIGHT_STYLE_ID)) return;
@@ -31,6 +33,135 @@ function ensureHighlightStyle() {
     }
   `;
   document.documentElement.appendChild(style);
+}
+
+function ensureHelperStyle() {
+  if (document.getElementById(HELPER_STYLE_ID)) return;
+  const style = document.createElement("style");
+  style.id = HELPER_STYLE_ID;
+  style.textContent = `
+    #${HELPER_ROOT_ID} {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 2147483645;
+    }
+    .ra-field-helper {
+      pointer-events: auto;
+      position: fixed;
+      width: min(320px, calc(100vw - 24px));
+      background: #fff;
+      color: #1a1a1a;
+      border: 2px solid #1f5c4a;
+      border-radius: 12px;
+      box-shadow: 0 10px 28px rgba(0,0,0,0.18);
+      padding: 10px 12px;
+      font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+      font-size: 13px;
+      line-height: 1.35;
+    }
+    .ra-field-helper-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 6px;
+    }
+    .ra-field-helper-title {
+      font-weight: 750;
+      color: #1f5c4a;
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+    .ra-field-helper-close {
+      border: 0;
+      background: transparent;
+      color: #666;
+      font-size: 18px;
+      line-height: 1;
+      cursor: pointer;
+      padding: 0 2px;
+    }
+    .ra-field-helper-tip {
+      margin: 0 0 8px;
+      color: #333;
+    }
+    .ra-field-helper-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .ra-field-helper-chip {
+      border: 1px solid #1f5c4a;
+      background: #eef6f2;
+      color: #1f5c4a;
+      border-radius: 999px;
+      padding: 5px 10px;
+      font-size: 13px;
+      font-weight: 650;
+      cursor: pointer;
+    }
+    .ra-field-helper-chip:hover {
+      background: #1f5c4a;
+      color: #fff;
+    }
+    .ra-field-helper-chip.copied {
+      background: #1f5c4a;
+      color: #fff;
+    }
+    .ra-field-helper-note {
+      margin: 8px 0 0;
+      font-size: 11px;
+      color: #666;
+    }
+  `;
+  document.documentElement.appendChild(style);
+}
+
+function getHelperRoot() {
+  let root = document.getElementById(HELPER_ROOT_ID);
+  if (!root) {
+    root = document.createElement("div");
+    root.id = HELPER_ROOT_ID;
+    document.documentElement.appendChild(root);
+  }
+  return root;
+}
+
+function removeFieldHelpers(fieldKey) {
+  const selector = fieldKey
+    ? `.ra-field-helper[data-field="${CSS.escape(fieldKey)}"]`
+    : ".ra-field-helper";
+  document.querySelectorAll(selector).forEach((node) => node.remove());
+}
+
+function positionHelperNear(helper, el) {
+  const rect = el.getBoundingClientRect();
+  const width = Math.min(320, window.innerWidth - 24);
+  let left = Math.min(Math.max(12, rect.left), window.innerWidth - width - 12);
+  let top = rect.bottom + 8;
+
+  const others = Array.from(
+    document.querySelectorAll(".ra-field-helper")
+  ).filter((node) => node !== helper);
+  for (const other of others) {
+    const o = other.getBoundingClientRect();
+    if (Math.abs(o.left - left) < 48 && Math.abs(o.top - top) < 48) {
+      top = o.bottom + 8;
+    }
+  }
+
+  helper.style.width = `${width}px`;
+  helper.style.left = `${left}px`;
+  helper.style.top = `${top}px`;
+  // Flip above if near bottom of viewport.
+  requestAnimationFrame(() => {
+    const h = helper.getBoundingClientRect().height;
+    if (top + h > window.innerHeight - 12) {
+      helper.style.top = `${Math.max(12, rect.top - h - 8)}px`;
+    }
+  });
 }
 
 function normalizeText(value) {
@@ -362,6 +493,111 @@ function handleHighlightNext(payload) {
   return { ok: true, filled: false };
 }
 
+function handleShowAutocompleteHelper(payload) {
+  ensureHelperStyle();
+  const fieldKey = payload?.fieldKey || "brand";
+  const label = payload?.label || fieldKey;
+  const tip =
+    payload?.tip ||
+    "Start typing, then select the matching suggestion from the list.";
+  const values = Array.isArray(payload?.values)
+    ? payload.values.map((v) => String(v || "").trim()).filter(Boolean)
+    : [];
+
+  if (!values.length) {
+    return { ok: false, shown: false, error: "No suggested values" };
+  }
+
+  const el = findField(fieldKey, payload?.selector || null);
+  if (!el) {
+    return {
+      ok: false,
+      shown: false,
+      error: `No field matched for ${fieldKey}`,
+    };
+  }
+
+  removeFieldHelpers(fieldKey);
+  highlightElement(el);
+
+  const helper = document.createElement("div");
+  helper.className = "ra-field-helper";
+  helper.dataset.field = fieldKey;
+
+  const head = document.createElement("div");
+  head.className = "ra-field-helper-head";
+  const title = document.createElement("div");
+  title.className = "ra-field-helper-title";
+  title.textContent = label;
+  const close = document.createElement("button");
+  close.type = "button";
+  close.className = "ra-field-helper-close";
+  close.setAttribute("aria-label", "Dismiss");
+  close.textContent = "×";
+  close.addEventListener("click", () => helper.remove());
+  head.append(title, close);
+
+  const tipEl = document.createElement("p");
+  tipEl.className = "ra-field-helper-tip";
+  tipEl.textContent = tip;
+
+  const chips = document.createElement("div");
+  chips.className = "ra-field-helper-chips";
+  for (const value of values) {
+    const chip = document.createElement("button");
+    chip.type = "button";
+    chip.className = "ra-field-helper-chip";
+    chip.textContent = value;
+    chip.title = "Copy and focus the field — then pick from suggestions";
+    chip.addEventListener("click", () => {
+      try {
+        el.focus();
+      } catch {
+        /* ignore */
+      }
+      // Seed a few characters so autocomplete often opens; user still picks.
+      try {
+        const seed = value.slice(0, Math.min(value.length, 12));
+        setNativeValue(el, seed);
+        dispatchInputEvents(el);
+      } catch {
+        /* ignore */
+      }
+      void navigator.clipboard?.writeText(value).catch(() => undefined);
+      chip.classList.add("copied");
+      chip.textContent = `Copied: ${value}`;
+      window.setTimeout(() => {
+        chip.classList.remove("copied");
+        chip.textContent = value;
+      }, 1400);
+    });
+    chips.appendChild(chip);
+  }
+
+  const note = document.createElement("p");
+  note.className = "ra-field-helper-note";
+  note.textContent =
+    "Tap a suggestion to copy it and focus the box, then choose the match from the site’s list.";
+
+  helper.append(head, tipEl, chips, note);
+  getHelperRoot().appendChild(helper);
+  positionHelperNear(helper, el);
+
+  const onScrollOrResize = () => {
+    if (!helper.isConnected || !document.contains(el)) {
+      helper.remove();
+      window.removeEventListener("scroll", onScrollOrResize, true);
+      window.removeEventListener("resize", onScrollOrResize);
+      return;
+    }
+    positionHelperNear(helper, el);
+  };
+  window.addEventListener("scroll", onScrollOrResize, true);
+  window.addEventListener("resize", onScrollOrResize);
+
+  return { ok: true, shown: true, fieldKey, values };
+}
+
 function guessInputType(el, label) {
   if (el.tagName === "TEXTAREA") return "textarea";
   if (el.tagName === "SELECT") return "select";
@@ -525,6 +761,8 @@ function handleMessage(message) {
       return handleVerifyField(message);
     case "highlightNext":
       return handleHighlightNext(message);
+    case "showAutocompleteHelper":
+      return handleShowAutocompleteHelper(message);
     case "discoverForm":
       return discoverFormFields();
     case "attachPhotos":

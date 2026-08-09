@@ -1,5 +1,7 @@
 /* global RA_COACH_STEPS, RA_DETAIL_FIELDS, raIsMarketplaceUrl, raPlatformFromUrl,
-   raFieldValueFromListing, raListingPhotoMeta, raPreviewForStep */
+   raFieldValueFromListing, raListingPhotoMeta, raPreviewForStep,
+   raIsAutocompleteField, raAutocompleteValues, raAutocompleteTip,
+   raAutocompleteLabel */
 
 importScripts("coach-shared.js");
 
@@ -248,9 +250,32 @@ async function encodeListingPhotos(listing) {
 async function fillFieldsOnPage(listing, fieldKeys, preferredPlatform) {
   let filled = 0;
   const missing = [];
+  const assisted = [];
+  const platform =
+    preferredPlatform || listing.platform || null;
+
   for (const key of fieldKeys) {
     const value = raFieldValueFromListing(listing, key);
     if (!value) continue;
+
+    if (raIsAutocompleteField(platform, key)) {
+      const values = raAutocompleteValues(listing, key);
+      if (!values.length) continue;
+      const result = await sendToMarketplaceTab(
+        {
+          type: "showAutocompleteHelper",
+          fieldKey: key,
+          values,
+          label: raAutocompleteLabel(key),
+          tip: raAutocompleteTip(key),
+        },
+        preferredPlatform
+      );
+      if (result?.ok && result.shown) assisted.push(key);
+      else missing.push(key);
+      continue;
+    }
+
     const result = await sendToMarketplaceTab(
       { type: "fillField", fieldKey: key, value },
       preferredPlatform
@@ -258,7 +283,7 @@ async function fillFieldsOnPage(listing, fieldKeys, preferredPlatform) {
     if (result?.ok && result.filled) filled += 1;
     else missing.push(key);
   }
-  return { filled, missing };
+  return { filled, missing, assisted };
 }
 
 async function advanceAfterSuccess(doneLabel) {
@@ -354,21 +379,21 @@ async function runCurrentStep() {
     }
 
     if (step.key === "details") {
-      const { filled, missing } = await fillFieldsOnPage(
+      const { filled, missing, assisted } = await fillFieldsOnPage(
         listing,
         RA_DETAIL_FIELDS,
         platform
       );
-      if (!filled) {
+      if (!filled && !(assisted && assisted.length)) {
         throw new Error(
           "Could not fill detail fields on this page. Some boxes may need a quick manual tap."
         );
       }
 
-      // Spot-check a couple of text-friendly fields when we have values.
-      const checkKeys = ["brand", "price", "originalPrice"].filter((key) =>
-        raFieldValueFromListing(listing, key)
-      );
+      // Spot-check text-friendly fields we actually auto-filled (skip autocomplete ones).
+      const checkKeys = ["price", "originalPrice", "size"]
+        .filter((key) => !raIsAutocompleteField(platform, key))
+        .filter((key) => raFieldValueFromListing(listing, key));
       let verifiedCount = 0;
       for (const key of checkKeys) {
         const expected = raFieldValueFromListing(listing, key);
@@ -377,15 +402,22 @@ async function runCurrentStep() {
         }
       }
 
-      if (checkKeys.length && verifiedCount === 0) {
+      if (checkKeys.length && verifiedCount === 0 && filled > 0) {
         return buildCoachState({
           error: true,
           message:
-            "Detail fields may not have saved on the page. Check brand/price, then try again.",
+            "Detail fields may not have saved on the page. Check price/size, then try again.",
         });
       }
 
-      let done = `Filled ${filled} detail field${filled === 1 ? "" : "s"}.`;
+      let done = filled
+        ? `Filled ${filled} detail field${filled === 1 ? "" : "s"}.`
+        : "Opened helpers for fields that need autocomplete.";
+      if (assisted?.length) {
+        done += ` Use the green tips for ${assisted
+          .map((key) => raAutocompleteLabel(key).toLowerCase())
+          .join(" & ")} — type, then pick from suggestions.`;
+      }
       if (missing.length) {
         done += ` Still check: ${missing.slice(0, 4).join(", ")}.`;
       }
