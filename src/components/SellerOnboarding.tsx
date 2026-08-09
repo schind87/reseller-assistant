@@ -4,38 +4,39 @@ import { useState, type FormEvent } from "react";
 import { BigButton } from "@/components/BigButton";
 import { PLATFORM_LABELS } from "@/lib/platforms";
 import {
+  SUPPORTED_SELLING_WEBSITES,
   composeSmokePetNotes,
   defaultListingPreferences,
   type ListingPreferences,
 } from "@/lib/seller-preferences";
+import type { Platform } from "@/lib/types";
 
 type SellerOnboardingProps = {
   initial?: ListingPreferences | null;
   editing?: boolean;
+  /** Compact layout for the profile screen. */
+  compact?: boolean;
   onSaved: (prefs: ListingPreferences) => void;
   onCancel?: () => void;
 };
 
-function ChoiceGroup<T extends string>({
-  legend,
-  hint,
+function CompactChoice<T extends string>({
+  label,
   value,
   options,
   onChange,
 }: {
-  legend: string;
-  hint?: string;
+  label: string;
   value: T;
   options: Array<{ value: T; label: string }>;
   onChange: (value: T) => void;
 }) {
   return (
-    <fieldset className="space-y-3">
-      <legend className="text-lg font-semibold text-[var(--foreground)]">
-        {legend}
-      </legend>
-      {hint ? <p className="text-base text-[var(--muted)]">{hint}</p> : null}
-      <div className="flex flex-col gap-2">
+    <div className="grid gap-2 sm:grid-cols-[minmax(0,9rem)_1fr] sm:items-center">
+      <span className="text-sm font-semibold text-[var(--foreground)]">
+        {label}
+      </span>
+      <div className="flex flex-wrap gap-1.5">
         {options.map((option) => {
           const selected = value === option.value;
           return (
@@ -43,7 +44,7 @@ function ChoiceGroup<T extends string>({
               key={option.value}
               type="button"
               onClick={() => onChange(option.value)}
-              className={`touch-target rounded-xl border px-4 py-3 text-left text-base font-semibold ${
+              className={`rounded-lg border px-2.5 py-1.5 text-sm font-semibold ${
                 selected
                   ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent)]"
                   : "border-[var(--border)] bg-white text-[var(--foreground)]"
@@ -54,13 +55,40 @@ function ChoiceGroup<T extends string>({
           );
         })}
       </div>
-    </fieldset>
+    </div>
+  );
+}
+
+function CompactToggle({
+  label,
+  checked,
+  onChange,
+  yesLabel,
+  noLabel,
+}: {
+  label: string;
+  checked: boolean;
+  onChange: (value: boolean) => void;
+  yesLabel: string;
+  noLabel: string;
+}) {
+  return (
+    <CompactChoice
+      label={label}
+      value={checked ? "yes" : "no"}
+      onChange={(value) => onChange(value === "yes")}
+      options={[
+        { value: "yes", label: yesLabel },
+        { value: "no", label: noLabel },
+      ]}
+    />
   );
 }
 
 export function SellerOnboarding({
   initial,
   editing = false,
+  compact = false,
   onSaved,
   onCancel,
 }: SellerOnboardingProps) {
@@ -75,6 +103,31 @@ export function SellerOnboarding({
     value: ListingPreferences[K]
   ) {
     setPrefs((prev) => ({ ...prev, [key]: value }));
+  }
+
+  function toggleStore(platform: Platform, enabled: boolean) {
+    setPrefs((prev) => {
+      const set = new Set(prev.sellingWebsites);
+      if (enabled) set.add(platform);
+      else set.delete(platform);
+      if (set.size === 0) return prev;
+      const sellingWebsites = SUPPORTED_SELLING_WEBSITES.filter((site) =>
+        set.has(site)
+      );
+      const sellingWebsite = sellingWebsites.includes(prev.sellingWebsite)
+        ? prev.sellingWebsite
+        : sellingWebsites[0];
+      return { ...prev, sellingWebsites, sellingWebsite };
+    });
+  }
+
+  function setPrimaryStore(platform: Platform) {
+    setPrefs((prev) => {
+      const sellingWebsites = prev.sellingWebsites.includes(platform)
+        ? prev.sellingWebsites
+        : [...prev.sellingWebsites, platform];
+      return { ...prev, sellingWebsites, sellingWebsite: platform };
+    });
   }
 
   async function save(e: FormEvent) {
@@ -97,6 +150,190 @@ export function SellerOnboarding({
     }
   }
 
+  const storeBlock = (
+    <fieldset className={compact ? "space-y-2" : "space-y-3"}>
+      <legend
+        className={
+          compact
+            ? "text-sm font-semibold text-[var(--foreground)]"
+            : "text-lg font-semibold text-[var(--foreground)]"
+        }
+      >
+        Stores you sell on
+      </legend>
+      {!compact ? (
+        <p className="text-base text-[var(--muted)]">
+          Check each marketplace you use. Tap Default next to the one new
+          listings should open on.
+        </p>
+      ) : null}
+      <div className={compact ? "space-y-1.5" : "space-y-2"}>
+        {SUPPORTED_SELLING_WEBSITES.map((platform) => {
+          const checked = prefs.sellingWebsites.includes(platform);
+          const isPrimary = prefs.sellingWebsite === platform;
+          return (
+            <div
+              key={platform}
+              className={`flex items-center gap-3 rounded-xl border px-3 py-2 ${
+                checked
+                  ? "border-[var(--accent)] bg-[var(--accent-soft)]/40"
+                  : "border-[var(--border)] bg-white"
+              }`}
+            >
+              <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-3">
+                <input
+                  type="checkbox"
+                  className="h-5 w-5 accent-[var(--accent)]"
+                  checked={checked}
+                  onChange={(e) => toggleStore(platform, e.target.checked)}
+                />
+                <span className="text-base font-semibold text-[var(--foreground)]">
+                  {PLATFORM_LABELS[platform]}
+                </span>
+              </label>
+              {checked ? (
+                <button
+                  type="button"
+                  onClick={() => setPrimaryStore(platform)}
+                  className={`shrink-0 rounded-lg px-2.5 py-1 text-xs font-semibold uppercase tracking-wide ${
+                    isPrimary
+                      ? "bg-[var(--accent)] text-white"
+                      : "border border-[var(--border)] bg-white text-[var(--muted)]"
+                  }`}
+                >
+                  {isPrimary ? "Default" : "Make default"}
+                </button>
+              ) : null}
+            </div>
+          );
+        })}
+      </div>
+    </fieldset>
+  );
+
+  if (compact) {
+    return (
+      <form
+        onSubmit={(e) => void save(e)}
+        className="flex w-full flex-col gap-4"
+      >
+        {storeBlock}
+
+        <div className="space-y-3 rounded-2xl border border-[var(--border)] bg-white p-4">
+          <CompactChoice
+            label="Smoke-free"
+            value={prefs.smokeFree}
+            onChange={(value) => patch("smokeFree", value)}
+            options={[
+              { value: "yes", label: "Yes" },
+              { value: "outdoor_only", label: "Outdoor only" },
+              { value: "no", label: "No" },
+            ]}
+          />
+          <CompactChoice
+            label="Pets"
+            value={prefs.pets}
+            onChange={(value) => patch("pets", value)}
+            options={[
+              { value: "none", label: "None" },
+              { value: "dogs", label: "Dogs" },
+              { value: "cats", label: "Cats" },
+              { value: "dogs_and_cats", label: "Both" },
+              { value: "other", label: "Other" },
+            ]}
+          />
+          {prefs.pets === "other" ? (
+            <label className="grid gap-2 sm:grid-cols-[minmax(0,9rem)_1fr] sm:items-center">
+              <span className="text-sm font-semibold">Pet details</span>
+              <input
+                value={prefs.petDetails ?? ""}
+                onChange={(e) => patch("petDetails", e.target.value || null)}
+                className="touch-target w-full rounded-lg border border-[var(--border)] bg-white px-3 text-base"
+                placeholder="e.g. rabbits"
+              />
+            </label>
+          ) : null}
+          <CompactChoice
+            label="Mostly list"
+            value={prefs.audience}
+            onChange={(value) => patch("audience", value)}
+            options={[
+              { value: "womens", label: "Women’s" },
+              { value: "mens", label: "Men’s" },
+              { value: "kids", label: "Kids" },
+              { value: "mixed", label: "Mix" },
+            ]}
+          />
+          <CompactToggle
+            label="Ships quickly"
+            checked={prefs.shipsQuickly}
+            onChange={(value) => patch("shipsQuickly", value)}
+            yesLabel="Yes"
+            noLabel="Not always"
+          />
+          <CompactToggle
+            label="Open to offers"
+            checked={prefs.acceptsOffers}
+            onChange={(value) => patch("acceptsOffers", value)}
+            yesLabel="Yes"
+            noLabel="Listed price"
+          />
+          <label className="grid gap-2 sm:grid-cols-[minmax(0,9rem)_1fr] sm:items-center">
+            <span className="text-sm font-semibold">Closet name</span>
+            <input
+              value={prefs.closetName ?? ""}
+              onChange={(e) => patch("closetName", e.target.value || null)}
+              className="touch-target w-full rounded-lg border border-[var(--border)] bg-white px-3 text-base"
+              placeholder="Optional"
+            />
+          </label>
+          <label className="grid gap-2 sm:grid-cols-[minmax(0,9rem)_1fr] sm:items-center">
+            <span className="text-sm font-semibold">Ships from</span>
+            <input
+              value={prefs.shipsFrom ?? ""}
+              onChange={(e) => patch("shipsFrom", e.target.value || null)}
+              className="touch-target w-full rounded-lg border border-[var(--border)] bg-white px-3 text-base"
+              placeholder="City, ST"
+            />
+          </label>
+          <label className="grid gap-2 sm:grid-cols-[minmax(0,9rem)_1fr] sm:items-start">
+            <span className="pt-2 text-sm font-semibold">Extra notes</span>
+            <textarea
+              value={prefs.extraBuyerNotes ?? ""}
+              onChange={(e) =>
+                patch("extraBuyerNotes", e.target.value || null)
+              }
+              rows={2}
+              className="w-full rounded-lg border border-[var(--border)] bg-white px-3 py-2 text-base"
+              placeholder="Optional buyer notes"
+            />
+          </label>
+        </div>
+
+        <p className="text-sm text-[var(--muted)]">
+          Listing note preview: {composeSmokePetNotes(prefs)}
+        </p>
+
+        {error ? (
+          <p className="rounded-xl bg-red-50 px-4 py-3 text-base text-red-800">
+            {error}
+          </p>
+        ) : null}
+
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <BigButton type="submit" disabled={busy}>
+            {busy ? "Saving…" : "Save seller profile"}
+          </BigButton>
+          {onCancel ? (
+            <BigButton type="button" variant="ghost" onClick={onCancel}>
+              Cancel
+            </BigButton>
+          ) : null}
+        </div>
+      </form>
+    );
+  }
+
   return (
     <form
       onSubmit={(e) => void save(e)}
@@ -115,20 +352,10 @@ export function SellerOnboarding({
         </p>
       </header>
 
-      <ChoiceGroup
-        legend="Where do you sell?"
-        hint="We’ll default new listings to this site. You can still pick the other one when listing a piece."
-        value={prefs.sellingWebsite}
-        onChange={(value) => patch("sellingWebsite", value)}
-        options={[
-          { value: "mercari", label: PLATFORM_LABELS.mercari },
-          { value: "poshmark", label: PLATFORM_LABELS.poshmark },
-        ]}
-      />
+      {storeBlock}
 
-      <ChoiceGroup
-        legend="Is your home smoke-free?"
-        hint="Buyers on Mercari and Poshmark expect this in the description."
+      <CompactChoice
+        label="Is your home smoke-free?"
         value={prefs.smokeFree}
         onChange={(value) => patch("smokeFree", value)}
         options={[
@@ -138,9 +365,8 @@ export function SellerOnboarding({
         ]}
       />
 
-      <ChoiceGroup
-        legend="Do you have pets at home?"
-        hint="We’ll add a clear allergy note when pets live with you."
+      <CompactChoice
+        label="Do you have pets at home?"
         value={prefs.pets}
         onChange={(value) => patch("pets", value)}
         options={[
@@ -164,9 +390,8 @@ export function SellerOnboarding({
         </label>
       ) : null}
 
-      <ChoiceGroup
-        legend="What do you mostly list?"
-        hint="Helps titles and categories sound right for your closet."
+      <CompactChoice
+        label="What do you mostly list?"
         value={prefs.audience}
         onChange={(value) => patch("audience", value)}
         options={[
@@ -179,9 +404,6 @@ export function SellerOnboarding({
 
       <label className="block space-y-2">
         <span className="text-lg font-semibold">Closet or shop name (optional)</span>
-        <p className="text-base text-[var(--muted)]">
-          Only used if you want a seller name mentioned in drafts.
-        </p>
         <input
           value={prefs.closetName ?? ""}
           onChange={(e) => patch("closetName", e.target.value || null)}
@@ -192,9 +414,6 @@ export function SellerOnboarding({
 
       <label className="block space-y-2">
         <span className="text-lg font-semibold">Ships from (optional)</span>
-        <p className="text-base text-[var(--muted)]">
-          City and state help buyers know where packages start.
-        </p>
         <input
           value={prefs.shipsFrom ?? ""}
           onChange={(e) => patch("shipsFrom", e.target.value || null)}
@@ -203,24 +422,20 @@ export function SellerOnboarding({
         />
       </label>
 
-      <ChoiceGroup
-        legend="Do you usually ship quickly?"
-        value={prefs.shipsQuickly ? "yes" : "no"}
-        onChange={(value) => patch("shipsQuickly", value === "yes")}
-        options={[
-          { value: "yes", label: "Yes — same or next business day when I can" },
-          { value: "no", label: "Not always — don’t promise fast ship" },
-        ]}
+      <CompactToggle
+        label="Do you usually ship quickly?"
+        checked={prefs.shipsQuickly}
+        onChange={(value) => patch("shipsQuickly", value)}
+        yesLabel="Yes — same or next business day when I can"
+        noLabel="Not always — don’t promise fast ship"
       />
 
-      <ChoiceGroup
-        legend="Are you open to offers?"
-        value={prefs.acceptsOffers ? "yes" : "no"}
-        onChange={(value) => patch("acceptsOffers", value === "yes")}
-        options={[
-          { value: "yes", label: "Yes — reasonable offers are fine" },
-          { value: "no", label: "Prefer buyers take the listed price" },
-        ]}
+      <CompactToggle
+        label="Are you open to offers?"
+        checked={prefs.acceptsOffers}
+        onChange={(value) => patch("acceptsOffers", value)}
+        yesLabel="Yes — reasonable offers are fine"
+        noLabel="Prefer buyers take the listed price"
       />
 
       <label className="block space-y-2">

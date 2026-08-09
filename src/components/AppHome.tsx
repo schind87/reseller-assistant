@@ -9,7 +9,6 @@ import { PinSetupCard } from "@/components/PinSetupCard";
 import { SellerOnboarding } from "@/components/SellerOnboarding";
 import { PLATFORM_LABELS } from "@/lib/platforms";
 import {
-  composeSmokePetNotes,
   type ListingPreferences,
 } from "@/lib/seller-preferences";
 import type { Listing, Platform } from "@/lib/types";
@@ -100,11 +99,10 @@ export function AppHome({
         initial={preferences}
         editing={prefsDone}
         onSaved={(prefs) => {
-          const wasEditing = prefsDone;
           setPreferences(prefs);
           setPrefsDone(true);
           setEditingPrefs(false);
-          setShowProfile(wasEditing);
+          setShowProfile(false);
         }}
         onCancel={
           prefsDone
@@ -142,45 +140,23 @@ export function AppHome({
           </button>
         </header>
 
-        <section className="rounded-2xl border border-[var(--border)] bg-white p-5">
+        <section className="flex flex-col gap-3">
           <h2 className="font-[family-name:var(--font-brand)] text-2xl">
             Seller preferences
           </h2>
-          {preferences ? (
-            <dl className="mt-3 space-y-3 text-base">
-              <div>
-                <dt className="font-semibold text-[var(--foreground)]">
-                  Selling website
-                </dt>
-                <dd className="text-[var(--muted)]">
-                  {PLATFORM_LABELS[preferredSellingWebsite(preferences)]}
-                </dd>
-              </div>
-              <div>
-                <dt className="font-semibold text-[var(--foreground)]">
-                  Home note
-                </dt>
-                <dd className="text-[var(--muted)]">
-                  {composeSmokePetNotes(preferences)}
-                </dd>
-              </div>
-            </dl>
-          ) : (
-            <p className="mt-2 text-base text-[var(--muted)]">
-              No seller preferences saved yet.
-            </p>
-          )}
-          <div className="mt-4">
-            <BigButton
-              variant="secondary"
-              onClick={() => {
-                setShowProfile(false);
-                setEditingPrefs(true);
-              }}
-            >
-              Change seller preferences
-            </BigButton>
-          </div>
+          <p className="text-base text-[var(--muted)]">
+            Choose the stores you sell on, then keep your closet details up to
+            date.
+          </p>
+          <SellerOnboarding
+            compact
+            editing
+            initial={preferences}
+            onSaved={(prefs) => {
+              setPreferences(prefs);
+              setPrefsDone(true);
+            }}
+          />
         </section>
 
         <PinSetupCard />
@@ -244,7 +220,10 @@ export function AppHome({
           <h2 className="font-[family-name:var(--font-brand)] text-2xl">
             Where will you sell this piece?
           </h2>
-          {(["mercari", "poshmark"] as const).map((platform) => {
+          {(preferences?.sellingWebsites?.length
+            ? preferences.sellingWebsites
+            : (["mercari", "poshmark"] as const)
+          ).map((platform) => {
             const preferred = preferredSellingWebsite(preferences) === platform;
             return (
               <BigButton

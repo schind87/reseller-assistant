@@ -4,23 +4,42 @@ import type { Platform } from "@/lib/types";
 
 export const sellingWebsiteSchema = z.enum(["mercari", "poshmark"]);
 
-export const listingPreferencesSchema = z.object({
-  sellingWebsite: sellingWebsiteSchema,
-  smokeFree: z.enum(["yes", "no", "outdoor_only"]),
-  pets: z.enum(["none", "dogs", "cats", "dogs_and_cats", "other"]),
-  petDetails: z.string().max(120).nullable().optional(),
-  audience: z.enum(["womens", "mens", "kids", "mixed"]),
-  closetName: z.string().max(80).nullable().optional(),
-  shipsFrom: z.string().max(80).nullable().optional(),
-  shipsQuickly: z.boolean(),
-  acceptsOffers: z.boolean(),
-  extraBuyerNotes: z.string().max(400).nullable().optional(),
-});
+export const SUPPORTED_SELLING_WEBSITES = [
+  "mercari",
+  "poshmark",
+] as const satisfies readonly Platform[];
+
+export const listingPreferencesSchema = z
+  .object({
+    /** Default site for new listings. */
+    sellingWebsite: sellingWebsiteSchema,
+    /** Marketplaces this seller uses. */
+    sellingWebsites: z.array(sellingWebsiteSchema).min(1).max(2),
+    smokeFree: z.enum(["yes", "no", "outdoor_only"]),
+    pets: z.enum(["none", "dogs", "cats", "dogs_and_cats", "other"]),
+    petDetails: z.string().max(120).nullable().optional(),
+    audience: z.enum(["womens", "mens", "kids", "mixed"]),
+    closetName: z.string().max(80).nullable().optional(),
+    shipsFrom: z.string().max(80).nullable().optional(),
+    shipsQuickly: z.boolean(),
+    acceptsOffers: z.boolean(),
+    extraBuyerNotes: z.string().max(400).nullable().optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (!data.sellingWebsites.includes(data.sellingWebsite)) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["sellingWebsite"],
+        message: "Default store must be one of the stores you sell on",
+      });
+    }
+  });
 
 export type ListingPreferences = z.infer<typeof listingPreferencesSchema>;
 
 export const defaultListingPreferences = (): ListingPreferences => ({
   sellingWebsite: "mercari",
+  sellingWebsites: ["mercari"],
   smokeFree: "yes",
   pets: "none",
   petDetails: null,
@@ -38,6 +57,25 @@ export function parseListingPreferences(raw: unknown): ListingPreferences {
     raw && typeof raw === "object" && !Array.isArray(raw)
       ? { ...base, ...(raw as Record<string, unknown>) }
       : base;
+
+  // Backfill sellingWebsites from older profiles that only had sellingWebsite.
+  if (
+    (!Array.isArray(merged.sellingWebsites) ||
+      merged.sellingWebsites.length === 0) &&
+    typeof merged.sellingWebsite === "string"
+  ) {
+    merged.sellingWebsites = [merged.sellingWebsite];
+  }
+
+  if (
+    Array.isArray(merged.sellingWebsites) &&
+    merged.sellingWebsites.length > 0 &&
+    (typeof merged.sellingWebsite !== "string" ||
+      !merged.sellingWebsites.includes(merged.sellingWebsite))
+  ) {
+    merged.sellingWebsite = merged.sellingWebsites[0];
+  }
+
   const parsed = listingPreferencesSchema.safeParse(merged);
   if (parsed.success) return parsed.data;
   return base;
@@ -46,7 +84,7 @@ export function parseListingPreferences(raw: unknown): ListingPreferences {
 export function isListingPreferencesComplete(raw: unknown): boolean {
   return listingPreferencesSchema.safeParse(
     raw && typeof raw === "object" && !Array.isArray(raw)
-      ? { ...defaultListingPreferences(), ...(raw as Record<string, unknown>) }
+      ? parseListingPreferences(raw)
       : raw
   ).success;
 }
@@ -94,8 +132,12 @@ export function sellingWebsiteLabel(platform: Platform): string {
 
 /** Extra context injected into AI draft prompts. */
 export function composeSellerContext(prefs: ListingPreferences): string {
+  const stores = prefs.sellingWebsites
+    .map((site) => sellingWebsiteLabel(site))
+    .join(", ");
   const lines: string[] = [
-    `Primary selling website: ${sellingWebsiteLabel(prefs.sellingWebsite)}`,
+    `Sells on: ${stores}`,
+    `Primary / default selling website: ${sellingWebsiteLabel(prefs.sellingWebsite)}`,
     `Home notes: ${composeSmokePetNotes(prefs)}`,
     `Primary clothing focus: ${
       prefs.audience === "womens"
