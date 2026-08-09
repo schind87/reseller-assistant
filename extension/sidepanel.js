@@ -1,9 +1,9 @@
 /* global RA_COACH_STEPS */
 
-const DEFAULT_APP_URL = "https://reseller-assistant.vercel.app";
+const DEFAULT_APP_URL = "https://reseller.mvfeed.us";
 const APP_URL_CANDIDATES = [
-  "https://reseller-assistant.vercel.app",
   "https://reseller.mvfeed.us",
+  "https://reseller-assistant.vercel.app",
   "http://localhost:3000",
 ];
 
