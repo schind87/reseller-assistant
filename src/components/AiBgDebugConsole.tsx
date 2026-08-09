@@ -428,10 +428,10 @@ export function AiBgDebugConsole({
               return (
                 <li key={photo.id}>
                   <div
-                    className={`overflow-hidden rounded-xl ring-1 transition ${
+                    className={`overflow-hidden rounded-xl border-2 bg-white transition ${
                       active
-                        ? "ring-2 ring-[var(--accent)]"
-                        : "ring-[var(--border)]"
+                        ? "border-[var(--accent)]"
+                        : "border-[var(--border)]"
                     }`}
                   >
                     <div className="relative">
