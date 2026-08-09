@@ -33,7 +33,6 @@ import type {
 import {
   emptyStructuredFields,
   isIdentifyPhotoRole,
-  isNonPostingPhotoRole,
   isPostingPhotoRole,
 } from "@/lib/types";
 
@@ -145,6 +144,7 @@ export function ListingHub({ listingId }: ListingHubProps) {
   const [error, setError] = useState<string | null>(null);
   const [processing, setProcessing] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [rewritingDescription, setRewritingDescription] = useState(false);
   const [deletingListing, setDeletingListing] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -157,6 +157,9 @@ export function ListingHub({ listingId }: ListingHubProps) {
     null
   );
   const [movingPhoto, setMovingPhoto] = useState(false);
+  const [previewPhoto, setPreviewPhoto] = useState<ListingPhotoWithUrl | null>(
+    null
+  );
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pendingUploadRoleRef = useRef<PhotoRole | null>(null);
 
@@ -544,6 +547,55 @@ export function ListingHub({ listingId }: ListingHubProps) {
     }
   }
 
+  async function rewriteDescription() {
+    setRewritingDescription(true);
+    setError(null);
+    setStatusMessage("Rewriting description from your current fields…");
+    try {
+      const priceNum = price.trim() === "" ? null : Number(price);
+      const res = await fetch(
+        `/api/listings/${listingId}/rewrite-description`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title,
+            price: Number.isFinite(priceNum) ? priceNum : null,
+            description,
+            structured_fields: fields,
+            save: false,
+          }),
+        }
+      );
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(
+          typeof json.error === "string"
+            ? json.error
+            : "Could not rewrite description"
+        );
+      }
+      if (typeof json.description !== "string") {
+        throw new Error("Could not rewrite description");
+      }
+      setDescription(json.description);
+      setDraftDirty(true);
+      setStatusMessage(
+        json.degraded
+          ? json.message ??
+              "Filled a simple description from your fields — edit as needed."
+          : "Description rewritten from your fields — review and save."
+      );
+    } catch (err) {
+      setStatusMessage(null);
+      setError(
+        err instanceof Error ? err.message : "Could not rewrite description"
+      );
+    } finally {
+      setRewritingDescription(false);
+    }
+  }
+
   if (!data && !error) {
     return (
       <div className="mx-auto max-w-4xl px-4 py-10 text-lg text-[var(--muted)]">
@@ -679,11 +731,11 @@ export function ListingHub({ listingId }: ListingHubProps) {
           description="Close-ups of brand, size, care, and style/SKU tags so the AI can read the garment. Private by default — tap Use in listing on any shot you also want shoppers to see."
           photos={identifyPhotos}
           empty="No tag photos yet — drop images here or add every label you can read."
-          addLabel="Add tag photo"
           section="identify"
           onAdd={() => pickFilesForRole("id_tag")}
           onDelete={(photoId) => void deletePhoto(photoId)}
           onUseInListing={(photoId) => setPromotePhotoId(photoId)}
+          onPreview={setPreviewPhoto}
           onDropFiles={(files) => void uploadFilesToSection(files, "identify")}
           onDropPhoto={(photoId) => void movePhotoToSection(photoId, "identify")}
           onBeginMove={(photoId) => setMovingPhotoId(photoId)}
@@ -709,11 +761,11 @@ export function ListingHub({ listingId }: ListingHubProps) {
           description="Optional photo of this piece where you stock it (closet, bin, or rack) so you can find it later. Add as many as you need. Private by default — use in the listing if you want."
           photos={inventoryPhotos}
           empty="No stocking photos yet — drop images here, or skip if you already know where it is."
-          addLabel="Add stocking photo"
           section="inventory"
           onAdd={() => pickFilesForRole("inventory")}
           onDelete={(photoId) => void deletePhoto(photoId)}
           onUseInListing={(photoId) => setPromotePhotoId(photoId)}
+          onPreview={setPreviewPhoto}
           onDropFiles={(files) => void uploadFilesToSection(files, "inventory")}
           onDropPhoto={(photoId) =>
             void movePhotoToSection(photoId, "inventory")
@@ -779,10 +831,10 @@ export function ListingHub({ listingId }: ListingHubProps) {
             description="Cover, front, back, details, and flaws for the marketplace listing. You can add multiple photos of each type. These are the only photos that get uploaded when you post."
             photos={listingPhotos}
             empty="No listing photos yet — drop images here or start with a clean cover shot."
-            addLabel={`Add ${photoRoleLabel(nextListingRole(photos)).toLowerCase()} photo`}
             section="listing"
             onAdd={() => setPickListingRole((open) => !open)}
             onDelete={(photoId) => void deletePhoto(photoId)}
+            onPreview={setPreviewPhoto}
             onDropFiles={(files) => void uploadFilesToSection(files, "listing")}
             onDropPhoto={(photoId) =>
               void movePhotoToSection(photoId, "listing")
@@ -883,16 +935,21 @@ export function ListingHub({ listingId }: ListingHubProps) {
               setFields(next);
               setDraftDirty(true);
             }}
+            onRewriteDescription={() => void rewriteDescription()}
+            rewritingDescription={rewritingDescription}
             onSubmit={(e) => void saveDraft(e)}
             footer={
               <div className="flex flex-col gap-3 pt-2 sm:flex-row">
-                <BigButton type="submit" disabled={saving || processing}>
+                <BigButton
+                  type="submit"
+                  disabled={saving || processing || rewritingDescription}
+                >
                   {saving ? "Saving…" : draftDirty ? "Save changes" : "Saved"}
                 </BigButton>
                 <BigButton
                   type="button"
                   variant="secondary"
-                  disabled={saving}
+                  disabled={saving || rewritingDescription}
                   onClick={() => {
                     void (async () => {
                       if (draftDirty) await saveDraft();
@@ -919,6 +976,13 @@ export function ListingHub({ listingId }: ListingHubProps) {
           {deletingListing ? "Deleting…" : "Delete this listing"}
         </BigButton>
       </div>
+
+      {previewPhoto ? (
+        <PhotoLightbox
+          photo={previewPhoto}
+          onClose={() => setPreviewPhoto(null)}
+        />
+      ) : null}
     </div>
   );
 }
@@ -929,11 +993,11 @@ function PhotoGroup({
   description,
   photos,
   empty,
-  addLabel,
   section,
   onAdd,
   onDelete,
   onUseInListing,
+  onPreview,
   onDropFiles,
   onDropPhoto,
   onBeginMove,
@@ -950,11 +1014,11 @@ function PhotoGroup({
   description?: string;
   photos: ListingPhotoWithUrl[];
   empty: string;
-  addLabel: string;
   section: PhotoSection;
   onAdd: () => void;
   onDelete: (photoId: string) => void;
   onUseInListing?: (photoId: string) => void;
+  onPreview: (photo: ListingPhotoWithUrl) => void;
   onDropFiles: (files: File[]) => void;
   onDropPhoto: (photoId: string) => void;
   onBeginMove: (photoId: string) => void;
@@ -1027,40 +1091,27 @@ function PhotoGroup({
             : "border-[var(--border)] bg-white"
       } ${moveArmed ? "cursor-pointer" : ""}`}
     >
-      <div className="mb-2 flex flex-wrap items-start justify-between gap-2">
-        <div className="min-w-0 flex-1 space-y-1">
-          <h3 className="text-lg font-semibold text-[var(--foreground)]">
-            {title}
-          </h3>
-          {badge ? (
-            <p
-              className={`inline-block rounded-md px-2 py-1 text-xs font-semibold uppercase tracking-wide ${badgeClass}`}
-            >
-              {badge}
-            </p>
-          ) : null}
-          {description ? (
-            <p className="text-sm leading-relaxed text-[var(--muted)]">
-              {description}
-            </p>
-          ) : null}
-          <p className="text-xs text-[var(--muted)]">
-            {moveArmed
-              ? "Tap or drop here to move the photo"
-              : "Drop images here to upload"}
+      <div className="mb-2 space-y-1">
+        <h3 className="text-lg font-semibold text-[var(--foreground)]">
+          {title}
+        </h3>
+        {badge ? (
+          <p
+            className={`inline-block rounded-md px-2 py-1 text-xs font-semibold uppercase tracking-wide ${badgeClass}`}
+          >
+            {badge}
           </p>
-        </div>
-        <button
-          type="button"
-          disabled={disabled}
-          onClick={(e) => {
-            e.stopPropagation();
-            onAdd();
-          }}
-          className="shrink-0 rounded-lg border border-[var(--accent)] bg-white px-3 py-2 text-sm font-semibold text-[var(--accent)] hover:bg-[var(--accent-soft)] disabled:opacity-50"
-        >
-          {addLabel}
-        </button>
+        ) : null}
+        {description ? (
+          <p className="text-sm leading-relaxed text-[var(--muted)]">
+            {description}
+          </p>
+        ) : null}
+        <p className="text-xs text-[var(--muted)]">
+          {moveArmed
+            ? "Tap or drop here to move the photo"
+            : "Drop images here to upload · tap a photo to enlarge"}
+        </p>
       </div>
       {photos.length === 0 ? (
         <p className="text-sm text-[var(--muted)]">{empty}</p>
@@ -1073,7 +1124,9 @@ function PhotoGroup({
               deleting={deletingPhotoId === photo.id}
               promoting={promotePhotoId === photo.id}
               moving={movingPhotoId === photo.id}
+              moveArmed={moveArmed}
               disabled={disabled}
+              onPreview={() => onPreview(photo)}
               onUseInListing={
                 onUseInListing
                   ? () => onUseInListing(photo.id)
@@ -1105,7 +1158,7 @@ function PhotoGroup({
           }}
           className="mt-3 flex min-h-28 w-full flex-col items-center justify-center rounded-xl border-2 border-dashed border-[var(--border)] bg-white text-base font-semibold text-[var(--accent)] hover:border-[var(--accent)] disabled:opacity-50"
         >
-          + {addLabel}
+          + Add
         </button>
       ) : null}
       {/* section id kept for debugging / a11y context */}
@@ -1119,7 +1172,9 @@ function PhotoTile({
   deleting,
   promoting,
   moving,
+  moveArmed,
   disabled,
+  onPreview,
   onUseInListing,
   onDelete,
   onBeginMove,
@@ -1128,7 +1183,9 @@ function PhotoTile({
   deleting: boolean;
   promoting: boolean;
   moving: boolean;
+  moveArmed: boolean;
   disabled?: boolean;
+  onPreview: () => void;
   onUseInListing?: () => void;
   onDelete: () => void;
   onBeginMove: () => void;
@@ -1201,20 +1258,25 @@ function PhotoTile({
           }
           return;
         }
+        if (longPressTriggered.current) {
+          e.stopPropagation();
+          longPressTriggered.current = false;
+          return;
+        }
         // While another photo is being moved, let the click hit the section drop target.
-        if (!longPressTriggered.current) {
+        if (moveArmed) {
           return;
         }
         e.stopPropagation();
-        longPressTriggered.current = false;
+        onPreview();
       }}
       className={`relative overflow-hidden rounded-xl ring-1 select-none ${
         moving || promoting
           ? "ring-2 ring-[var(--accent)]"
           : "ring-[var(--border)]"
-      } ${moving ? "opacity-80" : ""} ${disabled ? "opacity-60" : "cursor-grab active:cursor-grabbing"}`}
+      } ${moving ? "opacity-80" : ""} ${disabled ? "opacity-60" : "cursor-pointer"}`}
       style={{ touchAction: "manipulation" }}
-      title="Long-press, then drop on another section to move"
+      title="Tap to enlarge · long-press to move"
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
@@ -1226,10 +1288,10 @@ function PhotoTile({
       <div
         className="space-y-1 bg-white px-2 py-1.5"
         onPointerDown={(e) => e.stopPropagation()}
+        onClick={(e) => e.stopPropagation()}
       >
         <p className="min-w-0 truncate text-sm text-[var(--muted)]">
           {photoRoleLabel(photo.role)}
-          {isNonPostingPhotoRole(photo.role) ? " · private" : ""}
           {moving ? " · moving" : ""}
         </p>
         <div className="flex flex-wrap items-center gap-1">
@@ -1261,5 +1323,60 @@ function PhotoTile({
         </div>
       </div>
     </li>
+  );
+}
+
+function PhotoLightbox({
+  photo,
+  onClose,
+}: {
+  photo: ListingPhotoWithUrl;
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+    }
+    window.addEventListener("keydown", onKeyDown);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      document.body.style.overflow = prev;
+    };
+  }, [onClose]);
+
+  const src = photo.processedSignedUrl ?? photo.signedUrl ?? undefined;
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={`${photoRoleLabel(photo.role)} photo preview`}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
+      onClick={onClose}
+    >
+      <button
+        type="button"
+        onClick={onClose}
+        className="absolute right-4 top-4 touch-target rounded-xl bg-white/95 px-4 text-base font-semibold text-[var(--foreground)]"
+      >
+        Close
+      </button>
+      <div
+        className="flex max-h-full max-w-full flex-col items-center gap-3"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={src}
+          alt={photoRoleLabel(photo.role)}
+          className="max-h-[min(85vh,900px)] max-w-[min(96vw,900px)] rounded-lg object-contain shadow-2xl"
+        />
+        <p className="rounded-lg bg-black/50 px-3 py-1 text-sm font-medium text-white">
+          {photoRoleLabel(photo.role)}
+        </p>
+      </div>
+    </div>
   );
 }

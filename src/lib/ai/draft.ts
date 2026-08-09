@@ -196,3 +196,85 @@ Keep title within ${limits.titleMax} characters and description within ${limits.
     return fallbackDraft(platform, identified, smokePetNotes);
   }
 }
+
+const rewriteDescriptionSchema = z.object({
+  description: z.string(),
+});
+
+export async function rewriteListingDescription(params: {
+  platform: Platform;
+  title: string;
+  price: number | null;
+  fields: StructuredFields;
+  currentDescription?: string | null;
+  sellerContext?: string | null;
+}): Promise<{ description: string; degraded: boolean; message?: string }> {
+  const { platform, title, price, fields, currentDescription, sellerContext } =
+    params;
+  const limits = FIELD_LIMITS[platform];
+
+  const fallback = () => {
+    const parts = [
+      title ? `Selling: ${title}.` : null,
+      fields.brand ? `Brand: ${fields.brand}.` : null,
+      fields.size ? `Size: ${fields.size}.` : null,
+      fields.color ? `Color: ${fields.color}.` : null,
+      fields.condition ? `Condition: ${fields.condition}.` : null,
+      fields.fabric ? `Fabric: ${fields.fabric}.` : null,
+      fields.measurements ? `Measurements: ${fields.measurements}.` : null,
+      fields.smokePetNotes,
+      "Please review all details before listing.",
+    ].filter(Boolean);
+    return {
+      description: parts.join("\n\n").slice(0, limits.descriptionMax),
+      degraded: true as const,
+      message: hasAiProvider()
+        ? "Could not rewrite with AI — filled a simple template from your fields."
+        : `${missingAiProviderMessage()} Filled a simple template from your fields.`,
+    };
+  };
+
+  if (!hasAiProvider()) {
+    return fallback();
+  }
+
+  try {
+    const { object } = await generateObject({
+      model: getAiModel("draft"),
+      schema: rewriteDescriptionSchema,
+      messages: [
+        {
+          role: "user",
+          content: `Rewrite the ${PLATFORM_LABELS[platform]} listing description using ONLY the facts below.
+Do not invent brand, size, measurements, or flaws that are not provided.
+Keep it buyer-friendly, clothing-focused, and within ${limits.descriptionMax} characters.
+Honor seller preferences in tone and required disclosures.
+
+Seller preferences:
+${sellerContext ?? "None provided."}
+
+Title: ${title || "(none)"}
+Price: ${price == null ? "(none)" : price}
+Structured fields:
+${JSON.stringify(fields, null, 2)}
+
+Current description (optional reference — improve it with the updated fields):
+${currentDescription?.trim() || "(none)"}
+
+Return only the new description text.`,
+        },
+      ],
+    });
+
+    let description = object.description.trim();
+    if (description.length > limits.descriptionMax) {
+      description =
+        description.slice(0, limits.descriptionMax - 1).trimEnd() + "…";
+    }
+
+    return { description, degraded: false };
+  } catch (err) {
+    console.error("rewriteListingDescription failed:", err);
+    return fallback();
+  }
+}

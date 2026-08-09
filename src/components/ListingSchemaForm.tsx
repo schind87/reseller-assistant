@@ -21,6 +21,8 @@ type ListingSchemaFormProps = {
   onFieldsChange: (fields: StructuredFields) => void;
   onSubmit: (e: FormEvent) => void;
   footer: ReactNode;
+  onRewriteDescription?: () => void;
+  rewritingDescription?: boolean;
 };
 
 function readStructured(
@@ -67,6 +69,8 @@ export function ListingSchemaForm({
   onFieldsChange,
   onSubmit,
   footer,
+  onRewriteDescription,
+  rewritingDescription = false,
 }: ListingSchemaFormProps) {
   const fieldNodes = useMemo(() => schema.fields, [schema.fields]);
   const categoryOptions = useMemo(() => {
@@ -116,11 +120,27 @@ export function ListingSchemaForm({
 
         if (field.source === "description") {
           return (
-            <Field
-              key={field.id}
-              label={`${label} (${description.length}/${field.maxLength ?? 5000})`}
-              hint={field.hint}
-            >
+            <div key={field.id} className="flex flex-col gap-2">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <span className="text-base font-semibold text-[var(--foreground)]">
+                  {`${label} (${description.length}/${field.maxLength ?? 5000})`}
+                </span>
+                {onRewriteDescription ? (
+                  <button
+                    type="button"
+                    disabled={rewritingDescription}
+                    onClick={onRewriteDescription}
+                    className="touch-target rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] px-4 text-base font-semibold text-[var(--foreground)] disabled:opacity-50"
+                  >
+                    {rewritingDescription
+                      ? "Rewriting…"
+                      : "Rewrite with AI"}
+                  </button>
+                ) : null}
+              </div>
+              {field.hint ? (
+                <span className="text-sm text-[var(--muted)]">{field.hint}</span>
+              ) : null}
               <textarea
                 value={description}
                 maxLength={field.maxLength}
@@ -129,7 +149,7 @@ export function ListingSchemaForm({
                 placeholder={field.placeholder}
                 className="w-full rounded-xl border border-[var(--border)] bg-white px-4 py-3 text-lg leading-relaxed"
               />
-            </Field>
+            </div>
           );
         }
 

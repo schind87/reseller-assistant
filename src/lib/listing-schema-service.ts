@@ -45,25 +45,35 @@ function enrichMarketplaceCategoryFields(
   schema: PlatformListingSchema
 ): PlatformListingSchema {
   const categoryOptions = getMarketplaceCategoryOptions(schema.platform);
+  const fields = schema.fields.map((field) => {
+    if (field.id === "category") {
+      return {
+        ...field,
+        input: "select" as const,
+        options: categoryOptions,
+      };
+    }
+    if (field.id === "subcategory") {
+      return {
+        ...field,
+        input: "select" as const,
+        options: field.options?.length ? field.options : [],
+      };
+    }
+    return field;
+  });
+
+  // Description stays last so sellers can edit facts first, then rewrite copy.
+  const descriptionFields = fields.filter(
+    (field) => field.source === "description" || field.id === "description"
+  );
+  const otherFields = fields.filter(
+    (field) => field.source !== "description" && field.id !== "description"
+  );
+
   return {
     ...schema,
-    fields: schema.fields.map((field) => {
-      if (field.id === "category") {
-        return {
-          ...field,
-          input: "select",
-          options: categoryOptions,
-        };
-      }
-      if (field.id === "subcategory") {
-        return {
-          ...field,
-          input: "select",
-          options: field.options?.length ? field.options : [],
-        };
-      }
-      return field;
-    }),
+    fields: [...otherFields, ...descriptionFields],
   };
 }
 
