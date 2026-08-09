@@ -130,13 +130,7 @@ export function UnlockForm() {
     e.preventDefault();
     if (codeSent) {
       void verifyCode();
-      return;
     }
-    if (pin.length >= 4) {
-      void loginWithPin();
-      return;
-    }
-    void sendCode();
   }
 
   const emailReady = displayEmail.includes("@");
@@ -227,11 +221,7 @@ export function UnlockForm() {
               required
             />
           </label>
-        ) : (
-          <p className="text-center text-base font-semibold uppercase tracking-wide text-[var(--muted)]">
-            — or —
-          </p>
-        )}
+        ) : null}
 
         {hint ? (
           <p className="rounded-xl bg-[var(--accent-soft)] px-4 py-3 text-center text-base text-[var(--foreground)]">
@@ -266,15 +256,20 @@ export function UnlockForm() {
           </>
         ) : (
           <>
-            {pinReady ? (
-              <BigButton type="submit" disabled={busy || !emailReady}>
-                {busy ? "Checking…" : "Sign in with PIN"}
-              </BigButton>
-            ) : null}
+            <BigButton
+              type="button"
+              disabled={busy || !emailReady || !pinReady}
+              onClick={() => void loginWithPin()}
+            >
+              {busy ? "Checking…" : "Sign in with PIN"}
+            </BigButton>
+
+            <p className="text-center text-base font-semibold uppercase tracking-wide text-[var(--muted)]">
+              — or —
+            </p>
 
             <BigButton
               type="button"
-              variant={pinReady ? "secondary" : undefined}
               disabled={busy || !emailReady}
               onClick={() => void sendCode()}
             >
