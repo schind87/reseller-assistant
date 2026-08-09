@@ -116,7 +116,7 @@ function showPairingUi() {
   els.listingSection.hidden = true;
   els.appUrl.value = pairing?.appUrl || DEFAULT_APP_URL;
   setConnection(
-    "Not connected — open Post checklist in the web app, or enter a code."
+    "Not connected — open the listing in the web app, or enter a code."
   );
 }
 

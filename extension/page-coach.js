@@ -216,7 +216,7 @@
       ui.title.textContent = "Connect your listing";
       ui.help.textContent =
         state.message ||
-        "Open your listing’s Post checklist in Reseller Assistant, then return to this page.";
+        "Open your listing in Reseller Assistant, then return to this page.";
       ui.preview.textContent = "";
       ui.doStep.textContent = "Check connection";
       ui.progress.style.width = "0%";

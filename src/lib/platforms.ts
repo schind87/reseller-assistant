@@ -18,12 +18,6 @@ export type FieldLimits = {
   maxPhotos: number;
 };
 
-export type ChecklistStep = {
-  id: string;
-  label: string;
-  hint: string;
-};
-
 /** Ideal capture frame shown in the in-app camera for listing photos. */
 export type PhotoAspectGuide = {
   width: number;
@@ -158,88 +152,6 @@ export const PLATFORM_LABELS: Record<Platform, string> = {
 export const SELL_PAGE_URLS: Record<Platform, string> = {
   mercari: "https://www.mercari.com/sell/",
   poshmark: "https://poshmark.com/create-listing",
-};
-
-export const POSTING_CHECKLIST: Record<Platform, ChecklistStep[]> = {
-  mercari: [
-    {
-      id: "open",
-      label: "Open Mercari Sell",
-      hint: "Use the button below, then keep this checklist open.",
-    },
-    {
-      id: "photos",
-      label: "Add listing photos in order",
-      hint: "Best: open the sell page with the Chrome extension and tap Attach photos. Fallback: download the photos ZIP below and choose those files on Mercari.",
-    },
-    {
-      id: "title",
-      label: "Paste the title",
-      hint: "Brand, garment type, size, and color up front (80 character limit).",
-    },
-    {
-      id: "description",
-      label: "Paste the description",
-      hint: "Include flat measurements, fabric, flaws, and smoke/pet notes.",
-    },
-    {
-      id: "fields",
-      label: "Fill brand, clothing category, size, color, condition",
-      hint: "Match the review screen fields, or use the browser extension.",
-    },
-    {
-      id: "price",
-      label: "Set your price",
-      hint: "Copy the price from the review screen.",
-    },
-    {
-      id: "publish",
-      label: "Review and list",
-      hint: "Double-check everything before you tap List.",
-    },
-  ],
-  poshmark: [
-    {
-      id: "open",
-      label: "Open Poshmark Create Listing",
-      hint: "Use the button below, then keep this checklist open.",
-    },
-    {
-      id: "cover",
-      label: "Upload the cover photo first",
-      hint: "Use a 4×3 portrait shot. Best: Chrome extension → Attach photos (cover is first). Fallback: photos ZIP — file 01-cover.",
-    },
-    {
-      id: "photos",
-      label: "Add remaining listing photos",
-      hint: "Extension attaches the full set when the page allows multiple files. Otherwise upload 02-front, 03-back, etc. from the ZIP.",
-    },
-    {
-      id: "title",
-      label: "Paste the brand-first title",
-      hint: "Start with the brand name.",
-    },
-    {
-      id: "description",
-      label: "Paste the description",
-      hint: "Include flat measurements, fabric, and condition notes.",
-    },
-    {
-      id: "fields",
-      label: "Fill brand, clothing category, size, color, condition",
-      hint: "Also set original price and style tags if you have them.",
-    },
-    {
-      id: "price",
-      label: "Set your asking price",
-      hint: "Copy the price from the review screen.",
-    },
-    {
-      id: "publish",
-      label: "Review and list",
-      hint: "Confirm everything looks right before publishing.",
-    },
-  ],
 };
 
 export function getPhotoSteps(platform: Platform): PhotoStepDef[] {

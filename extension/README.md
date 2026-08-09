@@ -12,21 +12,20 @@ After code changes: run `npm run extension:live`, then **Reload extension** in t
 
 ## Easy posting flow
 
-1. Open a listing **Post checklist** in the web app (pairs the extension automatically).
-2. Tap **Open Mercari/Poshmark sell page**.
-3. On that page, use the green **Reseller Assistant** box in the corner:
+1. Open a listing in the web app and tap **Open Mercari** / **Open Poshmark** (pairs the extension and opens the sell page in a new tab).
+2. Keep the listing tab open; on the sell page use the green **Reseller Assistant** box:
    - **Do this for me** — photos, title, description, then other details
    - After a successful fill, it checks the page and moves to the next step
    - On Poshmark, **brand** and **style tags** show a green tip instead of auto-fill — type and pick from the site’s suggestions
    - **Tweak listing fields** opens a large app editor popup (save there; closing refreshes the listing)
    - Use **Back** if you need to redo a step
-4. When it says to review, check the form and press **List / Publish** yourself.
+3. When it says to review, check the form and press **List / Publish** yourself.
 
 The side panel mirrors the same steps if you prefer tapping there.
 
 ## Pairing
 
-- Automatic from the Post checklist page
+- Automatic when you open the marketplace from the listing hub
 - Or paste a join link / 6-digit code in the side panel
 
 Stored in `chrome.storage.local` as `{ appUrl, token, listingId, listingCache, stepIndex }`.

@@ -22,8 +22,13 @@ import {
 } from "@/lib/listing-schemas";
 import {
   PLATFORM_LABELS,
+  SELL_PAGE_URLS,
   photoRoleLabel,
 } from "@/lib/platforms";
+import {
+  requestExtensionPair,
+  waitForExtensionPairAck,
+} from "@/lib/extension-bridge";
 import type {
   Listing,
   ListingPhotoWithUrl,
@@ -149,6 +154,7 @@ export function ListingHub({ listingId }: ListingHubProps) {
   const [saving, setSaving] = useState(false);
   const [rewritingDescription, setRewritingDescription] = useState(false);
   const [deletingListing, setDeletingListing] = useState(false);
+  const [openingSell, setOpeningSell] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [deletingPhotoId, setDeletingPhotoId] = useState<string | null>(null);
@@ -402,9 +408,9 @@ export function ListingHub({ listingId }: ListingHubProps) {
     }
   }
 
-  async function saveDraft(e?: FormEvent) {
+  async function saveDraft(e?: FormEvent): Promise<boolean> {
     e?.preventDefault();
-    if (!data) return;
+    if (!data) return false;
     setSaving(true);
     setError(null);
     try {
@@ -426,8 +432,10 @@ export function ListingHub({ listingId }: ListingHubProps) {
       );
       setDraftDirty(false);
       setStatusMessage("Listing fields saved.");
+      return true;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not save");
+      return false;
     } finally {
       setSaving(false);
     }
@@ -613,6 +621,58 @@ export function ListingHub({ listingId }: ListingHubProps) {
     }
   }
 
+  async function openMarketplaceSell() {
+    if (!data) return;
+    setOpeningSell(true);
+    setError(null);
+    try {
+      if (draftDirty) {
+        const saved = await saveDraft();
+        if (!saved) return;
+      }
+
+      try {
+        const tokenRes = await fetch(`/api/listings/${listingId}/join-token`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ purpose: "extension" }),
+        });
+        const tokenJson = await tokenRes.json().catch(() => ({}));
+        if (tokenRes.ok && tokenJson.token) {
+          requestExtensionPair({
+            token: String(tokenJson.token),
+            listingId,
+            joinCode: data.listing.join_code,
+            openSidePanel: true,
+          });
+          void waitForExtensionPairAck(2000);
+        }
+      } catch {
+        // Extension pairing is best-effort; still open the sell page.
+      }
+
+      const sellUrl =
+        schema?.sellPageUrl ||
+        SELL_PAGE_URLS[data.listing.platform as Platform];
+      const opened = window.open(sellUrl, "_blank", "noopener,noreferrer");
+      if (!opened) {
+        throw new Error(
+          "Could not open a new tab — allow pop-ups for this site, then try again."
+        );
+      }
+
+      setStatusMessage(
+        `Opened ${PLATFORM_LABELS[data.listing.platform as Platform]} in a new tab. Keep this listing open — use the green helper on the sell page.`
+      );
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Could not open the sell page"
+      );
+    } finally {
+      setOpeningSell(false);
+    }
+  }
+
   if (!data && !error) {
     return (
       <div className="mx-auto max-w-4xl px-4 py-10 text-lg text-[var(--muted)]">
@@ -657,7 +717,7 @@ export function ListingHub({ listingId }: ListingHubProps) {
           </h1>
           <p className="mt-2 text-lg text-[var(--muted)]">
             Add photos, run AI if you want, then edit the {PLATFORM_LABELS[platform]}{" "}
-            fields here before posting.
+            fields here before opening {PLATFORM_LABELS[platform]} to post.
           </p>
         </div>
         <Link
@@ -942,15 +1002,12 @@ export function ListingHub({ listingId }: ListingHubProps) {
                 <BigButton
                   type="button"
                   variant="secondary"
-                  disabled={saving || rewritingDescription}
-                  onClick={() => {
-                    void (async () => {
-                      if (draftDirty) await saveDraft();
-                      router.push(`/app/listings/${listingId}/post`);
-                    })();
-                  }}
+                  disabled={saving || rewritingDescription || openingSell}
+                  onClick={() => void openMarketplaceSell()}
                 >
-                  Post checklist
+                  {openingSell
+                    ? "Opening…"
+                    : `Open ${PLATFORM_LABELS[platform]}`}
                 </BigButton>
               </div>
             }

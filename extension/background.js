@@ -110,7 +110,7 @@ async function buildCoachState(extra = {}) {
       steps: RA_COACH_STEPS,
       stepIndex: 0,
       message:
-        "Open your listing’s Post checklist in Reseller Assistant to connect, then come back here.",
+        "Open your listing in Reseller Assistant to connect, then come back here.",
       ...extra,
     };
   }
