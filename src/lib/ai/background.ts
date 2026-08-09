@@ -1,10 +1,8 @@
 /**
- * Background replacement via fal.ai:
- * 1) BiRefNet v2 for a high-quality garment cutout / mask
- * 2) EVF-SAM hanger mask unioned in so hooks/hangers are not clipped
- * 3) Drop disconnected leftover backdrop islands (wrinkles/folds)
- * 4) Keep large enclosed gaps (hanger triangle) as studio background
- * 5) Composite onto a solid studio color
+ * Background replacement providers (tried in order):
+ * 1) PhotoRoom Remove Background API (PHOTOROOM_API_KEY) — best clothing quality
+ * 2) Pixelcut Product Photo on fal (FAL_KEY) — e-commerce specialist
+ * 3) Pixelcut/BiRefNet cutout + hanger-aware white composite (fallback)
  */
 import sharp from "sharp";
 
@@ -27,6 +25,106 @@ export type ReplaceBackgroundOptions = {
 
 function falKey(): string | null {
   return process.env.FAL_KEY?.trim() || null;
+}
+
+function photoroomKey(): string | null {
+  return process.env.PHOTOROOM_API_KEY?.trim() || null;
+}
+
+function hasBgProvider(): boolean {
+  return Boolean(falKey() || photoroomKey());
+}
+
+/**
+ * PhotoRoom Remove Background API — proprietary e-commerce quality (~$0.02/img).
+ * https://docs.photoroom.com/remove-background-api-basic-plan/quickstart-guide
+ */
+async function replaceWithPhotoroom(
+  imageUrl: string,
+  backgroundColor: string
+): Promise<Buffer | null> {
+  const key = photoroomKey();
+  if (!key) return null;
+
+  try {
+    const source = await fetchImageBytes(imageUrl);
+    if (!source) return null;
+
+    const form = new FormData();
+    const blob = new Blob([new Uint8Array(source.bytes)], {
+      type: source.contentType || "image/jpeg",
+    });
+    form.append("image_file", blob, "photo.jpg");
+    form.append("format", "png");
+    // Solid studio backdrop (no alpha leftovers / soft wall fringes).
+    form.append("bg_color", backgroundColor.replace("#", "").toUpperCase());
+    form.append("channels", "rgba");
+    form.append("size", "full");
+    form.append("crop", "false");
+
+    const response = await fetch("https://sdk.photoroom.com/v1/segment", {
+      method: "POST",
+      headers: { "x-api-key": key },
+      body: form,
+    });
+
+    if (!response.ok) {
+      const text = await response.text().catch(() => "");
+      console.error("photoroom segment error:", response.status, text);
+      return null;
+    }
+
+    return Buffer.from(await response.arrayBuffer());
+  } catch (err) {
+    console.error("photoroom replace failed:", err);
+    return null;
+  }
+}
+
+/**
+ * Pixelcut Product Photo on fal — e-commerce cutout + white studio canvas.
+ * Better garment/hanger edges than generic BiRefNet for catalog shots.
+ */
+async function replaceWithPixelcut(
+  imageUrl: string,
+  backgroundColor: string,
+  width: number,
+  height: number
+): Promise<Buffer | null> {
+  if (!falKey()) return null;
+
+  const { r, g, b } = hexToRgb(backgroundColor);
+  const data = await falPost("pixelcut/product-photo", {
+    image_url: imageUrl,
+    image_size: { width, height },
+    background: {
+      mode: "Color",
+      color: { r, g, b },
+    },
+    // Keep the original framing (no catalog re-crop).
+    margin: { all: "0%" },
+    output_format: "png",
+    sync_mode: false,
+  });
+
+  const url = firstImageUrl(data);
+  if (!url) return null;
+  const downloaded = await fetchImageBytes(url);
+  if (!downloaded) return null;
+  return Buffer.from(downloaded.bytes);
+}
+
+/**
+ * Pixelcut cutout only (transparent PNG) — used when we still need hanger
+ * post-processing on top of a stronger base mask than BiRefNet.
+ */
+async function pixelcutCutout(imageUrl: string): Promise<string | null> {
+  const data = await falPost("pixelcut/background-removal", {
+    image_url: imageUrl,
+    output_format: "rgba",
+    sync_mode: false,
+  });
+  return firstImageUrl(data);
 }
 
 async function falPost(
@@ -604,11 +702,12 @@ export async function replaceBackground(
   imageUrl: string,
   options: ReplaceBackgroundOptions = {}
 ): Promise<ReplaceBackgroundResult> {
-  if (!falKey()) {
+  if (!hasBgProvider()) {
     return {
       ok: false,
       reason: "missing_fal_key",
-      detail: "FAL_KEY is not configured on the server.",
+      detail:
+        "Set PHOTOROOM_API_KEY (preferred) and/or FAL_KEY for Clean background.",
     };
   }
 
@@ -626,34 +725,6 @@ export async function replaceBackground(
       };
     }
 
-    const [{ cutoutUrl, maskUrl }, hangerMaskUrl] = await Promise.all([
-      birefnetCutoutAndMask(imageUrl),
-      keepHanger ? segmentHangerMask(imageUrl) : Promise.resolve(null),
-    ]);
-
-    if (!cutoutUrl) {
-      return {
-        ok: false,
-        reason: "fal_failed",
-        detail:
-          "fal.ai garment cutout failed. Check FAL_KEY and fal.ai status.",
-      };
-    }
-
-    const cutout = await fetchImageBytes(cutoutUrl);
-    if (!cutout) {
-      return {
-        ok: false,
-        reason: "fal_failed",
-        detail: "Could not download the fal.ai cutout.",
-      };
-    }
-
-    const [birefnetMask, hangerMask] = await Promise.all([
-      maskUrl ? fetchImageBytes(maskUrl) : Promise.resolve(null),
-      hangerMaskUrl ? fetchImageBytes(hangerMaskUrl) : Promise.resolve(null),
-    ]);
-
     const meta = await sharp(Buffer.from(originalBytes.bytes)).metadata();
     const width = meta.width ?? 0;
     const height = meta.height ?? 0;
@@ -665,6 +736,98 @@ export async function replaceBackground(
       };
     }
 
+    // 1) PhotoRoom — closest quality to the consumer Photoroom app.
+    const photoroom = await replaceWithPhotoroom(imageUrl, backgroundColor);
+    if (photoroom) {
+      return { ok: true, bytes: photoroom, contentType: "image/png" };
+    }
+
+    // 2) Pixelcut Product Photo — e-commerce specialist on fal (~$0.024).
+    const pixelcut = await replaceWithPixelcut(
+      imageUrl,
+      backgroundColor,
+      width,
+      height
+    );
+    if (pixelcut) {
+      return { ok: true, bytes: pixelcut, contentType: "image/png" };
+    }
+
+    // 3) Fallback: Pixelcut/BiRefNet cutout + hanger-aware composite.
+    return await replaceWithCutoutComposite({
+      imageUrl,
+      originalBytes: originalBytes.bytes,
+      width,
+      height,
+      backgroundRgb: { r, g, b },
+      keepHanger,
+    });
+  } catch (err) {
+    console.error("replaceBackground failed:", err);
+    return {
+      ok: false,
+      reason: "process_failed",
+      detail: err instanceof Error ? err.message : "Background compose failed.",
+    };
+  }
+}
+
+async function replaceWithCutoutComposite(params: {
+  imageUrl: string;
+  originalBytes: ArrayBuffer;
+  width: number;
+  height: number;
+  backgroundRgb: { r: number; g: number; b: number };
+  keepHanger: boolean;
+}): Promise<ReplaceBackgroundResult> {
+  const { imageUrl, originalBytes, width, height, backgroundRgb, keepHanger } =
+    params;
+  const { r, g, b } = backgroundRgb;
+
+  if (!falKey()) {
+    return {
+      ok: false,
+      reason: "fal_failed",
+      detail:
+        "PhotoRoom/Pixelcut unavailable and FAL_KEY is missing for fallback.",
+    };
+  }
+
+  try {
+    const pixelcutUrl = await pixelcutCutout(imageUrl);
+    const birefnet = pixelcutUrl
+      ? { cutoutUrl: pixelcutUrl, maskUrl: null as string | null }
+      : await birefnetCutoutAndMask(imageUrl);
+
+    const hangerMaskUrl = keepHanger
+      ? await segmentHangerMask(imageUrl)
+      : null;
+
+    if (!birefnet.cutoutUrl) {
+      return {
+        ok: false,
+        reason: "fal_failed",
+        detail:
+          "Background cutout failed (PhotoRoom, Pixelcut, and BiRefNet). Check API keys.",
+      };
+    }
+
+    const cutout = await fetchImageBytes(birefnet.cutoutUrl);
+    if (!cutout) {
+      return {
+        ok: false,
+        reason: "fal_failed",
+        detail: "Could not download the cutout image.",
+      };
+    }
+
+    const [birefnetMask, hangerMask] = await Promise.all([
+      birefnet.maskUrl
+        ? fetchImageBytes(birefnet.maskUrl)
+        : Promise.resolve(null),
+      hangerMaskUrl ? fetchImageBytes(hangerMaskUrl) : Promise.resolve(null),
+    ]);
+
     const { alpha, hangerGray } = await buildUnionAlpha({
       width,
       height,
@@ -673,14 +836,12 @@ export async function replaceBackground(
       hangerMaskBytes: hangerMask?.bytes ?? null,
     });
 
-    // Original RGB + cleaned alpha, flattened onto the studio color.
-    const rgba = await sharp(Buffer.from(originalBytes.bytes))
+    const rgba = await sharp(Buffer.from(originalBytes))
       .ensureAlpha()
       .resize(width, height, { fit: "fill" })
       .raw()
       .toBuffer();
 
-    // Clear wall color trapped inside the hanger triangle / soft shadows.
     punchTrappedBackdrop({
       alpha,
       rgba,
@@ -717,7 +878,7 @@ export async function replaceBackground(
       contentType: "image/png",
     };
   } catch (err) {
-    console.error("replaceBackground failed:", err);
+    console.error("replaceWithCutoutComposite failed:", err);
     return {
       ok: false,
       reason: "process_failed",

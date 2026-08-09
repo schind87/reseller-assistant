@@ -11,7 +11,7 @@ Live app: **https://reseller-assistant.vercel.app** (custom domain **https://res
 - Next.js 16 (App Router) + TypeScript + Tailwind 4
 - Supabase (Postgres + Storage + Auth)
 - Passwordless sign-in: email one-time code (Resend), or your own PIN
-- Optional OpenRouter (or OpenAI) vision/drafting and fal.ai background replacement (hanger-safe)
+- Optional OpenRouter (or OpenAI) vision/drafting and Clean bg via PhotoRoom / Pixelcut
 
 ## Auth email (Resend)
 
@@ -48,7 +48,8 @@ Open [http://localhost:3000](http://localhost:3000) → email code sign-in (or e
 | `OPENROUTER_IDENTIFY_MODEL` | no | Default `google/gemini-2.5-pro` |
 | `OPENROUTER_DRAFT_MODEL` | no | Default `openai/gpt-4o` |
 | `OPENAI_API_KEY` | no | Fallback if OpenRouter is unset |
-| `FAL_KEY` | **yes for Clean bg** | fal.ai API key — without it, Clean background returns an error |
+| `FAL_KEY` | no* | Pixelcut / BiRefNet Clean bg when PhotoRoom is unset |
+| `PHOTOROOM_API_KEY` | no* | Preferred Clean bg (PhotoRoom quality for clothing) |
 
 ## Domain
 
