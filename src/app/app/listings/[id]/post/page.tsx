@@ -216,11 +216,7 @@ export default function PostPage() {
             <span className="font-semibold text-[var(--foreground)]">
               Do this for me
             </span>
-            , then{" "}
-            <span className="font-semibold text-[var(--foreground)]">
-              Next step
-            </span>
-            . It walks through photos, title, description, and the rest.
+            . When a step works, it checks the page and moves on automatically.
           </li>
           <li>
             When the helper says to review, check the form, then press{" "}

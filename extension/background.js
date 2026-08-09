@@ -261,6 +261,32 @@ async function fillFieldsOnPage(listing, fieldKeys, preferredPlatform) {
   return { filled, missing };
 }
 
+async function advanceAfterSuccess(doneLabel) {
+  const pairing = await getPairing();
+  const current = pairing?.stepIndex || 0;
+  if (current >= RA_COACH_STEPS.length - 1) {
+    return buildCoachState({
+      message: `${doneLabel} Look over the form, then press List / Publish yourself.`,
+    });
+  }
+  const next = await setStepIndex(current + 1);
+  const nextStep = RA_COACH_STEPS[next];
+  return buildCoachState({
+    message: `${doneLabel} Next: ${nextStep.label}.`,
+    advanced: true,
+  });
+}
+
+async function verifyFilledField(fieldKey, expected, preferredPlatform) {
+  // Give the page a beat to commit React/controlled input state.
+  await new Promise((resolve) => setTimeout(resolve, 200));
+  const result = await sendToMarketplaceTab(
+    { type: "verifyField", fieldKey, value: expected },
+    preferredPlatform
+  );
+  return Boolean(result?.ok && result.verified);
+}
+
 async function runCurrentStep() {
   const pairing = await getPairing();
   if (!pairing) {
@@ -287,16 +313,14 @@ async function runCurrentStep() {
       if (!result?.ok) {
         throw new Error(result?.error || "Could not attach photos.");
       }
-      let message = `Added ${result.attached} photo${
-        result.attached === 1 ? "" : "s"
-      }.`;
       if (result.truncated) {
-        message +=
-          " This page only took one file — tap Add my photos again or use the ZIP from the web app.";
-      } else {
-        message += " Tap Next step when you’re ready.";
+        return buildCoachState({
+          message: `Added ${result.attached} photo. This page only took one file — tap Add my photos again, or use the ZIP, then Next step.`,
+        });
       }
-      return buildCoachState({ message });
+      return advanceAfterSuccess(
+        `Added ${result.attached} photo${result.attached === 1 ? "" : "s"}.`
+      );
     }
 
     if (step.key === "title" || step.key === "description") {
@@ -318,9 +342,15 @@ async function runCurrentStep() {
         { type: "highlightNext", fieldKey: step.key },
         platform
       ).catch(() => null);
-      return buildCoachState({
-        message: `${step.label} filled. Tap Next step.`,
-      });
+
+      const verified = await verifyFilledField(step.key, value, platform);
+      if (!verified) {
+        return buildCoachState({
+          error: true,
+          message: `${step.label} didn’t stick on the page. Tap the field and try Do this for me again.`,
+        });
+      }
+      return advanceAfterSuccess(`${step.label} filled.`);
     }
 
     if (step.key === "details") {
@@ -334,13 +364,32 @@ async function runCurrentStep() {
           "Could not fill detail fields on this page. Some boxes may need a quick manual tap."
         );
       }
-      let message = `Filled ${filled} detail field${filled === 1 ? "" : "s"}.`;
-      if (missing.length) {
-        message += ` Check: ${missing.slice(0, 4).join(", ")}.`;
-      } else {
-        message += " Tap Next step.";
+
+      // Spot-check a couple of text-friendly fields when we have values.
+      const checkKeys = ["brand", "price", "originalPrice"].filter((key) =>
+        raFieldValueFromListing(listing, key)
+      );
+      let verifiedCount = 0;
+      for (const key of checkKeys) {
+        const expected = raFieldValueFromListing(listing, key);
+        if (await verifyFilledField(key, expected, platform)) {
+          verifiedCount += 1;
+        }
       }
-      return buildCoachState({ message });
+
+      if (checkKeys.length && verifiedCount === 0) {
+        return buildCoachState({
+          error: true,
+          message:
+            "Detail fields may not have saved on the page. Check brand/price, then try again.",
+        });
+      }
+
+      let done = `Filled ${filled} detail field${filled === 1 ? "" : "s"}.`;
+      if (missing.length) {
+        done += ` Still check: ${missing.slice(0, 4).join(", ")}.`;
+      }
+      return advanceAfterSuccess(done);
     }
 
     if (step.key === "review") {

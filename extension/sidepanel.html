@@ -88,7 +88,8 @@
         <strong>Use the green box on the sell page</strong>
         <span>
           Open Mercari or Poshmark create/sell. A helper box appears in the
-          corner — tap <em>Do this for me</em>, then <em>Next step</em>.
+          corner — tap <em>Do this for me</em>. When it works, the helper moves
+          to the next step automatically.
         </span>
       </div>
 
@@ -128,11 +129,15 @@
       <p id="action-status" class="status" role="status" aria-live="polite"></p>
     </section>
 
-    <footer class="footer">
-      <button id="reload-extension-btn" class="btn btn-reload" type="button">
-        Reload extension
+    <footer class="footer footer-discreet">
+      <button
+        id="reload-extension-btn"
+        class="btn-reload-quiet"
+        type="button"
+        title="Reload extension from repo"
+      >
+        Reload
       </button>
-      <p class="footer-hint">After pulling code, click this instead of chrome://extensions.</p>
     </footer>
 
     <script src="coach-shared.js"></script>

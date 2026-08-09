@@ -353,9 +353,33 @@ textarea:focus {
 }
 
 .footer {
-  margin-top: 8px;
-  padding-top: 8px;
-  border-top: 1px solid var(--border);
+  margin-top: 16px;
+  padding-top: 0;
+  border-top: none;
+}
+
+.footer-discreet {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+}
+
+.btn-reload-quiet {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: #9a948a;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding: 4px 2px;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.btn-reload-quiet:hover {
+  color: var(--muted);
 }
 
 .btn-reload {

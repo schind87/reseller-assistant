@@ -10,19 +10,19 @@ var RA_COACH_STEPS = [
   {
     key: "title",
     label: "Title",
-    help: "Fill the title shoppers see first.",
+    help: "Fill the title shoppers see first. We’ll check it stuck, then move on.",
     actionLabel: "Fill title",
   },
   {
     key: "description",
     label: "Description",
-    help: "Fill the longer description.",
+    help: "Fill the longer description. We’ll check it stuck, then move on.",
     actionLabel: "Fill description",
   },
   {
     key: "details",
     label: "Other details",
-    help: "Fill brand, size, color, condition, prices, and tags.",
+    help: "Fill brand, size, color, condition, prices, and tags — then we move on.",
     actionLabel: "Fill the rest",
   },
   {

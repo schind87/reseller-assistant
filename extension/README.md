@@ -16,7 +16,8 @@ After code changes: run `npm run extension:live`, then **Reload extension** in t
 2. Tap **Open Mercari/Poshmark sell page**.
 3. On that page, use the green **Reseller Assistant** box in the corner:
    - **Do this for me** — photos, title, description, then other details
-   - **Next step** / **Back**
+   - After a successful fill, it checks the page and moves to the next step
+   - Use **Back** if you need to redo a step
 4. When it says to review, check the form and press **List / Publish** yourself.
 
 The side panel mirrors the same steps if you prefer tapping there.

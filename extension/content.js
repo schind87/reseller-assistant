@@ -305,6 +305,53 @@ function handleFillField(payload) {
   };
 }
 
+function readElementValue(el) {
+  if (!el) return "";
+  if (el.isContentEditable) return String(el.textContent || "").trim();
+  if (el instanceof HTMLSelectElement) {
+    const opt = el.selectedOptions?.[0];
+    return String(opt?.textContent || el.value || "").trim();
+  }
+  return String(el.value || "").trim();
+}
+
+function handleVerifyField(payload) {
+  const fieldKey = payload?.fieldKey || "title";
+  const expected = payload?.value == null ? "" : String(payload.value).trim();
+  const el = findField(fieldKey, payload?.selector || null);
+  if (!el) {
+    return {
+      ok: false,
+      verified: false,
+      error: `No field matched for ${fieldKey}`,
+    };
+  }
+
+  const actual = readElementValue(el);
+  if (!expected) {
+    return {
+      ok: true,
+      verified: Boolean(actual),
+      actual,
+      expected,
+    };
+  }
+
+  const expectedNorm = normalizeText(expected);
+  const actualNorm = normalizeText(actual);
+  const verified =
+    actualNorm === expectedNorm ||
+    actualNorm.includes(expectedNorm) ||
+    expectedNorm.includes(actualNorm);
+
+  return {
+    ok: true,
+    verified,
+    actual,
+    expected,
+  };
+}
+
 function handleHighlightNext(payload) {
   const fieldKey = payload?.fieldKey || "title";
   const el = findField(fieldKey, payload?.selector || null);
@@ -474,6 +521,8 @@ function handleMessage(message) {
       return { ok: true, pong: true, href: location.href };
     case "fillField":
       return handleFillField(message);
+    case "verifyField":
+      return handleVerifyField(message);
     case "highlightNext":
       return handleHighlightNext(message);
     case "discoverForm":
