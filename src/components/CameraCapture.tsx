@@ -147,7 +147,11 @@ export function CameraCapture({
         {showAspectGuide ? (
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center p-6">
             <div
-              className="relative w-full max-w-[min(92vw,70vh)] border-2 border-white/90 shadow-[0_0_0_9999px_rgba(0,0,0,0.45)]"
+              className={
+                aspect.height > aspect.width
+                  ? "relative h-full max-h-[min(78vh,92vw)] w-auto border-2 border-white/90 shadow-[0_0_0_9999px_rgba(0,0,0,0.45)]"
+                  : "relative w-full max-w-[min(92vw,70vh)] border-2 border-white/90 shadow-[0_0_0_9999px_rgba(0,0,0,0.45)]"
+              }
               style={{ aspectRatio: `${aspect.width} / ${aspect.height}` }}
             >
               <div className="absolute inset-x-0 top-2 text-center text-xs font-semibold tracking-wide text-white drop-shadow">

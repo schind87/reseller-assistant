@@ -32,9 +32,9 @@ export type PhotoAspectGuide = {
 };
 
 export const PLATFORM_PHOTO_ASPECT: Record<Platform, PhotoAspectGuide> = {
-  // Both marketplaces display listing grids as squares in practice.
   mercari: { width: 1, height: 1, label: "1:1 square" },
-  poshmark: { width: 1, height: 1, label: "1:1 square" },
+  // Poshmark listing photos work best as 4×3 portrait (3 wide × 4 tall).
+  poshmark: { width: 3, height: 4, label: "4×3 portrait" },
 };
 
 const SHARED_PHOTO_STEPS: PhotoStepDef[] = [
@@ -120,7 +120,13 @@ const POSHMARK_PHOTO_STEPS: PhotoStepDef[] = SHARED_PHOTO_STEPS.map((step) => {
       ...step,
       title: "Cover shot",
       instruction:
-        "Poshmark shoppers judge the cover first. Flat lay or on a hanger, fill the square frame, bright and uncluttered. Add more cover-style shots if you want options.",
+        "Poshmark shoppers judge the cover first. Flat lay or on a hanger, fill the 4×3 portrait frame, bright and uncluttered. Add more cover-style shots if you want options.",
+    };
+  }
+  if (step.purpose === "listing") {
+    return {
+      ...step,
+      instruction: `${step.instruction} Use a 4×3 portrait frame for Poshmark.`,
     };
   }
   return step;
@@ -201,7 +207,7 @@ export const POSTING_CHECKLIST: Record<Platform, ChecklistStep[]> = {
     {
       id: "cover",
       label: "Upload the cover photo first",
-      hint: "Best: Chrome extension → Attach photos (cover is first). Fallback: use the photos ZIP — file 01-cover.",
+      hint: "Use a 4×3 portrait shot. Best: Chrome extension → Attach photos (cover is first). Fallback: photos ZIP — file 01-cover.",
     },
     {
       id: "photos",
