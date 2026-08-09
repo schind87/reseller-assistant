@@ -160,7 +160,7 @@ function CostBadge({
         className={`inline-flex items-center rounded-md border border-dashed border-[var(--border)] bg-white/90 font-semibold text-[var(--muted)] ${
           size === "sm" ? "px-1.5 py-0.5 text-[10px]" : "px-2 py-1 text-xs"
         }`}
-        title="fal has not returned a billed amount for this request yet"
+        title="fal billing API returned no amount yet (needs an ADMIN-scoped key for actual costs — see Recent History link)"
       >
         Cost pending
       </span>

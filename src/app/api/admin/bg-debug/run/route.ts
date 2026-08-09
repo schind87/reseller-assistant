@@ -218,9 +218,11 @@ export async function POST(request: Request) {
           ) {
             continue;
           }
+          const model = getFalBgModel(result.model_id);
           const billing = await resolveFalCost({
             requestId: result.fal_request_id,
             endpointId: result.fal_endpoint,
+            approxCostHint: model?.approxCost,
           });
           if (billing.source !== "billing_event" && billing.costUsd == null) {
             continue;
@@ -405,6 +407,7 @@ export async function POST(request: Request) {
               requestId,
               endpointId: model.falPath,
               settleMs: 1200,
+              approxCostHint: model.approxCost,
             });
             costUsd = billing.costUsd;
             costUnitPrice = billing.unitPrice;
@@ -490,10 +493,12 @@ export async function POST(request: Request) {
             continue;
           }
           try {
+            const modelDef = getFalBgModel(result.modelId);
             const billing = await resolveFalCost({
               requestId: result.falRequestId,
               endpointId: result.falEndpoint,
               settleMs: i === 0 ? 1500 : 0,
+              approxCostHint: modelDef?.approxCost,
             });
             if (billing.source !== "billing_event") continue;
             const next = applyBillingToResult(result, billing);

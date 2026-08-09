@@ -48,7 +48,8 @@ Open [http://localhost:3000](http://localhost:3000) → email code sign-in (or e
 | `OPENROUTER_IDENTIFY_MODEL` | no | Default `google/gemini-2.5-pro` |
 | `OPENROUTER_DRAFT_MODEL` | no | Default `openai/gpt-4o` |
 | `OPENAI_API_KEY` | no | Fallback if OpenRouter is unset |
-| `FAL_KEY` | no* | Pixelcut / BiRefNet Clean bg |
+| `FAL_KEY` | no* | Pixelcut / BiRefNet Clean bg + bg lab inference |
+| `FAL_ADMIN_KEY` | no | ADMIN-scoped fal key so the bg lab can read actual billed costs |
 | `ADMIN_EMAILS` | no | Comma-separated emails for `/app/admin/bg-lab` |
 
 ## Domain

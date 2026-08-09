@@ -19,8 +19,39 @@ function falKey(): string | null {
   return process.env.FAL_KEY?.trim() || null;
 }
 
+/**
+ * Billing/usage Platform APIs require an ADMIN-scoped fal key.
+ * Inference works with a normal API key; Recent History in the dashboard
+ * uses the logged-in session — so costs can appear there while our lab
+ * still shows "Cost pending" if only an API-scoped key is configured.
+ */
+function falBillingKey(): string | null {
+  return (
+    process.env.FAL_ADMIN_KEY?.trim() ||
+    process.env.FAL_KEY?.trim() ||
+    null
+  );
+}
+
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function asFiniteNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim()) {
+    const n = Number(value);
+    if (Number.isFinite(n)) return n;
+  }
+  return null;
+}
+
+/** Parse lab catalog strings like "~$0.016" into a USD estimate. */
+export function parseApproxCostUsd(approxCost: string): number | null {
+  const match = approxCost.match(/\$?\s*([0-9]+(?:\.[0-9]+)?)/);
+  if (!match) return null;
+  const n = Number(match[1]);
+  return Number.isFinite(n) && n > 0 ? n : null;
 }
 
 export function falModelPageUrl(endpointId: string): string {
@@ -249,17 +280,20 @@ async function fetchPricingEstimate(
     const data = (await res.json()) as {
       prices?: Array<{
         endpoint_id?: string;
-        unit_price?: number;
+        unit_price?: number | string | null;
         unit?: string;
         currency?: string;
       }>;
     };
-    const price = data.prices?.[0];
-    if (price?.unit_price == null) return null;
+    const price =
+      data.prices?.find((p) => p.endpoint_id === endpointId) ??
+      data.prices?.[0];
+    const unitPrice = asFiniteNumber(price?.unit_price);
+    if (unitPrice == null || unitPrice <= 0) return null;
     return {
-      unitPrice: price.unit_price,
-      unit: price.unit ?? "image",
-      currency: price.currency ?? "USD",
+      unitPrice,
+      unit: price?.unit ?? "image",
+      currency: price?.currency ?? "USD",
     };
   } catch {
     return null;
@@ -267,75 +301,73 @@ async function fetchPricingEstimate(
 }
 
 async function fetchBillingEvent(
-  requestId: string
+  requestId: string,
+  endpointId?: string | null
 ): Promise<{
   costUsd: number;
   unitPrice: number | null;
   units: number | null;
   currency: string;
 } | null> {
-  const key = falKey();
+  const key = falBillingKey();
   if (!key) return null;
   if (requestId.startsWith("sync-")) return null;
 
   // Billing events can lag several seconds after completion.
-  for (let attempt = 0; attempt < 10; attempt++) {
-    if (attempt > 0) await sleep(1000 + attempt * 250);
+  // Auth failures won't recover with retries — fail fast.
+  for (let attempt = 0; attempt < 8; attempt++) {
+    if (attempt > 0) await sleep(900 + attempt * 300);
     try {
       const url = new URL("https://api.fal.ai/v1/models/billing-events");
       url.searchParams.set("request_id", requestId);
       url.searchParams.set("limit", "10");
+      // Widen past the default 24h window when filtering by id.
+      const start = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
+      url.searchParams.set("start", start.toISOString());
+      if (endpointId?.trim()) {
+        url.searchParams.set("endpoint_id", endpointId.trim());
+      }
       const res = await fetch(url, {
         headers: { Authorization: `Key ${key}` },
       });
+      if (res.status === 401 || res.status === 403) {
+        console.warn(
+          "fal billing-events denied — use an ADMIN-scoped key (FAL_ADMIN_KEY or ADMIN FAL_KEY) to read actual costs",
+          res.status,
+        );
+        return null;
+      }
       if (!res.ok) continue;
       const data = (await res.json()) as {
-        billing_events?: Array<{
-          request_id?: string;
-          cost_total?: number | null;
-          cost_subtotal?: number | null;
-          cost_discount?: number | null;
-          cost_estimate_nano_usd?: number | null;
-          unit_price?: number | null;
-          output_units?: number | null;
-          percent_discount?: number | null;
-          currency?: string;
-        }>;
+        billing_events?: Array<Record<string, unknown>>;
       };
       const event =
         data.billing_events?.find((e) => e.request_id === requestId) ??
         data.billing_events?.[0];
       if (!event) continue;
 
-      const unitPrice =
-        typeof event.unit_price === "number" ? event.unit_price : null;
-      const units =
-        typeof event.output_units === "number" ? event.output_units : null;
+      const unitPrice = asFiniteNumber(event.unit_price);
+      const units = asFiniteNumber(event.output_units);
 
-      let costUsd: number | null =
-        typeof event.cost_total === "number"
-          ? event.cost_total
-          : typeof event.cost_subtotal === "number"
-            ? event.cost_subtotal -
-              (typeof event.cost_discount === "number"
-                ? event.cost_discount
-                : 0)
-            : null;
+      let costUsd =
+        asFiniteNumber(event.cost_total) ??
+        (() => {
+          const sub = asFiniteNumber(event.cost_subtotal);
+          if (sub == null) return null;
+          const discount = asFiniteNumber(event.cost_discount) ?? 0;
+          return sub - discount;
+        })();
 
-      if (
-        costUsd == null &&
-        typeof event.cost_estimate_nano_usd === "number"
-      ) {
-        costUsd = event.cost_estimate_nano_usd / 1_000_000_000;
+      if (costUsd == null) {
+        const nano = asFiniteNumber(event.cost_estimate_nano_usd);
+        if (nano != null) costUsd = nano / 1_000_000_000;
       }
 
       if (costUsd == null && unitPrice != null && units != null) {
         costUsd = unitPrice * units;
-        if (
-          typeof event.percent_discount === "number" &&
-          event.percent_discount > 0
-        ) {
-          costUsd *= 1 - event.percent_discount / 100;
+        const pct = asFiniteNumber(event.percent_discount);
+        if (pct != null && pct > 0) {
+          costUsd *= 1 - pct / 100;
         }
       }
 
@@ -363,12 +395,14 @@ export async function resolveFalCost(params: {
   endpointId: string;
   /** Extra wait before first billing poll — useful right after inference. */
   settleMs?: number;
+  /** Optional lab catalog hint like "~$0.016" when fal pricing has no row. */
+  approxCostHint?: string | null;
 }): Promise<FalBillingInfo> {
   if (params.settleMs && params.settleMs > 0) {
     await sleep(params.settleMs);
   }
 
-  const billed = await fetchBillingEvent(params.requestId);
+  const billed = await fetchBillingEvent(params.requestId, params.endpointId);
   if (billed) {
     return {
       requestId: params.requestId,
@@ -396,11 +430,27 @@ export async function resolveFalCost(params: {
     };
   }
 
+  const catalog = params.approxCostHint
+    ? parseApproxCostUsd(params.approxCostHint)
+    : null;
+  if (catalog != null) {
+    return {
+      requestId: params.requestId,
+      endpointId: params.endpointId,
+      costUsd: catalog,
+      unitPrice: catalog,
+      units: 1,
+      currency: "USD",
+      source: "pricing_estimate",
+      dashboardUrl: falDashboardUrl(params.requestId, params.endpointId),
+    };
+  }
+
   return {
     requestId: params.requestId,
     endpointId: params.endpointId,
     costUsd: null,
-    unitPrice: estimate?.unitPrice ?? null,
+    unitPrice: null,
     units: null,
     currency: "USD",
     source: null,
