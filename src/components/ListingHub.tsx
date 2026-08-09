@@ -1569,13 +1569,13 @@ function PhotoTile({
       {dropEdge === "before" ? (
         <span
           aria-hidden
-          className="pointer-events-none absolute inset-y-2 left-0 z-10 w-1 rounded-full bg-[var(--accent)]"
+          className="pointer-events-none absolute inset-y-2 left-0 z-10 w-1 -translate-x-1/2 -ml-1.5 rounded-full bg-[var(--accent)]"
         />
       ) : null}
       {dropEdge === "after" ? (
         <span
           aria-hidden
-          className="pointer-events-none absolute inset-y-2 right-0 z-10 w-1 rounded-full bg-[var(--accent)]"
+          className="pointer-events-none absolute inset-y-2 right-0 z-10 w-1 translate-x-1/2 -mr-1.5 rounded-full bg-[var(--accent)]"
         />
       ) : null}
       {/* eslint-disable-next-line @next/next/no-img-element */}
