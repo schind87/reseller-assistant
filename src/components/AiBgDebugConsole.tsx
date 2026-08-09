@@ -144,7 +144,7 @@ export function AiBgDebugConsole({
             Admin
           </p>
           <h1 className="font-[family-name:var(--font-brand)] text-3xl text-[var(--foreground)]">
-            AI background debug
+            Background model lab
           </h1>
           <p className="mt-2 max-w-2xl text-base text-[var(--muted)]">
             Compare fal.ai (and PhotoRoom) removers on any listing photo in the

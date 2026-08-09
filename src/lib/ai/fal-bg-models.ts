@@ -1,6 +1,6 @@
 /**
  * Catalog of fal.ai (and optional PhotoRoom) background models for the
- * admin AI debug console. Each entry knows how to build a fal.run body and
+ * admin background model lab. Each entry knows how to build a fal.run body and
  * extract the result image URL.
  */
 

@@ -185,13 +185,13 @@ export function AppHome({
               Admin
             </h2>
             <p className="mt-1 text-sm text-[var(--muted)]">
-              Compare fal.ai background models on any listing photo.
+              Compare fal.ai background removers on any listing photo.
             </p>
             <Link
-              href="/app/admin/ai-debug"
+              href="/app/admin/bg-lab"
               className="mt-3 inline-block text-base font-semibold text-[var(--accent)] hover:underline"
             >
-              Open AI background debug →
+              Open background model lab →
             </Link>
           </section>
         ) : null}
