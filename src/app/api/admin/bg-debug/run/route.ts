@@ -452,7 +452,9 @@ export async function POST(request: Request) {
             error,
             falRequestId,
             falEndpoint,
-            falDashboardUrl: falRequestId ? falDashboardUrl(falRequestId) : null,
+            falDashboardUrl: falRequestId
+              ? falDashboardUrl(falRequestId, falEndpoint)
+              : falDashboardUrl(null, falEndpoint),
             costUsd,
             costUnitPrice,
             costUnits,

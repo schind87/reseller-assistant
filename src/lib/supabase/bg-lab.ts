@@ -1,5 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getSignedPhotoUrl } from "@/lib/supabase/queries";
+import { falDashboardUrl } from "@/lib/ai/fal-lab";
 
 export type BgLabResultRow = {
   id: string;
@@ -33,9 +34,12 @@ export type BgLabRunRow = {
   results: BgLabResultRow[];
 };
 
-function dashboardUrlFor(requestId: string | null): string | null {
-  if (!requestId) return null;
-  return `https://fal.ai/dashboard/requests?requestId=${encodeURIComponent(requestId)}`;
+function dashboardUrlFor(
+  requestId: string | null,
+  endpointId: string | null
+): string | null {
+  if (!requestId && !endpointId) return null;
+  return falDashboardUrl(requestId, endpointId);
 }
 
 export async function createBgLabRun(params: {
@@ -194,7 +198,8 @@ export async function listBgLabRunsForPhoto(
       created_at: raw.created_at as string,
       imageUrl,
       dashboardUrl: dashboardUrlFor(
-        (raw.fal_request_id as string | null) ?? null
+        (raw.fal_request_id as string | null) ?? null,
+        (raw.fal_endpoint as string | null) ?? null
       ),
     };
     const list = byRun.get(runId) ?? [];

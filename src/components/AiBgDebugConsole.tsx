@@ -31,6 +31,7 @@ type RunResult = {
   imageUrl: string | null;
   error?: string;
   falRequestId?: string | null;
+  falEndpoint?: string | null;
   falDashboardUrl?: string | null;
   costUsd?: number | null;
   costUnitPrice?: number | null;
@@ -1191,16 +1192,7 @@ export function AiBgDebugConsole({
                       {when ? (
                         <p className="text-xs text-[var(--muted)]">{when}</p>
                       ) : null}
-                      {result.falDashboardUrl ? (
-                        <a
-                          href={result.falDashboardUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="mt-1 inline-block text-xs font-semibold text-[var(--accent)] hover:underline"
-                        >
-                          fal request →
-                        </a>
-                      ) : null}
+                      <FalRequestMeta result={result} />
                       <div className="mt-2 flex items-center justify-between gap-2">
                         <button
                           type="button"
@@ -1265,6 +1257,43 @@ export function AiBgDebugConsole({
           backdrop={labBackdrop}
           onClose={() => setPreview(null)}
         />
+      ) : null}
+    </div>
+  );
+}
+
+function FalRequestMeta({ result }: { result: RunResult }) {
+  const requestId = result.falRequestId?.trim() || null;
+  const realId =
+    Boolean(requestId) && !requestId!.startsWith("sync-") ? requestId : null;
+  const href = result.falDashboardUrl;
+
+  if (!href && !realId) return null;
+
+  return (
+    <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+      {href ? (
+        <a
+          href={href}
+          target="_blank"
+          rel="noreferrer"
+          className="font-semibold text-[var(--accent)] hover:underline"
+          title="fal does not deep-link Model API requests; opens the model page or usage billing"
+        >
+          Open on fal →
+        </a>
+      ) : null}
+      {realId ? (
+        <button
+          type="button"
+          className="font-semibold text-[var(--muted)] hover:text-[var(--foreground)] hover:underline"
+          title={realId}
+          onClick={() => {
+            void navigator.clipboard.writeText(realId);
+          }}
+        >
+          Copy request id
+        </button>
       ) : null}
     </div>
   );

@@ -23,11 +23,32 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-export function falDashboardUrl(requestId?: string | null): string {
-  if (requestId) {
-    return `https://fal.ai/dashboard/requests?requestId=${encodeURIComponent(requestId)}`;
+export function falModelPageUrl(endpointId: string): string {
+  return `https://fal.ai/models/${endpointId.replace(/^\/+/, "")}`;
+}
+
+/** True when the id is a real fal queue request (not a sync fallback placeholder). */
+export function isRealFalRequestId(requestId?: string | null): boolean {
+  if (!requestId?.trim()) return false;
+  return !requestId.startsWith("sync-");
+}
+
+/**
+ * Best public fal URL for a lab result.
+ * fal does not expose a stable deep-link to a single Model API request
+ * (`/dashboard/requests?requestId=` is not a real page), so we open the
+ * model page when we know the endpoint, otherwise Usage & Billing.
+ */
+export function falDashboardUrl(
+  requestId?: string | null,
+  endpointId?: string | null
+): string {
+  const endpoint = endpointId?.trim();
+  if (endpoint) return falModelPageUrl(endpoint);
+  if (isRealFalRequestId(requestId)) {
+    return "https://fal.ai/dashboard/usage-billing";
   }
-  return "https://fal.ai/dashboard/usage";
+  return "https://fal.ai/dashboard/usage-billing";
 }
 
 /**
@@ -347,7 +368,7 @@ export async function resolveFalCost(params: {
       units: billed.units,
       currency: billed.currency,
       source: "billing_event",
-      dashboardUrl: falDashboardUrl(params.requestId),
+      dashboardUrl: falDashboardUrl(params.requestId, params.endpointId),
     };
   }
 
@@ -361,7 +382,7 @@ export async function resolveFalCost(params: {
       units: 1,
       currency: estimate.currency,
       source: "pricing_estimate",
-      dashboardUrl: falDashboardUrl(params.requestId),
+      dashboardUrl: falDashboardUrl(params.requestId, params.endpointId),
     };
   }
 
@@ -373,6 +394,6 @@ export async function resolveFalCost(params: {
     units: null,
     currency: "USD",
     source: null,
-    dashboardUrl: falDashboardUrl(params.requestId),
+    dashboardUrl: falDashboardUrl(params.requestId, params.endpointId),
   };
 }
