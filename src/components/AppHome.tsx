@@ -93,6 +93,22 @@ export function AppHome({
     }
   }
 
+  function enabledStores(): Platform[] {
+    if (preferences?.sellingWebsites?.length) {
+      return preferences.sellingWebsites;
+    }
+    return ["mercari", "poshmark"];
+  }
+
+  function createNewListing() {
+    const stores = enabledStores();
+    if (stores.length === 1) {
+      void startListing(stores[0]);
+      return;
+    }
+    setChoosing(true);
+  }
+
   if (editingPrefs || !prefsDone) {
     return (
       <SellerOnboarding
@@ -198,32 +214,15 @@ export function AppHome({
       ) : null}
 
       {!choosing ? (
-        <div className="flex flex-col gap-3">
-          <BigButton
-            disabled={busy}
-            onClick={() =>
-              void startListing(preferredSellingWebsite(preferences))
-            }
-          >
-            List on {PLATFORM_LABELS[preferredSellingWebsite(preferences)]}
-          </BigButton>
-          <BigButton
-            variant="secondary"
-            disabled={busy}
-            onClick={() => setChoosing(true)}
-          >
-            Sell on a different site
-          </BigButton>
-        </div>
+        <BigButton disabled={busy} onClick={() => createNewListing()}>
+          {busy ? "Starting…" : "Create new listing"}
+        </BigButton>
       ) : (
         <div className="flex flex-col gap-3 rounded-2xl border border-[var(--border)] bg-white p-5">
           <h2 className="font-[family-name:var(--font-brand)] text-2xl">
             Where will you sell this piece?
           </h2>
-          {(preferences?.sellingWebsites?.length
-            ? preferences.sellingWebsites
-            : (["mercari", "poshmark"] as const)
-          ).map((platform) => {
+          {enabledStores().map((platform) => {
             const preferred = preferredSellingWebsite(preferences) === platform;
             return (
               <BigButton
@@ -252,8 +251,7 @@ export function AppHome({
         </h2>
         {listings.length === 0 ? (
           <p className="text-base text-[var(--muted)]">
-            No clothing listings yet. Tap List a clothing item when you are
-            ready.
+            No clothing listings yet. Tap Create new listing when you are ready.
           </p>
         ) : (
           <ul className="flex flex-col gap-3">
