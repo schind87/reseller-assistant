@@ -189,6 +189,8 @@ export function AppHome({
             </p>
             <Link
               href="/app/admin/bg-lab"
+              target="_blank"
+              rel="noopener noreferrer"
               className="mt-3 inline-block text-base font-semibold text-[var(--accent)] hover:underline"
             >
               Open background model lab →
