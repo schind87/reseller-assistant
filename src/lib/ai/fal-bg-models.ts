@@ -1,5 +1,5 @@
 /**
- * Catalog of fal.ai background models for the admin background model lab.
+ * Catalog of fal.ai background models for the admin AI Photo Lab.
  * Each entry knows how to build a fal.run body and extract the result image URL.
  */
 

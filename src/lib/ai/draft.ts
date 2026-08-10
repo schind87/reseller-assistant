@@ -123,7 +123,8 @@ export async function draftListing(params: {
 Condition MUST be exactly one of: "New With Tags", "Like New", "Good", "Fair".
   (Use "Like New" for NWOT / never worn without tags / excellent used.)
 Primary/secondary color MUST be from: Red, Pink, Orange, Yellow, Green, Blue, Purple, Gold, Silver, Black, Gray, White, Cream, Brown, Tan.
-Style tags: at most 3 short tags. Original price is required on Poshmark when known — estimate retail if needed.
+Style tags: at most 3, chosen from Poshmark’s official style-tag list (examples: Casual, Bohemian, Vintage, Athleisure, Preppy, Streetwear, Y2K, Cottagecore, Business Casual, Athletic). Use exact canonical names.
+Original price is required on Poshmark when known — estimate retail if needed.
 Description should include flat measurements, fabric, and smoke/pet notes.`;
 
   try {

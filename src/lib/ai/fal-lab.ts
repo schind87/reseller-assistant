@@ -1,5 +1,5 @@
 /**
- * fal.ai helpers for the background model lab:
+ * fal.ai helpers for AI Photo Lab:
  * queue inference (to get request_id) + pricing/billing lookup.
  */
 
@@ -52,6 +52,23 @@ export function parseApproxCostUsd(approxCost: string): number | null {
   if (!match) return null;
   const n = Number(match[1]);
   return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+/** Display USD as cents with one decimal (e.g. $0.016 → 1.6¢). */
+export function formatCostUsd(value: number | null | undefined): string | null {
+  if (value == null || Number.isNaN(value) || !Number.isFinite(value)) {
+    return null;
+  }
+  const cents = value * 100;
+  const rounded = Math.round(cents * 10) / 10;
+  const body = Math.abs(rounded).toFixed(1);
+  return `${rounded < 0 ? "-" : ""}${body}¢`;
+}
+
+/** Catalog approxCost strings normalized to cents (or "unpriced"). */
+export function formatApproxCostCents(approxCost: string): string {
+  const usd = parseApproxCostUsd(approxCost);
+  return formatCostUsd(usd) ?? "unpriced";
 }
 
 export function falModelPageUrl(endpointId: string): string {

@@ -1,4 +1,5 @@
 import type { StructuredFields } from "@/lib/types";
+import { normalizePoshmarkStyleTag } from "@/lib/poshmark-style-tags";
 
 /** Live Poshmark create-listing color swatches (up to 2). */
 export const POSHMARK_COLORS = [
@@ -104,10 +105,18 @@ export function normalizePoshmarkStyleTags(
   tags: string[] | null | undefined
 ): string[] {
   if (!tags?.length) return [];
-  return tags
-    .map((tag) => tag.trim())
-    .filter(Boolean)
-    .slice(0, 3);
+  const seen = new Set<string>();
+  const normalized: string[] = [];
+  for (const raw of tags) {
+    const canonical = normalizePoshmarkStyleTag(raw) ?? raw.trim();
+    if (!canonical) continue;
+    const key = canonical.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    normalized.push(canonical);
+    if (normalized.length >= 3) break;
+  }
+  return normalized;
 }
 
 /** Coerce draft/identify structured fields into Poshmark-accepted formats. */

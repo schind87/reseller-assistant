@@ -187,7 +187,7 @@ export function AppHome({
               Admin
             </h2>
             <p className="mt-1 text-sm text-[var(--muted)]">
-              Compare fal.ai background removers on any listing photo.
+              Compare fal.ai photo models on any listing photo.
             </p>
             <Link
               href="/app/admin/bg-lab"
@@ -195,7 +195,7 @@ export function AppHome({
               rel="noopener noreferrer"
               className="mt-3 inline-block text-base font-semibold text-[var(--accent)] hover:underline"
             >
-              Open background model lab →
+              Open AI Photo Lab →
             </Link>
           </section>
         ) : null}

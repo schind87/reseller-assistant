@@ -5,6 +5,7 @@ import {
   type PlatformListingSchema,
 } from "@/lib/listing-schemas";
 import { getMarketplaceCategoryOptions } from "@/lib/marketplace-categories";
+import { POSHMARK_STYLE_TAGS } from "@/lib/poshmark-style-tags";
 import {
   getStoredListingSchema,
   upsertListingSchema,
@@ -40,7 +41,7 @@ export async function resolveListingSchema(
   return enrichMarketplaceCategoryFields(base);
 }
 
-/** Keep category/subcategory selects aligned with live marketplace trees. */
+/** Keep category/subcategory/style-tag selects aligned with live marketplace lists. */
 function enrichMarketplaceCategoryFields(
   schema: PlatformListingSchema
 ): PlatformListingSchema {
@@ -58,6 +59,13 @@ function enrichMarketplaceCategoryFields(
         ...field,
         input: "select" as const,
         options: field.options?.length ? field.options : [],
+      };
+    }
+    if (field.id === "styleTags" && schema.platform === "poshmark") {
+      return {
+        ...field,
+        input: "tags" as const,
+        options: [...POSHMARK_STYLE_TAGS],
       };
     }
     return field;

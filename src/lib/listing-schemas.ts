@@ -1,6 +1,7 @@
 import type { Platform } from "@/lib/types";
 import { getMarketplaceCategoryOptions } from "@/lib/marketplace-categories";
 import { POSHMARK_COLORS } from "@/lib/poshmark-formats";
+import { POSHMARK_STYLE_TAGS } from "@/lib/poshmark-style-tags";
 
 export type ListingFieldInput =
   | "text"
@@ -211,7 +212,7 @@ export const SEED_LISTING_SCHEMAS: Record<Platform, PlatformListingSchema> = {
   },
   poshmark: {
     platform: "poshmark",
-    version: 4,
+    version: 5,
     sellPageUrl: "https://poshmark.com/create-listing",
     source: "seed",
     syncedAt: null,
@@ -327,7 +328,8 @@ export const SEED_LISTING_SCHEMAS: Record<Platform, PlatformListingSchema> = {
         input: "tags",
         required: false,
         source: "structured:styleTags",
-        hint: "Up to 3 tags (e.g. Casual, Bohemian, Vintage). Prefer Poshmark’s suggested tags.",
+        options: [...POSHMARK_STYLE_TAGS],
+        hint: "Pick up to 3 from Poshmark’s suggested style tags (same list as create-listing).",
         keywords: ["style", "style tags", "tags"],
         copyable: true,
       },

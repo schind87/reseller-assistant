@@ -4,7 +4,11 @@ import { startTransition, useCallback, useEffect, useMemo, useState, useSyncExte
 import Link from "next/link";
 import { BigButton } from "@/components/BigButton";
 import type { FalBgModelDef, FalBgModelId } from "@/lib/ai/fal-bg-models";
-import { parseApproxCostUsd } from "@/lib/ai/fal-lab";
+import {
+  formatApproxCostCents,
+  formatCostUsd,
+  parseApproxCostUsd,
+} from "@/lib/ai/fal-lab";
 import {
   EMPTY_BG_MODEL_CATALOG_PREFS,
   descopedModelIdSet,
@@ -212,23 +216,6 @@ type Props = {
   models: FalBgModelDef[];
   hasFalKey: boolean;
 };
-
-function formatCostUsd(value: number | null | undefined): string | null {
-  if (value == null || Number.isNaN(value) || !Number.isFinite(value)) {
-    return null;
-  }
-  // Display as cents with one decimal (e.g. $0.016 → 1.6¢).
-  const cents = value * 100;
-  const rounded = Math.round(cents * 10) / 10;
-  const body = Math.abs(rounded).toFixed(1);
-  return `${rounded < 0 ? "-" : ""}${body}¢`;
-}
-
-/** Catalog approxCost strings normalized to cents (or "unpriced"). */
-function formatApproxCostCents(approxCost: string): string {
-  const usd = parseApproxCostUsd(approxCost);
-  return formatCostUsd(usd) ?? "unpriced";
-}
 
 function formatDurationSeconds(ms: number): string {
   const seconds = ms / 1000;
@@ -1214,7 +1201,7 @@ export function AiBgDebugConsole({
             Admin
           </p>
           <h1 className="font-[family-name:var(--font-brand)] text-3xl text-[var(--foreground)]">
-            Background model lab
+            AI Photo Lab
           </h1>
           <p className="mt-2 max-w-2xl text-base text-[var(--muted)]">
             Compare fal.ai removers on any listing photo. Each model&apos;s past
@@ -2570,7 +2557,7 @@ function BgModelSettingsDialog({
     <div
       role="dialog"
       aria-modal="true"
-      aria-label="Background model settings"
+      aria-label="AI Photo Lab settings"
       className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-4 sm:items-center"
       onClick={onClose}
     >
@@ -2581,7 +2568,7 @@ function BgModelSettingsDialog({
         <div className="flex items-start justify-between gap-3">
           <div>
             <h2 className="text-xl font-semibold text-[var(--foreground)]">
-              Model settings
+              AI Photo Lab settings
             </h2>
             <p className="mt-1 text-sm text-[var(--muted)]">
               Choose the listing-page default and which models appear in

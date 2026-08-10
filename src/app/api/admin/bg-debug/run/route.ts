@@ -10,6 +10,7 @@ import {
 import {
   falDashboardUrl,
   falQueueInfer,
+  formatCostUsd,
   resolveFalCost,
 } from "@/lib/ai/fal-lab";
 import { bakeExifOrientation } from "@/lib/image-orient";
@@ -73,17 +74,6 @@ async function downloadImageBuffer(imageUrl: string): Promise<Buffer> {
     throw new Error(`Failed to download image (${res.status})`);
   }
   return Buffer.from(await res.arrayBuffer());
-}
-
-function formatCostUsd(value: number | null | undefined): string | null {
-  if (value == null || Number.isNaN(value) || !Number.isFinite(value)) {
-    return null;
-  }
-  // Display as cents with one decimal (e.g. $0.016 → 1.6¢).
-  const cents = value * 100;
-  const rounded = Math.round(cents * 10) / 10;
-  const body = Math.abs(rounded).toFixed(1);
-  return `${rounded < 0 ? "-" : ""}${body}¢`;
 }
 
 function costSourceFromBilling(
