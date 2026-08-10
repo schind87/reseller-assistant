@@ -6,15 +6,17 @@ import {
   useRef,
   useState,
   type PointerEvent as ReactPointerEvent,
-  type WheelEvent as ReactWheelEvent,
 } from "react";
 import { BigButton } from "@/components/BigButton";
 import type { PhotoAspectGuide } from "@/lib/platforms";
 import {
   DEFAULT_PHOTO_CROP_TRANSFORM,
+  PHOTO_CROP_MAX_ZOOM,
   blobToJpegFile,
+  clampCropTransform,
   cropImageFileToAspect,
   cropImageUrlToAspect,
+  cropRectFromOutline,
   loadImageFromFile,
   loadImageFromUrl,
   type PhotoCropTransform,
@@ -34,6 +36,55 @@ type PhotoAspectCropProps = {
   onCancel: () => void;
 };
 
+type DisplayLayout = {
+  stageW: number;
+  stageH: number;
+  imgLeft: number;
+  imgTop: number;
+  imgW: number;
+  imgH: number;
+  cropLeft: number;
+  cropTop: number;
+  cropW: number;
+  cropH: number;
+};
+
+function layoutFor(
+  stageW: number,
+  stageH: number,
+  naturalW: number,
+  naturalH: number,
+  aspect: PhotoAspectGuide,
+  transform: PhotoCropTransform
+): DisplayLayout | null {
+  if (stageW <= 0 || stageH <= 0 || naturalW <= 0 || naturalH <= 0) return null;
+
+  const fit = Math.min(stageW / naturalW, stageH / naturalH);
+  const imgW = naturalW * fit;
+  const imgH = naturalH * fit;
+  const imgLeft = (stageW - imgW) / 2;
+  const imgTop = (stageH - imgH) / 2;
+
+  const rect = cropRectFromOutline(naturalW, naturalH, aspect, transform);
+  const cropW = rect.sw * fit;
+  const cropH = rect.sh * fit;
+  const cropLeft = imgLeft + rect.sx * fit;
+  const cropTop = imgTop + rect.sy * fit;
+
+  return {
+    stageW,
+    stageH,
+    imgLeft,
+    imgTop,
+    imgW,
+    imgH,
+    cropLeft,
+    cropTop,
+    cropW,
+    cropH,
+  };
+}
+
 export function PhotoAspectCrop({
   aspect,
   platformLabel,
@@ -44,13 +95,13 @@ export function PhotoAspectCrop({
   onConfirm,
   onCancel,
 }: PhotoAspectCropProps) {
-  const frameRef = useRef<HTMLDivElement>(null);
+  const stageRef = useRef<HTMLDivElement>(null);
   const [objectUrl, setObjectUrl] = useState<string | null>(null);
   const [natural, setNatural] = useState<{ w: number; h: number } | null>(null);
   const [transform, setTransform] = useState<PhotoCropTransform>(
     DEFAULT_PHOTO_CROP_TRANSFORM
   );
-  const [frameSize, setFrameSize] = useState<{ w: number; h: number } | null>(
+  const [stageSize, setStageSize] = useState<{ w: number; h: number } | null>(
     null
   );
   const [busy, setBusy] = useState(false);
@@ -59,10 +110,11 @@ export function PhotoAspectCrop({
     pointerId: number;
     startX: number;
     startY: number;
-    originX: number;
-    originY: number;
+    originNx: number;
+    originNy: number;
+    travelX: number;
+    travelY: number;
   } | null>(null);
-  const pinchRef = useRef<{ distance: number; scale: number } | null>(null);
   const transformRef = useRef(transform);
 
   useEffect(() => {
@@ -122,10 +174,10 @@ export function PhotoAspectCrop({
   }, []);
 
   useEffect(() => {
-    const el = frameRef.current;
+    const el = stageRef.current;
     if (!el) return;
     const measure = () => {
-      setFrameSize({ w: el.clientWidth, h: el.clientHeight });
+      setStageSize({ w: el.clientWidth, h: el.clientHeight });
     };
     measure();
     const ro = new ResizeObserver(measure);
@@ -133,130 +185,102 @@ export function PhotoAspectCrop({
     return () => ro.disconnect();
   }, [natural]);
 
-  const clampTransform = useCallback(
-    (next: PhotoCropTransform): PhotoCropTransform => {
-      if (!frameSize || !natural) {
-        return { ...next, scale: Math.max(1, next.scale) };
-      }
-      const { w: fw, h: fh } = frameSize;
-      const scale = Math.max(1, next.scale);
-      const baseScale = Math.max(fw / natural.w, fh / natural.h);
-      const displayScale = baseScale * scale;
-      const minX = fw - natural.w * displayScale;
-      const minY = fh - natural.h * displayScale;
-      return {
-        scale,
-        offsetX: Math.min(0, Math.max(minX, next.offsetX)),
-        offsetY: Math.min(0, Math.max(minY, next.offsetY)),
-      };
-    },
-    [frameSize, natural]
-  );
+  const layout =
+    stageSize && natural
+      ? layoutFor(
+          stageSize.w,
+          stageSize.h,
+          natural.w,
+          natural.h,
+          aspect,
+          transform
+        )
+      : null;
 
-  function onPointerDown(e: ReactPointerEvent<HTMLDivElement>) {
+  const applyZoom = useCallback((nextScale: number) => {
+    setTransform((prev) =>
+      clampCropTransform({
+        ...prev,
+        scale: nextScale,
+      })
+    );
+  }, []);
+
+  function onOutlinePointerDown(e: ReactPointerEvent<HTMLDivElement>) {
+    if (!layout || !natural) return;
+    e.preventDefault();
+    e.stopPropagation();
     e.currentTarget.setPointerCapture(e.pointerId);
+
+    const fit = Math.min(
+      layout.stageW / natural.w,
+      layout.stageH / natural.h
+    );
+    const rect = cropRectFromOutline(
+      natural.w,
+      natural.h,
+      aspect,
+      transformRef.current
+    );
+    const travelX = Math.max(0, (natural.w - rect.sw) * fit);
+    const travelY = Math.max(0, (natural.h - rect.sh) * fit);
+
     dragRef.current = {
       pointerId: e.pointerId,
       startX: e.clientX,
       startY: e.clientY,
-      originX: transform.offsetX,
-      originY: transform.offsetY,
+      originNx: transformRef.current.nx,
+      originNy: transformRef.current.ny,
+      travelX,
+      travelY,
     };
   }
 
-  function onPointerMove(e: ReactPointerEvent<HTMLDivElement>) {
+  function onOutlinePointerMove(e: ReactPointerEvent<HTMLDivElement>) {
     const drag = dragRef.current;
     if (!drag || drag.pointerId !== e.pointerId) return;
+    const dx = e.clientX - drag.startX;
+    const dy = e.clientY - drag.startY;
+    const nx =
+      drag.travelX > 0 ? drag.originNx + dx / drag.travelX : drag.originNx;
+    const ny =
+      drag.travelY > 0 ? drag.originNy + dy / drag.travelY : drag.originNy;
     setTransform(
-      clampTransform({
+      clampCropTransform({
         scale: transformRef.current.scale,
-        offsetX: drag.originX + (e.clientX - drag.startX),
-        offsetY: drag.originY + (e.clientY - drag.startY),
+        nx,
+        ny,
       })
     );
   }
 
-  function onPointerUp(e: ReactPointerEvent<HTMLDivElement>) {
+  function onOutlinePointerUp(e: ReactPointerEvent<HTMLDivElement>) {
     if (dragRef.current?.pointerId === e.pointerId) {
       dragRef.current = null;
     }
   }
 
-  function onWheel(e: ReactWheelEvent<HTMLDivElement>) {
-    e.preventDefault();
-    const delta = e.deltaY > 0 ? -0.08 : 0.08;
-    setTransform((prev) =>
-      clampTransform({
-        ...prev,
-        scale: prev.scale + delta,
-      })
-    );
-  }
-
   useEffect(() => {
-    const el = frameRef.current;
+    const el = stageRef.current;
     if (!el) return;
-
-    function distance(a: Touch, b: Touch) {
-      return Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+    function onWheel(e: WheelEvent) {
+      e.preventDefault();
+      const delta = e.deltaY > 0 ? -0.12 : 0.12;
+      applyZoom(transformRef.current.scale + delta);
     }
-
-    function onTouchStart(e: TouchEvent) {
-      if (e.touches.length === 2) {
-        const t0 = e.touches[0]!;
-        const t1 = e.touches[1]!;
-        pinchRef.current = {
-          distance: distance(t0, t1),
-          scale: transformRef.current.scale,
-        };
-        dragRef.current = null;
-      }
-    }
-
-    function onTouchMove(e: TouchEvent) {
-      if (e.touches.length === 2 && pinchRef.current) {
-        e.preventDefault();
-        const t0 = e.touches[0]!;
-        const t1 = e.touches[1]!;
-        const d = distance(t0, t1);
-        const ratio = d / Math.max(1, pinchRef.current.distance);
-        setTransform(
-          clampTransform({
-            ...transformRef.current,
-            scale: pinchRef.current.scale * ratio,
-          })
-        );
-      }
-    }
-
-    function onTouchEnd(e: TouchEvent) {
-      if (e.touches.length < 2) {
-        pinchRef.current = null;
-      }
-    }
-
-    el.addEventListener("touchstart", onTouchStart, { passive: true });
-    el.addEventListener("touchmove", onTouchMove, { passive: false });
-    el.addEventListener("touchend", onTouchEnd);
-    el.addEventListener("touchcancel", onTouchEnd);
-    return () => {
-      el.removeEventListener("touchstart", onTouchStart);
-      el.removeEventListener("touchmove", onTouchMove);
-      el.removeEventListener("touchend", onTouchEnd);
-      el.removeEventListener("touchcancel", onTouchEnd);
-    };
-  }, [clampTransform, natural]);
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, [applyZoom, natural]);
 
   async function confirm() {
-    if (!frameSize || !natural) return;
+    if (!natural) return;
     setBusy(true);
     setError(null);
     try {
-      const size = { width: frameSize.w, height: frameSize.h };
       const blob = file
-        ? await cropImageFileToAspect(file, aspect, transform, size)
+        ? await cropImageFileToAspect(file, aspect, transform)
         : imageUrl
-          ? await cropImageUrlToAspect(imageUrl, aspect, transform, size)
+          ? await cropImageUrlToAspect(imageUrl, aspect, transform)
           : null;
       if (!blob) throw new Error("Could not crop this photo.");
       await onConfirm(blobToJpegFile(blob, file?.name ?? fileName));
@@ -266,32 +290,17 @@ export function PhotoAspectCrop({
     }
   }
 
-  const imgStyle =
-    natural && frameSize
-      ? (() => {
-          const baseScale = Math.max(
-            frameSize.w / natural.w,
-            frameSize.h / natural.h
-          );
-          const displayScale = baseScale * Math.max(1, transform.scale);
-          const left =
-            (frameSize.w - natural.w * displayScale) / 2 + transform.offsetX;
-          const top =
-            (frameSize.h - natural.h * displayScale) / 2 + transform.offsetY;
-          return {
-            width: natural.w * displayScale,
-            height: natural.h * displayScale,
-            transform: `translate(${left}px, ${top}px)`,
-          };
-        })()
-      : undefined;
+  const zoomPct = Math.round(
+    ((transform.scale - 1) / (PHOTO_CROP_MAX_ZOOM - 1)) * 100
+  );
 
   return (
     <div
-      className="fixed inset-0 z-[60] flex flex-col bg-black text-white"
+      className="fixed inset-0 z-[60] flex select-none flex-col bg-black text-white"
       role="dialog"
       aria-modal="true"
       aria-label="Adjust aspect ratio"
+      onCopy={(e) => e.preventDefault()}
     >
       <div className="flex items-center justify-between gap-3 px-4 py-3">
         <button
@@ -311,52 +320,83 @@ export function PhotoAspectCrop({
         <span className="w-14" aria-hidden />
       </div>
 
-      <div className="relative min-h-0 flex-1 overflow-hidden">
-        <div className="absolute inset-0 flex items-center justify-center p-6">
-          <div
-            ref={frameRef}
-            className={
-              aspect.height > aspect.width
-                ? "relative h-full max-h-[min(78vh,92vw)] w-auto touch-none overflow-hidden border-2 border-white/90 shadow-[0_0_0_9999px_rgba(0,0,0,0.55)]"
-                : "relative w-full max-w-[min(92vw,70vh)] touch-none overflow-hidden border-2 border-white/90 shadow-[0_0_0_9999px_rgba(0,0,0,0.55)]"
-            }
-            style={{ aspectRatio: `${aspect.width} / ${aspect.height}` }}
-            onPointerDown={onPointerDown}
-            onPointerMove={onPointerMove}
-            onPointerUp={onPointerUp}
-            onPointerCancel={onPointerUp}
-            onWheel={onWheel}
-          >
-            {objectUrl && natural ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={objectUrl}
-                alt=""
-                draggable={false}
-                className="pointer-events-none absolute left-0 top-0 max-w-none select-none"
-                style={imgStyle}
-              />
-            ) : (
-              <div className="flex h-48 w-48 items-center justify-center text-sm text-white/70">
-                Loading…
+      <div
+        ref={stageRef}
+        className="relative min-h-0 flex-1 touch-none overflow-hidden"
+      >
+        {objectUrl && natural && layout ? (
+          <>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={objectUrl}
+              alt=""
+              draggable={false}
+              className="pointer-events-none absolute max-w-none select-none"
+              style={{
+                left: layout.imgLeft,
+                top: layout.imgTop,
+                width: layout.imgW,
+                height: layout.imgH,
+              }}
+            />
+
+            <div
+              role="presentation"
+              className="absolute cursor-grab touch-none border-2 border-white shadow-[0_0_0_9999px_rgba(0,0,0,0.55)] active:cursor-grabbing"
+              style={{
+                left: layout.cropLeft,
+                top: layout.cropTop,
+                width: layout.cropW,
+                height: layout.cropH,
+              }}
+              onPointerDown={onOutlinePointerDown}
+              onPointerMove={onOutlinePointerMove}
+              onPointerUp={onOutlinePointerUp}
+              onPointerCancel={onOutlinePointerUp}
+            >
+              <div className="pointer-events-none absolute inset-x-0 top-2 text-center text-xs font-semibold tracking-wide text-white drop-shadow">
+                Drag outline · scroll or slider to zoom
               </div>
-            )}
-            <div className="pointer-events-none absolute inset-x-0 top-2 text-center text-xs font-semibold tracking-wide text-white drop-shadow">
-              Drag to reposition · pinch or scroll to zoom
+              <span className="pointer-events-none absolute left-0 top-0 h-3 w-3 border-l-2 border-t-2 border-white" />
+              <span className="pointer-events-none absolute right-0 top-0 h-3 w-3 border-r-2 border-t-2 border-white" />
+              <span className="pointer-events-none absolute bottom-0 left-0 h-3 w-3 border-b-2 border-l-2 border-white" />
+              <span className="pointer-events-none absolute bottom-0 right-0 h-3 w-3 border-b-2 border-r-2 border-white" />
             </div>
+          </>
+        ) : (
+          <div className="flex h-full items-center justify-center text-sm text-white/70">
+            Loading…
           </div>
-        </div>
+        )}
       </div>
 
-      {error ? (
-        <p className="bg-red-950 px-4 py-3 text-center text-sm text-red-100">
-          {error}
-        </p>
-      ) : null}
+      <div className="flex flex-col gap-3 border-t border-white/10 px-4 py-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+        <label className="flex items-center gap-3 text-sm font-semibold text-white/90">
+          <span className="w-12 shrink-0">Zoom</span>
+          <input
+            type="range"
+            min={1}
+            max={PHOTO_CROP_MAX_ZOOM}
+            step={0.01}
+            value={transform.scale}
+            disabled={busy || !natural}
+            onChange={(e) => applyZoom(Number(e.target.value))}
+            className="h-2 w-full flex-1 cursor-pointer accent-[var(--accent)]"
+            aria-valuetext={`${zoomPct}% zoom`}
+          />
+          <span className="w-10 shrink-0 text-right text-xs font-medium text-white/70 tabular-nums">
+            {Math.round(transform.scale * 100) / 100}×
+          </span>
+        </label>
 
-      <div className="flex flex-col gap-3 px-4 py-5 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
+        {error ? (
+          <p className="rounded-lg bg-red-950 px-3 py-2 text-center text-sm text-red-100">
+            {error}
+          </p>
+        ) : null}
+
         <BigButton
-          disabled={busy || !natural || !frameSize || Boolean(error && !natural)}
+          disabled={busy || !natural || Boolean(error && !natural)}
           onClick={() => void confirm()}
         >
           {busy ? "Saving crop…" : "Use this crop"}

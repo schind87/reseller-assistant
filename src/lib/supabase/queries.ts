@@ -753,7 +753,8 @@ export async function getSignedPhotoUrls(
 const LISTING_GRID_THUMB: PhotoSignTransform = {
   width: 640,
   height: 640,
-  resize: "cover",
+  // Contain keeps the full photo; the hub frames tiles to the marketplace aspect.
+  resize: "contain",
   quality: 72,
 };
 

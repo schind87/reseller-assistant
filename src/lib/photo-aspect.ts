@@ -6,18 +6,25 @@ export const PHOTO_ASPECT_MAX_LONG_EDGE = 1600;
 /** Relative tolerance when deciding a photo already matches the platform frame. */
 export const PHOTO_ASPECT_NEAR_TOLERANCE = 0.02;
 
+/** How far the crop outline can zoom in (1 = largest fit). */
+export const PHOTO_CROP_MAX_ZOOM = 4;
+
 export type PhotoCropTransform = {
-  /** Zoom relative to cover-fit (1 = fill the frame). */
+  /**
+   * Zoom relative to the largest aspect-fit crop.
+   * 1 = biggest outline that fits; higher = smaller outline (zoom in).
+   */
   scale: number;
-  /** Pan in frame pixels (positive = image moves right/down). */
-  offsetX: number;
-  offsetY: number;
+  /** Horizontal position of the outline within travel range (0 = left, 1 = right). */
+  nx: number;
+  /** Vertical position of the outline within travel range (0 = top, 1 = bottom). */
+  ny: number;
 };
 
 export const DEFAULT_PHOTO_CROP_TRANSFORM: PhotoCropTransform = {
   scale: 1,
-  offsetX: 0,
-  offsetY: 0,
+  nx: 0.5,
+  ny: 0.5,
 };
 
 export function aspectRatio(guide: PhotoAspectGuide): number {
@@ -62,46 +69,6 @@ export type ImageCropRect = {
   sh: number;
 };
 
-/**
- * Source rectangle (image pixels) visible inside a frame given cover-fit + pan/zoom.
- */
-export function cropRectFromTransform(
-  imageWidth: number,
-  imageHeight: number,
-  frameWidth: number,
-  frameHeight: number,
-  transform: PhotoCropTransform
-): ImageCropRect {
-  const iw = Math.max(1, imageWidth);
-  const ih = Math.max(1, imageHeight);
-  const fw = Math.max(1, frameWidth);
-  const fh = Math.max(1, frameHeight);
-  const scale = Math.max(1, transform.scale);
-  const baseScale = Math.max(fw / iw, fh / ih);
-  const displayScale = baseScale * scale;
-
-  let left = (fw - iw * displayScale) / 2 + transform.offsetX;
-  let top = (fh - ih * displayScale) / 2 + transform.offsetY;
-
-  // Keep the frame covered (no empty edges inside the crop).
-  const minLeft = fw - iw * displayScale;
-  const minTop = fh - ih * displayScale;
-  left = Math.min(0, Math.max(minLeft, left));
-  top = Math.min(0, Math.max(minTop, top));
-
-  let sx = (0 - left) / displayScale;
-  let sy = (0 - top) / displayScale;
-  let sw = fw / displayScale;
-  let sh = fh / displayScale;
-
-  sx = Math.min(Math.max(0, sx), Math.max(0, iw - sw));
-  sy = Math.min(Math.max(0, sy), Math.max(0, ih - sh));
-  sw = Math.min(sw, iw - sx);
-  sh = Math.min(sh, ih - sy);
-
-  return { sx, sy, sw, sh };
-}
-
 /** Center crop that matches `guide` using the largest possible area. */
 export function centerCropRect(
   imageWidth: number,
@@ -122,6 +89,45 @@ export function centerCropRect(
     sy: (ih - sh) / 2,
     sw,
     sh,
+  };
+}
+
+/**
+ * Source rectangle for a movable aspect outline over the full photo.
+ * `scale` 1 = largest fit; higher = tighter crop. `nx`/`ny` slide the outline.
+ */
+export function cropRectFromOutline(
+  imageWidth: number,
+  imageHeight: number,
+  guide: PhotoAspectGuide,
+  transform: PhotoCropTransform
+): ImageCropRect {
+  const scale = Math.min(
+    PHOTO_CROP_MAX_ZOOM,
+    Math.max(1, transform.scale)
+  );
+  const full = centerCropRect(imageWidth, imageHeight, guide);
+  const sw = full.sw / scale;
+  const sh = full.sh / scale;
+  const maxX = Math.max(0, imageWidth - sw);
+  const maxY = Math.max(0, imageHeight - sh);
+  const nx = Math.min(1, Math.max(0, transform.nx));
+  const ny = Math.min(1, Math.max(0, transform.ny));
+  return {
+    sx: nx * maxX,
+    sy: ny * maxY,
+    sw,
+    sh,
+  };
+}
+
+export function clampCropTransform(
+  transform: PhotoCropTransform
+): PhotoCropTransform {
+  return {
+    scale: Math.min(PHOTO_CROP_MAX_ZOOM, Math.max(1, transform.scale)),
+    nx: Math.min(1, Math.max(0, transform.nx)),
+    ny: Math.min(1, Math.max(0, transform.ny)),
   };
 }
 
@@ -165,28 +171,25 @@ export async function readImageDimensions(
 export async function cropImageFileToAspect(
   file: File,
   guide: PhotoAspectGuide,
-  transform: PhotoCropTransform = DEFAULT_PHOTO_CROP_TRANSFORM,
-  frameSize?: { width: number; height: number }
+  transform: PhotoCropTransform = DEFAULT_PHOTO_CROP_TRANSFORM
 ): Promise<Blob> {
   const img = await loadImageFromFile(file);
-  return cropHtmlImageToAspect(img, guide, transform, frameSize);
+  return cropHtmlImageToAspect(img, guide, transform);
 }
 
 export async function cropImageUrlToAspect(
   url: string,
   guide: PhotoAspectGuide,
-  transform: PhotoCropTransform = DEFAULT_PHOTO_CROP_TRANSFORM,
-  frameSize?: { width: number; height: number }
+  transform: PhotoCropTransform = DEFAULT_PHOTO_CROP_TRANSFORM
 ): Promise<Blob> {
   const img = await loadImageFromUrl(url);
-  return cropHtmlImageToAspect(img, guide, transform, frameSize);
+  return cropHtmlImageToAspect(img, guide, transform);
 }
 
 function cropHtmlImageToAspect(
   img: HTMLImageElement,
   guide: PhotoAspectGuide,
-  transform: PhotoCropTransform,
-  frameSize: { width: number; height: number } | undefined
+  transform: PhotoCropTransform
 ): Promise<Blob> {
   const iw = img.naturalWidth;
   const ih = img.naturalHeight;
@@ -194,20 +197,7 @@ function cropHtmlImageToAspect(
     return Promise.reject(new Error("Photo has no readable dimensions."));
   }
 
-  const ratio = aspectRatio(guide);
-  const frame =
-    frameSize ??
-    (ratio >= 1
-      ? { width: 1000, height: Math.round(1000 / ratio) }
-      : { width: Math.round(1000 * ratio), height: 1000 });
-
-  const rect =
-    transform.scale === 1 &&
-    transform.offsetX === 0 &&
-    transform.offsetY === 0 &&
-    !frameSize
-      ? centerCropRect(iw, ih, guide)
-      : cropRectFromTransform(iw, ih, frame.width, frame.height, transform);
+  const rect = cropRectFromOutline(iw, ih, guide, transform);
 
   const longEdge = Math.min(
     PHOTO_ASPECT_MAX_LONG_EDGE,

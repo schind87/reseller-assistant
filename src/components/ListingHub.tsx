@@ -27,6 +27,7 @@ import {
   PLATFORM_PHOTO_ASPECT,
   SELL_PAGE_URLS,
   photoRoleLabel,
+  type PhotoAspectGuide,
 } from "@/lib/platforms";
 import {
   isNearAspect,
@@ -39,6 +40,7 @@ import {
 import { isCurrentBgPipeline } from "@/lib/ai/bg-pipeline";
 import {
   FAL_BG_MODELS,
+  type FalBgModelDef,
   type FalBgModelId,
 } from "@/lib/ai/fal-bg-models";
 import {
@@ -50,6 +52,7 @@ import {
   subscribeBgModelCatalogPrefs,
   writeBgModelCatalogPrefs,
 } from "@/lib/ai/bg-model-prefs";
+import { formatApproxCostCents } from "@/lib/ai/fal-lab";
 import type {
   Listing,
   ListingPhotoWithUrl,
@@ -270,6 +273,9 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
     FAL_BG_MODELS
   );
   const selectableCleanBgModels = scopedBgModels(FAL_BG_MODELS, catalogPrefs);
+  const [bgModelRatingStats, setBgModelRatingStats] = useState<
+    Map<string, { upCount: number; downCount: number }>
+  >(() => new Map());
   const [joinUrl, setJoinUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [processing, setProcessing] = useState(false);
@@ -403,6 +409,49 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
 
   function chooseCleanBgModel(next: FalBgModelId | "") {
     writeBgModelCatalogPrefs({ defaultListingModelId: next });
+  }
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch("/api/admin/bg-debug/run?recent=1");
+        if (!res.ok) return;
+        const json = (await res.json()) as {
+          modelRatingStats?: Array<{
+            modelId: string;
+            upCount: number;
+            downCount: number;
+          }>;
+        };
+        if (cancelled || !Array.isArray(json.modelRatingStats)) return;
+        const next = new Map<string, { upCount: number; downCount: number }>();
+        for (const row of json.modelRatingStats) {
+          if (!row?.modelId) continue;
+          next.set(row.modelId, {
+            upCount: row.upCount ?? 0,
+            downCount: row.downCount ?? 0,
+          });
+        }
+        setBgModelRatingStats(next);
+      } catch {
+        /* keep empty stats */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isAdmin]);
+
+  function cleanBgModelOptionLabel(model: FalBgModelDef): string {
+    const cost = formatApproxCostCents(model.approxCost);
+    const ratings = bgModelRatingStats.get(model.id);
+    const parts = [model.label, cost];
+    if (ratings && (ratings.upCount > 0 || ratings.downCount > 0)) {
+      parts.push(`↑${ratings.upCount} ↓${ratings.downCount}`);
+    }
+    return parts.join(" · ");
   }
 
   const closeTweak = useCallback(() => {
@@ -1202,7 +1251,7 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
                       <option value="">Production default (hanger-safe)</option>
                       {selectableCleanBgModels.map((model) => (
                         <option key={model.id} value={model.id}>
-                          {model.label} · {model.approxCost}
+                          {cleanBgModelOptionLabel(model)}
                         </option>
                       ))}
                     </select>
@@ -1213,7 +1262,7 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
                     rel="noopener noreferrer"
                     className="shrink-0 text-base font-semibold text-[var(--accent)] hover:underline"
                   >
-                    Open bg lab →
+                    Open AI Photo Lab →
                   </a>
                 </div>
               ) : null}
@@ -1224,6 +1273,7 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
                 photos={listingPhotos}
                 empty="No listing photos yet — drop images here or start with a clean cover shot."
                 section="listing"
+                photoAspect={PLATFORM_PHOTO_ASPECT[platform]}
                 onAdd={() => setPickListingRole(true)}
                 onDelete={(photoId) => void deletePhoto(photoId)}
                 onToggleCleanBackground={(photo) =>
@@ -1322,6 +1372,7 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
                   photos={identifyPhotos}
                   empty="No tag photos yet — drop images here or add brand and care labels."
                   section="identify"
+                  photoAspect={PLATFORM_PHOTO_ASPECT[platform]}
                   onAdd={() => pickFilesForRole("id_tag")}
                   onDelete={(photoId) => void deletePhoto(photoId)}
                   onPreview={setPreviewPhoto}
@@ -1600,6 +1651,7 @@ function PhotoGroup({
   photos,
   empty,
   section,
+  photoAspect,
   onAdd,
   onDelete,
   onUseInListing,
@@ -1629,6 +1681,7 @@ function PhotoGroup({
   photos: ListingPhotoWithUrl[];
   empty: string;
   section: PhotoSection;
+  photoAspect: PhotoAspectGuide;
   onAdd: () => void;
   onDelete: (photoId: string) => void;
   onUseInListing?: (photoId: string) => void;
@@ -1783,6 +1836,7 @@ function PhotoGroup({
             <PhotoTile
               key={photo.id}
               photo={photo}
+              photoAspect={photoAspect}
               deleting={deletingPhotoId === photo.id}
               cleaningBg={bgPhotoId === photo.id}
               moving={movingPhotoId === photo.id}
@@ -1816,7 +1870,12 @@ function PhotoGroup({
           ))}
           {Array.from({ length: Math.max(pendingSlots, uploading ? 1 : 0) }, (_, i) => (
             <li key={`upload-slot-${i}`} aria-hidden>
-              <div className="relative flex aspect-square w-full items-center justify-center overflow-hidden rounded-xl border border-dashed border-[var(--accent)]/60 bg-[var(--accent-soft)]/70">
+              <div
+                className="relative flex w-full items-center justify-center overflow-hidden rounded-xl border border-dashed border-[var(--accent)]/60 bg-[var(--accent-soft)]/70"
+                style={{
+                  aspectRatio: `${photoAspect.width} / ${photoAspect.height}`,
+                }}
+              >
                 <div className="absolute inset-0 animate-pulse bg-[var(--accent)]/10" />
                 <span className="relative h-7 w-7 animate-spin rounded-full border-[3px] border-white border-t-[var(--accent)]" />
               </div>
@@ -1827,7 +1886,10 @@ function PhotoGroup({
               type="button"
               disabled={disabled}
               onClick={onAdd}
-              className="flex aspect-square w-full flex-col items-center justify-center rounded-xl border-2 border-dashed border-[var(--border)] bg-[var(--surface-muted)] text-base font-semibold text-[var(--accent)] hover:border-[var(--accent)] disabled:opacity-50"
+              className="flex w-full flex-col items-center justify-center rounded-xl border-2 border-dashed border-[var(--border)] bg-[var(--surface-muted)] text-base font-semibold text-[var(--accent)] hover:border-[var(--accent)] disabled:opacity-50"
+              style={{
+                aspectRatio: `${photoAspect.width} / ${photoAspect.height}`,
+              }}
             >
               + Add
             </button>
@@ -1855,6 +1917,7 @@ function PhotoGroup({
 
 function PhotoTile({
   photo,
+  photoAspect,
   deleting,
   cleaningBg,
   moving,
@@ -1872,6 +1935,7 @@ function PhotoTile({
   onReorder,
 }: {
   photo: ListingPhotoWithUrl;
+  photoAspect: PhotoAspectGuide;
   deleting: boolean;
   cleaningBg?: boolean;
   moving: boolean;
@@ -2047,21 +2111,28 @@ function PhotoTile({
           className="pointer-events-none absolute inset-y-2 right-0 z-10 w-1 translate-x-1/2 -mr-1.5 rounded-full bg-[var(--accent)]"
         />
       ) : null}
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src={photoThumbUrl(photo)}
-        alt={photoRoleLabel(photo.role)}
-        loading="lazy"
-        decoding="async"
-        className="pointer-events-none aspect-square w-full object-cover"
-        draggable={false}
-        onError={(e) => {
-          const full = photoFullUrl(photo);
-          if (full && e.currentTarget.src !== full) {
-            e.currentTarget.src = full;
-          }
+      <div
+        className="w-full bg-[var(--surface-muted)]"
+        style={{
+          aspectRatio: `${photoAspect.width} / ${photoAspect.height}`,
         }}
-      />
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={photoThumbUrl(photo)}
+          alt={photoRoleLabel(photo.role)}
+          loading="lazy"
+          decoding="async"
+          className="pointer-events-none h-full w-full object-contain"
+          draggable={false}
+          onError={(e) => {
+            const full = photoFullUrl(photo);
+            if (full && e.currentTarget.src !== full) {
+              e.currentTarget.src = full;
+            }
+          }}
+        />
+      </div>
       {cleaningBg ? (
         <div
           className="absolute inset-0 z-20 flex items-center justify-center bg-white/65 backdrop-blur-[1px]"
@@ -2143,7 +2214,7 @@ function PhotoTile({
               rel="noopener noreferrer"
               onClick={(e) => e.stopPropagation()}
               onPointerDown={(e) => e.stopPropagation()}
-              title="Open this photo in the background model lab"
+              title="Open this photo in AI Photo Lab"
               className="rounded-md border border-[var(--border)] px-2 py-1 text-sm font-semibold text-[var(--accent)] transition hover:bg-[var(--accent-soft)]"
             >
               Lab
