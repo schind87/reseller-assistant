@@ -36,13 +36,13 @@ import {
   type FalBgModelId,
 } from "@/lib/ai/fal-bg-models";
 import {
+  EMPTY_BG_MODEL_CATALOG_PREFS,
   isFalBgModelId,
   readBgModelCatalogPrefs,
   resolveDefaultListingModelId,
   scopedBgModels,
   subscribeBgModelCatalogPrefs,
   writeBgModelCatalogPrefs,
-  type BgModelCatalogPrefs,
 } from "@/lib/ai/bg-model-prefs";
 import type {
   Listing,
@@ -257,7 +257,7 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
   const catalogPrefs = useSyncExternalStore(
     subscribeBgModelCatalogPrefs,
     readBgModelCatalogPrefs,
-    () => ({} as BgModelCatalogPrefs)
+    () => EMPTY_BG_MODEL_CATALOG_PREFS
   );
   const cleanBgModelId = resolveDefaultListingModelId(
     catalogPrefs,

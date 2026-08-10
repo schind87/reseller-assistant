@@ -5,13 +5,13 @@ import Link from "next/link";
 import { BigButton } from "@/components/BigButton";
 import type { FalBgModelDef, FalBgModelId } from "@/lib/ai/fal-bg-models";
 import {
+  EMPTY_BG_MODEL_CATALOG_PREFS,
   descopedModelIdSet,
   readBgModelCatalogPrefs,
   resolveDefaultListingModelId,
   scopedBgModels,
   subscribeBgModelCatalogPrefs,
   writeBgModelCatalogPrefs,
-  type BgModelCatalogPrefs,
 } from "@/lib/ai/bg-model-prefs";
 import { photoRoleLabel, PLATFORM_LABELS } from "@/lib/platforms";
 import type { PhotoRole, Platform } from "@/lib/types";
@@ -91,21 +91,36 @@ type StoredLabPrefs = {
   labBackdrop?: LabBackdrop;
 };
 
+const EMPTY_LAB_PREFS: StoredLabPrefs = Object.freeze({});
+
+let cachedLabPrefsRaw: string | null | undefined;
+let cachedLabPrefs: StoredLabPrefs = EMPTY_LAB_PREFS;
+
 function readStoredLabPrefs(): StoredLabPrefs {
   try {
     const raw = window.localStorage.getItem(LAB_PREFS_KEY);
-    if (!raw) return {};
+    if (raw === cachedLabPrefsRaw) return cachedLabPrefs;
+    cachedLabPrefsRaw = raw;
+    if (!raw) {
+      cachedLabPrefs = EMPTY_LAB_PREFS;
+      return cachedLabPrefs;
+    }
     const parsed = JSON.parse(raw) as StoredLabPrefs;
-    return parsed && typeof parsed === "object" ? parsed : {};
+    cachedLabPrefs =
+      parsed && typeof parsed === "object" ? parsed : EMPTY_LAB_PREFS;
+    return cachedLabPrefs;
   } catch {
-    return {};
+    return EMPTY_LAB_PREFS;
   }
 }
 
 function writeStoredLabPrefs(patch: StoredLabPrefs) {
   try {
     const next = { ...readStoredLabPrefs(), ...patch };
-    window.localStorage.setItem(LAB_PREFS_KEY, JSON.stringify(next));
+    const raw = JSON.stringify(next);
+    window.localStorage.setItem(LAB_PREFS_KEY, raw);
+    cachedLabPrefsRaw = raw;
+    cachedLabPrefs = next;
     window.dispatchEvent(new Event("ra-bg-lab-prefs"));
   } catch {
     /* ignore quota / private mode */
@@ -325,13 +340,13 @@ export function AiBgDebugConsole({
   const storedPrefs = useSyncExternalStore(
     subscribeLabPrefs,
     readStoredLabPrefs,
-    () => ({} as StoredLabPrefs),
+    () => EMPTY_LAB_PREFS,
   );
   const [settingsOpen, setSettingsOpen] = useState(false);
   const catalogPrefs = useSyncExternalStore(
     subscribeBgModelCatalogPrefs,
     readBgModelCatalogPrefs,
-    () => ({} as BgModelCatalogPrefs),
+    () => EMPTY_BG_MODEL_CATALOG_PREFS,
   );
   const descopedIds = useMemo(
     () => descopedModelIdSet(catalogPrefs),

@@ -11,6 +11,7 @@ import {
 
 export const BG_MODEL_CATALOG_PREFS_KEY = "ra-bg-model-catalog-v1";
 const CHANGE_EVENT = "ra-bg-model-catalog";
+const LEGACY_LISTING_MODEL_KEY = "ra-listing-clean-bg-model-v1";
 
 export type BgModelCatalogPrefs = {
   /** Model ids hidden from lab + listing selectors. */
@@ -22,30 +23,55 @@ export type BgModelCatalogPrefs = {
   defaultListingModelId?: string;
 };
 
+/** Stable empty snapshot — useSyncExternalStore requires referential equality when unchanged. */
+export const EMPTY_BG_MODEL_CATALOG_PREFS: BgModelCatalogPrefs = Object.freeze(
+  {}
+);
+
+let cachedRaw: string | null | undefined;
+let cachedPrefs: BgModelCatalogPrefs = EMPTY_BG_MODEL_CATALOG_PREFS;
+let migratedLegacy = false;
+
+function cacheSnapshot(
+  raw: string | null,
+  prefs: BgModelCatalogPrefs
+): BgModelCatalogPrefs {
+  cachedRaw = raw;
+  cachedPrefs = prefs;
+  return prefs;
+}
+
 export function readBgModelCatalogPrefs(): BgModelCatalogPrefs {
-  if (typeof window === "undefined") return {};
+  if (typeof window === "undefined") return EMPTY_BG_MODEL_CATALOG_PREFS;
   try {
-    const raw = window.localStorage.getItem(BG_MODEL_CATALOG_PREFS_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw) as BgModelCatalogPrefs;
-      return parsed && typeof parsed === "object" ? parsed : {};
+    let raw = window.localStorage.getItem(BG_MODEL_CATALOG_PREFS_KEY);
+
+    // One-time migrate from the older listing-only key (before snapshot cache).
+    if (!raw && !migratedLegacy) {
+      migratedLegacy = true;
+      const legacy = window.localStorage.getItem(LEGACY_LISTING_MODEL_KEY);
+      if (legacy && isFalBgModelId(legacy)) {
+        const migrated: BgModelCatalogPrefs = {
+          defaultListingModelId: legacy,
+        };
+        raw = JSON.stringify(migrated);
+        window.localStorage.setItem(BG_MODEL_CATALOG_PREFS_KEY, raw);
+      }
     }
 
-    // One-time migrate from the older listing-only key.
-    const legacy = window.localStorage.getItem("ra-listing-clean-bg-model-v1");
-    if (legacy && isFalBgModelId(legacy)) {
-      const migrated: BgModelCatalogPrefs = {
-        defaultListingModelId: legacy,
-      };
-      window.localStorage.setItem(
-        BG_MODEL_CATALOG_PREFS_KEY,
-        JSON.stringify(migrated)
-      );
-      return migrated;
+    if (raw === cachedRaw) return cachedPrefs;
+
+    if (!raw) {
+      return cacheSnapshot(null, EMPTY_BG_MODEL_CATALOG_PREFS);
     }
-    return {};
+
+    const parsed = JSON.parse(raw) as BgModelCatalogPrefs;
+    if (!parsed || typeof parsed !== "object") {
+      return cacheSnapshot(raw, EMPTY_BG_MODEL_CATALOG_PREFS);
+    }
+    return cacheSnapshot(raw, parsed);
   } catch {
-    return {};
+    return EMPTY_BG_MODEL_CATALOG_PREFS;
   }
 }
 
@@ -53,10 +79,9 @@ export function writeBgModelCatalogPrefs(patch: BgModelCatalogPrefs) {
   if (typeof window === "undefined") return;
   try {
     const next = { ...readBgModelCatalogPrefs(), ...patch };
-    window.localStorage.setItem(
-      BG_MODEL_CATALOG_PREFS_KEY,
-      JSON.stringify(next)
-    );
+    const raw = JSON.stringify(next);
+    window.localStorage.setItem(BG_MODEL_CATALOG_PREFS_KEY, raw);
+    cacheSnapshot(raw, next);
     window.dispatchEvent(new Event(CHANGE_EVENT));
   } catch {
     /* ignore quota / private mode */
