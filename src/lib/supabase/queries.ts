@@ -1,6 +1,7 @@
 import { randomBytes } from "crypto";
 import { v4 as uuidv4 } from "uuid";
 import { getProfileById } from "@/lib/auth/otp";
+import { bakeExifOrientation } from "@/lib/image-orient";
 import { composeSmokePetNotes } from "@/lib/seller-preferences";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { PlatformListingSchema } from "@/lib/listing-schemas";
@@ -791,11 +792,15 @@ export async function uploadListingPhoto(
 ): Promise<{ storagePath: string; photo: ListingPhoto }> {
   const supabase = createAdminClient();
   const storagePath = `${listingId}/${role}-${uuidv4()}.jpg`;
+  const input = Buffer.isBuffer(bytes) ? bytes : Buffer.from(bytes);
+  // Bake EXIF Orientation so storage pixels match how browsers display the photo.
+  const oriented = await bakeExifOrientation(input);
+  void contentType;
 
   const { error: uploadError } = await supabase.storage
     .from("listing-photos")
-    .upload(storagePath, bytes, {
-      contentType,
+    .upload(storagePath, oriented.buffer, {
+      contentType: oriented.contentType,
       upsert: false,
     });
 
@@ -810,6 +815,114 @@ export async function uploadListingPhoto(
   });
 
   return { storagePath, photo };
+}
+
+/**
+ * Upload an EXIF-baked JPEG for fal inference and return a short-lived signed URL.
+ * Callers should delete `storagePath` when finished.
+ */
+export async function uploadOrientedFalSource(
+  bytes: Buffer
+): Promise<{
+  url: string;
+  storagePath: string;
+  width: number;
+  height: number;
+  buffer: Buffer;
+}> {
+  const oriented = await bakeExifOrientation(bytes);
+  const supabase = createAdminClient();
+  const storagePath = `fal-orient/${uuidv4()}.jpg`;
+  const { error } = await supabase.storage
+    .from("listing-photos")
+    .upload(storagePath, oriented.buffer, {
+      contentType: oriented.contentType,
+      upsert: false,
+    });
+  if (error) {
+    throw new Error(`uploadOrientedFalSource: ${error.message}`);
+  }
+  const url = await getSignedPhotoUrl(storagePath, 3600);
+  if (!url) {
+    throw new Error("uploadOrientedFalSource: could not sign temp image");
+  }
+  return {
+    url,
+    storagePath,
+    width: oriented.width,
+    height: oriented.height,
+    buffer: oriented.buffer,
+  };
+}
+
+export async function removeStoragePaths(paths: string[]): Promise<void> {
+  const unique = [...new Set(paths.filter(Boolean))];
+  if (unique.length === 0) return;
+  const supabase = createAdminClient();
+  await supabase.storage
+    .from("listing-photos")
+    .remove(unique)
+    .catch(() => undefined);
+}
+
+/**
+ * Overwrite a listing photo's original file (e.g. after aspect crop).
+ * Clears any cleaned version so Clean bg must be re-run from the new original.
+ */
+export async function replaceListingPhotoOriginal(
+  listingId: string,
+  photoId: string,
+  bytes: ArrayBuffer | Buffer,
+  contentType = "image/jpeg"
+): Promise<ListingPhoto> {
+  const photo = await getListingPhoto(listingId, photoId);
+  if (!photo) {
+    throw new Error("Photo not found");
+  }
+
+  const supabase = createAdminClient();
+  const input = Buffer.isBuffer(bytes) ? bytes : Buffer.from(bytes);
+  const oriented = await bakeExifOrientation(input);
+  void contentType;
+  const storagePath = `${listingId}/${photo.role}-${uuidv4()}.jpg`;
+
+  const { error: uploadError } = await supabase.storage
+    .from("listing-photos")
+    .upload(storagePath, oriented.buffer, {
+      contentType: oriented.contentType,
+      upsert: false,
+    });
+
+  if (uploadError) {
+    throw new Error(`replaceListingPhotoOriginal: ${uploadError.message}`);
+  }
+
+  const oldPaths = [photo.storage_path, photo.processed_path].filter(
+    (path): path is string => Boolean(path)
+  );
+
+  const updated = await updatePhoto(photoId, {
+    storage_path: storagePath,
+    processed_path: null,
+  });
+
+  const listing = await getListing(listingId);
+  if (
+    listing?.cover_processed_path &&
+    (photo.role === "cover" ||
+      listing.cover_processed_path === photo.processed_path)
+  ) {
+    await updateListing(listingId, { cover_processed_path: null });
+  }
+
+  if (oldPaths.length > 0) {
+    await supabase.storage
+      .from("listing-photos")
+      .remove(oldPaths)
+      .catch(() => undefined);
+  }
+
+  return updated;
 }
 
 export async function markPosted(id: string): Promise<Listing> {

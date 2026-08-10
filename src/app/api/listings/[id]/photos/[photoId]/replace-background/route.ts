@@ -8,6 +8,7 @@ import {
 } from "@/lib/ai/background";
 import { getFalBgModel, type FalBgModelId } from "@/lib/ai/fal-bg-models";
 import { getAdminUser } from "@/lib/admin";
+import { PLATFORM_PHOTO_ASPECT } from "@/lib/platforms";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   getListingPhoto,
@@ -121,6 +122,7 @@ export async function POST(request: Request, context: RouteContext) {
         backgroundColor: body.backgroundColor,
         keepHanger: true,
         modelId: adminModelId,
+        aspect: PLATFORM_PHOTO_ASPECT[access.listing.platform],
       });
 
       if (!processed.ok) {

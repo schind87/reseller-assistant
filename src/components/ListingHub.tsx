@@ -16,6 +16,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { BigButton } from "@/components/BigButton";
 import { ListingSchemaForm } from "@/components/ListingSchemaForm";
 import { ListingTweakDialog } from "@/components/ListingTweakDialog";
+import { PhotoAspectCrop } from "@/components/PhotoAspectCrop";
 import { QrPanel } from "@/components/QrPanel";
 import {
   getSeedListingSchema,
@@ -23,9 +24,14 @@ import {
 } from "@/lib/listing-schemas";
 import {
   PLATFORM_LABELS,
+  PLATFORM_PHOTO_ASPECT,
   SELL_PAGE_URLS,
   photoRoleLabel,
 } from "@/lib/platforms";
+import {
+  isNearAspect,
+  readImageDimensions,
+} from "@/lib/photo-aspect";
 import {
   requestExtensionPair,
   waitForExtensionPairAck,
@@ -290,6 +296,14 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
   const [previewPhoto, setPreviewPhoto] = useState<ListingPhotoWithUrl | null>(
     null
   );
+  const [cropRequest, setCropRequest] = useState<{
+    file: File;
+    resolve: (file: File | null) => void;
+  } | null>(null);
+  const [adjustPhoto, setAdjustPhoto] = useState<ListingPhotoWithUrl | null>(
+    null
+  );
+  const [adjustingAspect, setAdjustingAspect] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pendingUploadRoleRef = useRef<PhotoRole | null>(null);
 
@@ -437,6 +451,28 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
     fileInputRef.current?.click();
   }
 
+  function requestAspectCrop(file: File): Promise<File | null> {
+    return new Promise((resolve) => {
+      setCropRequest({ file, resolve });
+    });
+  }
+
+  async function maybeCropForListingUpload(
+    file: File,
+    platform: Platform
+  ): Promise<File | null> {
+    const aspect = PLATFORM_PHOTO_ASPECT[platform];
+    try {
+      const dims = await readImageDimensions(file);
+      if (isNearAspect(dims.width, dims.height, aspect)) {
+        return file;
+      }
+    } catch {
+      // If we can't read dimensions, still offer the crop UI.
+    }
+    return requestAspectCrop(file);
+  }
+
   async function onDesktopFilesSelected(event: ChangeEvent<HTMLInputElement>) {
     const files = Array.from(event.target.files ?? []).filter((file) =>
       file.type.startsWith("image/")
@@ -447,12 +483,22 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
     if (!role || files.length === 0) return;
 
     const section = sectionForRole(role);
+    const platform = data?.listing.platform as Platform | undefined;
     setUploadingSection(section);
     setUploadProgress({ done: 0, total: files.length });
     setError(null);
+    let uploaded = 0;
     try {
       for (let i = 0; i < files.length; i++) {
-        const file = files[i]!;
+        let file = files[i]!;
+        if (section === "listing" && platform) {
+          const cropped = await maybeCropForListingUpload(file, platform);
+          if (!cropped) {
+            setUploadProgress({ done: i + 1, total: files.length });
+            continue;
+          }
+          file = cropped;
+        }
         const body = new FormData();
         body.append("photo", file);
         body.append("role", role);
@@ -466,14 +512,17 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
             typeof json.error === "string" ? json.error : "Upload failed"
           );
         }
+        uploaded += 1;
         setUploadProgress({ done: i + 1, total: files.length });
       }
-      setStatusMessage(
-        files.length === 1
-          ? `Added ${photoRoleLabel(role)} photo.`
-          : `Added ${files.length} ${photoRoleLabel(role).toLowerCase()} photos.`
-      );
-      await load({ syncDraft: false });
+      if (uploaded > 0) {
+        setStatusMessage(
+          uploaded === 1
+            ? `Added ${photoRoleLabel(role)} photo.`
+            : `Added ${uploaded} ${photoRoleLabel(role).toLowerCase()} photos.`
+        );
+        await load({ syncDraft: false });
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Upload failed");
     } finally {
@@ -489,14 +538,24 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
       return;
     }
 
+    const platform = data?.listing.platform as Platform | undefined;
     setUploadingSection(section);
     setUploadProgress({ done: 0, total: images.length });
     setError(null);
     endPhotoDrag();
+    let uploaded = 0;
     try {
       let working = data?.photos ?? [];
       for (let i = 0; i < images.length; i++) {
-        const file = images[i]!;
+        let file = images[i]!;
+        if (section === "listing" && platform) {
+          const cropped = await maybeCropForListingUpload(file, platform);
+          if (!cropped) {
+            setUploadProgress({ done: i + 1, total: images.length });
+            continue;
+          }
+          file = cropped;
+        }
         const role = roleForSection(section, working);
         const body = new FormData();
         body.append("photo", file);
@@ -514,14 +573,17 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
         if (json.photo) {
           working = [...working, json.photo as ListingPhotoWithUrl];
         }
+        uploaded += 1;
         setUploadProgress({ done: i + 1, total: images.length });
       }
-      setStatusMessage(
-        images.length === 1
-          ? `Added photo to ${sectionLabel(section)}.`
-          : `Added ${images.length} photos to ${sectionLabel(section)}.`
-      );
-      await load({ syncDraft: false });
+      if (uploaded > 0) {
+        setStatusMessage(
+          uploaded === 1
+            ? `Added photo to ${sectionLabel(section)}.`
+            : `Added ${uploaded} photos to ${sectionLabel(section)}.`
+        );
+        await load({ syncDraft: false });
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Upload failed");
     } finally {
@@ -1418,7 +1480,67 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
       {previewPhoto ? (
         <PhotoLightbox
           photo={previewPhoto}
+          canAdjustAspect={isPostingPhotoRole(previewPhoto.role)}
           onClose={() => setPreviewPhoto(null)}
+          onAdjustAspect={() => {
+            setAdjustPhoto(previewPhoto);
+            setPreviewPhoto(null);
+          }}
+        />
+      ) : null}
+
+      {cropRequest && data ? (
+        <PhotoAspectCrop
+          file={cropRequest.file}
+          aspect={PLATFORM_PHOTO_ASPECT[data.listing.platform]}
+          platformLabel={PLATFORM_LABELS[data.listing.platform]}
+          cancelLabel="Skip this photo"
+          onConfirm={(cropped) => {
+            cropRequest.resolve(cropped);
+            setCropRequest(null);
+          }}
+          onCancel={() => {
+            cropRequest.resolve(null);
+            setCropRequest(null);
+          }}
+        />
+      ) : null}
+
+      {adjustPhoto && data ? (
+        <PhotoAspectCrop
+          imageUrl={adjustPhoto.signedUrl}
+          fileName={`${adjustPhoto.role}.jpg`}
+          aspect={PLATFORM_PHOTO_ASPECT[data.listing.platform]}
+          platformLabel={PLATFORM_LABELS[data.listing.platform]}
+          cancelLabel="Cancel"
+          onConfirm={async (cropped) => {
+            setAdjustingAspect(true);
+            setError(null);
+            try {
+              const body = new FormData();
+              body.append("photo", cropped);
+              const res = await fetch(
+                `/api/listings/${listingId}/photos/${adjustPhoto.id}`,
+                { method: "PUT", body }
+              );
+              const json = await res.json().catch(() => ({}));
+              if (!res.ok) {
+                throw new Error(
+                  typeof json.error === "string"
+                    ? json.error
+                    : "Could not update photo"
+                );
+              }
+              setAdjustPhoto(null);
+              setStatusMessage("Updated photo aspect ratio.");
+              await load({ syncDraft: false });
+            } finally {
+              setAdjustingAspect(false);
+            }
+          }}
+          onCancel={() => {
+            if (!adjustingAspect) setAdjustPhoto(null);
+          }}
         />
       ) : null}
 
@@ -2164,9 +2286,13 @@ function TrashIcon({ className }: { className?: string }) {
 function PhotoLightbox({
   photo,
   onClose,
+  canAdjustAspect = false,
+  onAdjustAspect,
 }: {
   photo: ListingPhotoWithUrl;
   onClose: () => void;
+  canAdjustAspect?: boolean;
+  onAdjustAspect?: () => void;
 }) {
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
@@ -2208,9 +2334,20 @@ function PhotoLightbox({
           alt={photoRoleLabel(photo.role)}
           className="max-h-[min(85vh,900px)] max-w-[min(96vw,900px)] rounded-lg object-contain shadow-2xl"
         />
-        <p className="rounded-lg bg-black/50 px-3 py-1 text-sm font-medium text-white">
-          {photoRoleLabel(photo.role)}
-        </p>
+        <div className="flex flex-wrap items-center justify-center gap-2">
+          <p className="rounded-lg bg-black/50 px-3 py-1 text-sm font-medium text-white">
+            {photoRoleLabel(photo.role)}
+          </p>
+          {canAdjustAspect && onAdjustAspect ? (
+            <button
+              type="button"
+              onClick={onAdjustAspect}
+              className="rounded-lg bg-white/95 px-3 py-1 text-sm font-semibold text-[var(--foreground)]"
+            >
+              Adjust aspect ratio
+            </button>
+          ) : null}
+        </div>
       </div>
     </div>
   );

@@ -12,6 +12,15 @@ import {
   type FalBgModelId,
 } from "@/lib/ai/fal-bg-models";
 import { falQueueInfer } from "@/lib/ai/fal-lab";
+import {
+  removeStoragePaths,
+  uploadOrientedFalSource,
+} from "@/lib/supabase/queries";
+import type { PhotoAspectGuide } from "@/lib/platforms";
+import {
+  enforceAspectWithSharp,
+  platformTargetSize,
+} from "@/lib/photo-aspect-sharp";
 
 export { BG_PIPELINE_TAG, isCurrentBgPipeline } from "@/lib/ai/bg-pipeline";
 
@@ -33,6 +42,8 @@ export type ReplaceBackgroundOptions = {
    * Transparent cutouts are composited onto backgroundColor.
    */
   modelId?: FalBgModelId;
+  /** Marketplace frame — output is always cover-cropped to this aspect when set. */
+  aspect?: PhotoAspectGuide;
 };
 
 function falKey(): string | null {
@@ -660,6 +671,17 @@ export type ReplaceBackgroundResult =
   | ReplaceBackgroundSuccess
   | ReplaceBackgroundFailure;
 
+async function finalizeBackgroundBytes(
+  bytes: Buffer,
+  aspect: PhotoAspectGuide | undefined
+): Promise<ReplaceBackgroundSuccess> {
+  if (!aspect) {
+    return { ok: true, bytes, contentType: "image/png" };
+  }
+  const enforced = await enforceAspectWithSharp(bytes, aspect);
+  return { ok: true, bytes: enforced, contentType: "image/png" };
+}
+
 export async function replaceBackground(
   imageUrl: string,
   options: ReplaceBackgroundOptions = {}
@@ -679,6 +701,7 @@ export async function replaceBackground(
   const backgroundColor = normalizeHexColor(options.backgroundColor);
   const keepHanger = options.keepHanger !== false;
   const { r, g, b } = hexToRgb(backgroundColor);
+  const aspect = options.aspect;
 
   try {
     const originalBytes = await fetchImageBytes(imageUrl);
@@ -690,37 +713,43 @@ export async function replaceBackground(
       };
     }
 
-    const meta = await sharp(Buffer.from(originalBytes.bytes)).metadata();
-    const width = meta.width ?? 0;
-    const height = meta.height ?? 0;
-    if (!width || !height) {
-      return {
-        ok: false,
-        reason: "process_failed",
-        detail: "Photo has no readable dimensions.",
-      };
-    }
-
-    // 1) Pixelcut Product Photo — e-commerce specialist on fal (~$0.024).
-    const pixelcut = await replaceWithPixelcut(
-      imageUrl,
-      backgroundColor,
-      width,
-      height
+    const oriented = await uploadOrientedFalSource(
+      Buffer.from(originalBytes.bytes)
     );
-    if (pixelcut) {
-      return { ok: true, bytes: pixelcut, contentType: "image/png" };
-    }
+    const { url: falImageUrl, width, height, buffer: orientedBuffer } =
+      oriented;
 
-    // 2) Fallback: Pixelcut/BiRefNet cutout + hanger-aware composite.
-    return await replaceWithCutoutComposite({
-      imageUrl,
-      originalBytes: originalBytes.bytes,
-      width,
-      height,
-      backgroundRgb: { r, g, b },
-      keepHanger,
-    });
+    try {
+      const target = aspect
+        ? platformTargetSize(width, height, aspect)
+        : { width, height };
+
+      // 1) Pixelcut Product Photo — e-commerce specialist on fal (~$0.024).
+      const pixelcut = await replaceWithPixelcut(
+        falImageUrl,
+        backgroundColor,
+        target.width,
+        target.height
+      );
+      if (pixelcut) {
+        return finalizeBackgroundBytes(pixelcut, aspect);
+      }
+
+      // 2) Fallback: Pixelcut/BiRefNet cutout + hanger-aware composite.
+      // Compose at source size, then enforce marketplace aspect on the result.
+      const composed = await replaceWithCutoutComposite({
+        imageUrl: falImageUrl,
+        originalBytes: orientedBuffer,
+        width,
+        height,
+        backgroundRgb: { r, g, b },
+        keepHanger,
+      });
+      if (!composed.ok) return composed;
+      return finalizeBackgroundBytes(composed.bytes, aspect);
+    } finally {
+      await removeStoragePaths([oriented.storagePath]);
+    }
   } catch (err) {
     console.error("replaceBackground failed:", err);
     return {
@@ -757,67 +786,71 @@ async function replaceBackgroundWithModel(
       };
     }
 
-    const meta = await sharp(Buffer.from(originalBytes.bytes)).metadata();
-    const width = meta.width ?? 0;
-    const height = meta.height ?? 0;
-    if (!width || !height) {
-      return {
-        ok: false,
-        reason: "process_failed",
-        detail: "Photo has no readable dimensions.",
-      };
-    }
-
-    const { data } = await falQueueInfer(
-      model.falPath,
-      buildFalInput(model, imageUrl, width, height)
+    const oriented = await uploadOrientedFalSource(
+      Buffer.from(originalBytes.bytes)
     );
-    const remoteUrl = extractFalImageUrl(data);
-    if (!remoteUrl) {
-      return {
-        ok: false,
-        reason: "fal_failed",
-        detail: `${model.label} returned no image.`,
-      };
+    const { url: falImageUrl, width, height } = oriented;
+
+    try {
+      const target = options.aspect
+        ? platformTargetSize(width, height, options.aspect)
+        : { width, height };
+
+      const { data } = await falQueueInfer(
+        model.falPath,
+        buildFalInput(model, falImageUrl, target.width, target.height)
+      );
+      const remoteUrl = extractFalImageUrl(data);
+      if (!remoteUrl) {
+        return {
+          ok: false,
+          reason: "fal_failed",
+          detail: `${model.label} returned no image.`,
+        };
+      }
+
+      const downloaded = await fetchImageBytes(remoteUrl);
+      if (!downloaded) {
+        return {
+          ok: false,
+          reason: "fal_failed",
+          detail: `Could not download ${model.label} output.`,
+        };
+      }
+
+      if (model.solidBackground) {
+        return finalizeBackgroundBytes(
+          Buffer.from(downloaded.bytes),
+          options.aspect
+        );
+      }
+
+      const { r, g, b } = hexToRgb(backgroundColor);
+      const cutout = await sharp(Buffer.from(downloaded.bytes))
+        .ensureAlpha()
+        .resize(target.width, target.height, {
+          fit: "cover",
+          position: "centre",
+        })
+        .png()
+        .toBuffer();
+
+      const composed = await sharp({
+        create: {
+          width: target.width,
+          height: target.height,
+          channels: 3,
+          background: { r, g, b },
+        },
+      })
+        .composite([{ input: cutout, blend: "over" }])
+        .png()
+        .toBuffer();
+
+      return finalizeBackgroundBytes(composed, options.aspect);
+    } finally {
+      await removeStoragePaths([oriented.storagePath]);
     }
-
-    const downloaded = await fetchImageBytes(remoteUrl);
-    if (!downloaded) {
-      return {
-        ok: false,
-        reason: "fal_failed",
-        detail: `Could not download ${model.label} output.`,
-      };
-    }
-
-    if (model.solidBackground) {
-      return {
-        ok: true,
-        bytes: Buffer.from(downloaded.bytes),
-        contentType: "image/png",
-      };
-    }
-
-    const { r, g, b } = hexToRgb(backgroundColor);
-    const cutout = await sharp(Buffer.from(downloaded.bytes))
-      .ensureAlpha()
-      .resize(width, height, { fit: "fill" })
-      .png()
-      .toBuffer();
-
-    const composed = await sharp({
-      create: {
-        width,
-        height,
-        channels: 3,
-        background: { r, g, b },
-      },
-    })
-      .composite([{ input: cutout, blend: "over" }])
-      .png()
-      .toBuffer();
-
-    return { ok: true, bytes: composed, contentType: "image/png" };
   } catch (err) {
     console.error("replaceBackgroundWithModel failed:", modelId, err);
     return {
@@ -833,7 +866,7 @@ async function replaceBackgroundWithModel(
 
 async function replaceWithCutoutComposite(params: {
   imageUrl: string;
-  originalBytes: ArrayBuffer;
+  originalBytes: ArrayBuffer | Buffer;
   width: number;
   height: number;
   backgroundRgb: { r: number; g: number; b: number };
@@ -894,7 +927,11 @@ async function replaceWithCutoutComposite(params: {
       hangerMaskBytes: hangerMask?.bytes ?? null,
     });
 
-    const rgba = await sharp(Buffer.from(originalBytes))
+    const rgba = await sharp(
+      Buffer.isBuffer(originalBytes)
+        ? originalBytes
+        : Buffer.from(originalBytes)
+    )
       .ensureAlpha()
       .resize(width, height, { fit: "fill" })
       .raw()

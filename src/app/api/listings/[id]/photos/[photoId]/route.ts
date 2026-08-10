@@ -2,10 +2,12 @@ import { NextResponse } from "next/server";
 import { authorizeListingAccess } from "@/lib/listing-access";
 import {
   deleteListingPhoto,
+  getListingPhoto,
   moveListingPhoto,
+  replaceListingPhotoOriginal,
   withSignedPhotoUrls,
 } from "@/lib/supabase/queries";
-import type { PhotoRole } from "@/lib/types";
+import { isPostingPhotoRole, type PhotoRole } from "@/lib/types";
 
 const PHOTO_ROLES: PhotoRole[] = [
   "brand_tag",
@@ -51,6 +53,63 @@ export async function PATCH(request: Request, context: RouteContext) {
       console.error("move photo error:", err);
     }
     return NextResponse.json({ error: message }, { status });
+  }
+}
+
+/**
+ * Replace the original photo bytes (aspect crop). Listing photos only.
+ * Clears processed Clean bg so it must be re-run.
+ */
+export async function PUT(request: Request, context: RouteContext) {
+  const { id, photoId } = await context.params;
+  const access = await authorizeListingAccess(id, { writeRequiresOwner: true });
+  if (access.error) return access.error;
+
+  const existing = await getListingPhoto(id, photoId);
+  if (!existing) {
+    return NextResponse.json({ error: "Photo not found" }, { status: 404 });
+  }
+  if (!isPostingPhotoRole(existing.role)) {
+    return NextResponse.json(
+      {
+        error:
+          "Aspect ratio adjust is only available for listing photos (not tags or stocking).",
+      },
+      { status: 400 }
+    );
+  }
+
+  try {
+    const form = await request.formData();
+    const file = form.get("photo");
+    if (!(file instanceof File)) {
+      return NextResponse.json(
+        { error: "Photo file is required" },
+        { status: 400 }
+      );
+    }
+
+    const bytes = await file.arrayBuffer();
+    const contentType = file.type || "image/jpeg";
+    const photo = await replaceListingPhotoOriginal(
+      id,
+      photoId,
+      bytes,
+      contentType
+    );
+    const [withUrl] = await withSignedPhotoUrls([photo]);
+    return NextResponse.json({ photo: withUrl });
+  } catch (err) {
+    console.error("replace photo error:", err);
+    return NextResponse.json(
+      {
+        error:
+          err instanceof Error && err.message
+            ? err.message
+            : "Could not update photo",
+      },
+      { status: 500 }
+    );
   }
 }
 

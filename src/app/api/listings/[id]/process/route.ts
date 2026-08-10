@@ -8,6 +8,7 @@ import {
   replaceBackground,
 } from "@/lib/ai/background";
 import { identifyFromPhotos } from "@/lib/ai/identify";
+import { PLATFORM_PHOTO_ASPECT } from "@/lib/platforms";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   getListingWithPhotos,
@@ -119,6 +120,7 @@ export async function POST(_request: Request, context: RouteContext) {
 
       const downloaded = await replaceBackground(entry.url, {
         keepHanger: true,
+        aspect: PLATFORM_PHOTO_ASPECT[result.listing.platform],
       });
       if (!downloaded.ok) {
         console.warn(
