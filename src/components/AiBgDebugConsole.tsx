@@ -115,11 +115,11 @@ function formatCostUsd(value: number | null | undefined): string | null {
   if (value == null || Number.isNaN(value) || !Number.isFinite(value)) {
     return null;
   }
-  if (value === 0) return "$0";
-  // Always 4 significant figures (e.g. $0.01600, $0.02400).
-  const precision = Math.abs(value).toPrecision(4);
-  const signed = value < 0 ? `-${precision}` : precision;
-  return `$${signed}`;
+  // Display as cents with one decimal (e.g. $0.016 → 1.6¢).
+  const cents = value * 100;
+  const rounded = Math.round(cents * 10) / 10;
+  const body = Math.abs(rounded).toFixed(1);
+  return `${rounded < 0 ? "-" : ""}${body}¢`;
 }
 
 function formatDurationSeconds(ms: number): string {
