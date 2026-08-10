@@ -193,6 +193,12 @@ function formatCostUsd(value: number | null | undefined): string | null {
   return `${rounded < 0 ? "-" : ""}${body}¢`;
 }
 
+/** Catalog approxCost strings normalized to cents (or "unpriced"). */
+function formatApproxCostCents(approxCost: string): string {
+  const usd = parseApproxCostUsd(approxCost);
+  return formatCostUsd(usd) ?? "unpriced";
+}
+
 function formatDurationSeconds(ms: number): string {
   const seconds = ms / 1000;
   if (!Number.isFinite(seconds) || seconds < 0) return "—";
@@ -1225,10 +1231,19 @@ export function AiBgDebugConsole({
               {selectableModels.map((model) => {
                 const savedCount = savedCountByModel.get(model.id) ?? 0;
                 const avg = avgCostByModel.get(model.id);
-                const avgLabel =
+                const catalogCents = formatApproxCostCents(model.approxCost);
+                const avgCents =
                   avg && avg.sampleCount > 0
-                    ? `avg ${formatCostUsd(avg.avgUsd)} · n=${avg.sampleCount}`
+                    ? formatCostUsd(avg.avgUsd)
                     : null;
+                const costParts = [
+                  catalogCents === "unpriced"
+                    ? "unpriced"
+                    : `est ${catalogCents}`,
+                ];
+                if (avgCents) {
+                  costParts.push(`avg ${avgCents} · n=${avg!.sampleCount}`);
+                }
                 return (
                   <li key={model.id}>
                     <label
@@ -1249,8 +1264,7 @@ export function AiBgDebugConsole({
                         <span className="block text-sm font-semibold text-[var(--foreground)]">
                           {model.label}{" "}
                           <span className="font-normal text-[var(--muted)]">
-                            ({model.approxCost}
-                            {avgLabel ? ` · ${avgLabel}` : ""})
+                            ({costParts.join(" · ")})
                           </span>
                           {savedCount > 0 ? (
                             <span className="ml-2 font-normal text-[var(--accent)]">
@@ -1762,7 +1776,7 @@ function BgModelSettingsDialog({
             <option value="">Production default (hanger-safe)</option>
             {scoped.map((model) => (
               <option key={model.id} value={model.id}>
-                {model.label} · {model.approxCost}
+                {model.label} · {formatApproxCostCents(model.approxCost)}
               </option>
             ))}
           </select>
@@ -1806,7 +1820,8 @@ function BgModelSettingsDialog({
                         ) : null}
                       </span>
                       <span className="block text-xs text-[var(--muted)]">
-                        {model.approxCost} · {model.description}
+                        {formatApproxCostCents(model.approxCost)} ·{" "}
+                        {model.description}
                       </span>
                     </span>
                   </label>
