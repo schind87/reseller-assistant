@@ -11,6 +11,11 @@ import { getAdminUser } from "@/lib/admin";
 import { PLATFORM_PHOTO_ASPECT } from "@/lib/platforms";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
+  createBgLabRun,
+  insertBgLabResult,
+  uploadBgLabImage,
+} from "@/lib/supabase/bg-lab";
+import {
   getListingPhoto,
   getSignedPhotoUrl,
   updateListing,
@@ -176,6 +181,35 @@ export async function POST(request: Request, context: RouteContext) {
       updated = await updatePhoto(photoId, { processed_path: processedPath });
       if (updated.role === "cover") {
         await updateListing(id, { cover_processed_path: processedPath });
+      }
+
+      // Persist so later clicks can pick among AI results for this crop.
+      try {
+        const model = adminModelId ? getFalBgModel(adminModelId) : null;
+        const run = await createBgLabRun({
+          photoId,
+          listingId: id,
+          runByUserId: access.userId,
+          compositeWhite: true,
+          sourceStoragePath: updated.storage_path,
+        });
+        const labPath = await uploadBgLabImage({
+          runId: run.id,
+          modelId: model?.id ?? "production-hanger",
+          bytes: Buffer.from(processed.bytes),
+          contentType: processed.contentType,
+        });
+        await insertBgLabResult({
+          runId: run.id,
+          modelId: model?.id ?? "production-hanger",
+          modelLabel: model?.label ?? "Production default (hanger-safe)",
+          provider: "fal",
+          ok: true,
+          ms: 0,
+          storagePath: labPath,
+        });
+      } catch (labErr) {
+        console.error("replace-background lab record failed:", labErr);
       }
     }
 

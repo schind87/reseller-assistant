@@ -2,8 +2,10 @@
 
 import {
   useMemo,
+  useRef,
   useState,
   type FormEvent,
+  type KeyboardEvent,
   type ReactNode,
 } from "react";
 import type { ListingFieldDef, PlatformListingSchema } from "@/lib/listing-schemas";
@@ -13,6 +15,7 @@ import {
   getMarketplaceSubcategoryOptions,
 } from "@/lib/marketplace-categories";
 import type { StructuredFields } from "@/lib/types";
+import { AiGlyph } from "@/components/AiPhotoBackgroundPicker";
 
 type ListingSchemaFormProps = {
   schema: PlatformListingSchema;
@@ -28,6 +31,8 @@ type ListingSchemaFormProps = {
   footer: ReactNode;
   onRewriteDescription?: () => void;
   rewritingDescription?: boolean;
+  /** True after AI has written the description at least once this session / listing. */
+  descriptionAiWritten?: boolean;
 };
 
 const controlClass =
@@ -118,6 +123,7 @@ export function ListingSchemaForm({
   footer,
   onRewriteDescription,
   rewritingDescription = false,
+  descriptionAiWritten = false,
 }: ListingSchemaFormProps) {
   const fieldNodes = useMemo(() => schema.fields, [schema.fields]);
   const categoryOptions = useMemo(() => {
@@ -141,7 +147,6 @@ export function ListingSchemaForm({
       >
         <input
           value={title}
-          title={field.hint}
           maxLength={field.maxLength}
           onChange={(e) => onTitleChange(e.target.value)}
           placeholder={field.placeholder}
@@ -155,23 +160,32 @@ export function ListingSchemaForm({
     return (
       <div key={field.id} className="flex flex-col gap-1 sm:col-span-2">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <span className="text-sm font-semibold text-[var(--foreground)]">
-            {`${field.label}${field.required ? "" : " (optional)"} (${description.length}/${field.maxLength ?? 5000})`}
-          </span>
+          <FieldLabel
+            label={`${field.label}${field.required ? "" : " (optional)"} (${description.length}/${field.maxLength ?? 5000})`}
+            hint={field.hint}
+          />
           {onRewriteDescription ? (
             <button
               type="button"
               disabled={rewritingDescription}
               onClick={onRewriteDescription}
-              className="rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-1.5 text-sm font-semibold text-[var(--foreground)] disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-1.5 text-sm font-semibold text-[var(--foreground)] disabled:opacity-50"
             >
-              {rewritingDescription ? "Rewriting…" : "Rewrite with AI"}
+              {rewritingDescription
+                ? descriptionAiWritten
+                  ? "Rewriting…"
+                  : "Writing…"
+                : descriptionAiWritten
+                  ? "Rewrite"
+                  : "Write with AI"}
+              {!rewritingDescription ? (
+                <AiGlyph className="h-3.5 w-3.5 text-[var(--accent)]" />
+              ) : null}
             </button>
           ) : null}
         </div>
         <textarea
           value={description}
-          title={field.hint}
           maxLength={field.maxLength}
           onChange={(e) => onDescriptionChange(e.target.value)}
           rows={5}
@@ -194,7 +208,6 @@ export function ListingSchemaForm({
           min={0}
           step="0.01"
           value={price}
-          title={field.hint}
           onChange={(e) => onPriceChange(e.target.value)}
           className={controlClass}
         />
@@ -213,7 +226,6 @@ export function ListingSchemaForm({
           <input
             type="text"
             value={selected.join(", ")}
-            title={field.hint}
             onChange={(e) =>
               onFieldsChange(
                 writeStructured(fields, key, e.target.value, field.input)
@@ -257,7 +269,6 @@ export function ListingSchemaForm({
         <Field key={field.id} label={label} hint={field.hint}>
           <select
             value={value}
-            title={field.hint}
             onChange={(e) => {
               const nextCategory = e.target.value;
               let next = writeStructured(fields, key, nextCategory, "select");
@@ -291,7 +302,6 @@ export function ListingSchemaForm({
         <Field key={field.id} label={label} hint={field.hint}>
           <select
             value={value}
-            title={field.hint}
             disabled={!fields.category || options.length === 0}
             onChange={(e) =>
               onFieldsChange(
@@ -322,7 +332,6 @@ export function ListingSchemaForm({
         <Field key={field.id} label={label} hint={field.hint}>
           <select
             value={value}
-            title={field.hint}
             onChange={(e) =>
               onFieldsChange(
                 writeStructured(fields, key, e.target.value, field.input)
@@ -351,7 +360,6 @@ export function ListingSchemaForm({
         >
           <textarea
             value={value}
-            title={field.hint}
             maxLength={field.maxLength}
             onChange={(e) =>
               onFieldsChange(
@@ -370,7 +378,6 @@ export function ListingSchemaForm({
         <input
           type={field.input === "number" ? "number" : "text"}
           value={value}
-          title={field.hint}
           maxLength={field.maxLength}
           onChange={(e) =>
             onFieldsChange(
@@ -431,6 +438,9 @@ function StyleTagsPicker({
   onChange: (next: string[]) => void;
 }) {
   const [query, setQuery] = useState("");
+  const [open, setOpen] = useState(false);
+  const [activeIndex, setActiveIndex] = useState(0);
+  const blurTimer = useRef<number | null>(null);
   const selectedSet = useMemo(
     () => new Set(selected.map((tag) => tag.toLowerCase())),
     [selected]
@@ -438,20 +448,64 @@ function StyleTagsPicker({
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const list = q
-      ? options.filter((option) => option.toLowerCase().includes(q))
-      : options;
-    return list.slice(0, 80);
-  }, [options, query]);
+    if (!q) return [];
+    return options
+      .filter(
+        (option) =>
+          option.toLowerCase().includes(q) &&
+          !selectedSet.has(option.toLowerCase())
+      )
+      .slice(0, 12);
+  }, [options, query, selectedSet]);
 
-  function toggle(tag: string) {
+  const showDropdown =
+    open && query.trim().length > 0 && selected.length < max;
+
+  function clearBlurTimer() {
+    if (blurTimer.current != null) {
+      window.clearTimeout(blurTimer.current);
+      blurTimer.current = null;
+    }
+  }
+
+  function addTag(tag: string) {
     const key = tag.toLowerCase();
-    if (selectedSet.has(key)) {
-      onChange(selected.filter((item) => item.toLowerCase() !== key));
+    if (selectedSet.has(key) || selected.length >= max) return;
+    onChange([...selected, tag]);
+    setQuery("");
+    setOpen(false);
+    setActiveIndex(0);
+  }
+
+  function removeTag(tag: string) {
+    onChange(selected.filter((item) => item.toLowerCase() !== tag.toLowerCase()));
+  }
+
+  function onKeyDown(e: KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "Escape") {
+      setOpen(false);
       return;
     }
-    if (selected.length >= max) return;
-    onChange([...selected, tag]);
+    if (e.key === "Backspace" && query === "" && selected.length > 0) {
+      removeTag(selected[selected.length - 1]!);
+      return;
+    }
+    if (!showDropdown || filtered.length === 0) return;
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setActiveIndex((i) => Math.min(i + 1, filtered.length - 1));
+      return;
+    }
+    if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setActiveIndex((i) => Math.max(i - 1, 0));
+      return;
+    }
+    if (e.key === "Enter") {
+      e.preventDefault();
+      const pick = filtered[activeIndex] ?? filtered[0];
+      if (pick) addTag(pick);
+    }
   }
 
   return (
@@ -462,7 +516,7 @@ function StyleTagsPicker({
             <button
               key={tag}
               type="button"
-              onClick={() => toggle(tag)}
+              onClick={() => removeTag(tag)}
               className="inline-flex items-center gap-1 rounded-md border border-[var(--border)] bg-[var(--surface-muted)] px-2 py-1 text-sm font-medium text-[var(--foreground)]"
             >
               {tag}
@@ -474,52 +528,101 @@ function StyleTagsPicker({
         </div>
       ) : null}
 
-      <input
-        type="search"
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
-        placeholder={
-          selected.length >= max
-            ? `Maximum ${max} tags — remove one to add another`
-            : "Search Poshmark style tags…"
-        }
-        className={controlClass}
-      />
+      <div className="relative">
+        <input
+          type="text"
+          value={query}
+          disabled={selected.length >= max}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            setOpen(true);
+            setActiveIndex(0);
+          }}
+          onFocus={() => {
+            clearBlurTimer();
+            if (query.trim()) setOpen(true);
+          }}
+          onBlur={() => {
+            clearBlurTimer();
+            blurTimer.current = window.setTimeout(() => setOpen(false), 120);
+          }}
+          onKeyDown={onKeyDown}
+          placeholder={
+            selected.length >= max
+              ? `Maximum ${max} tags — remove one to add another`
+              : "Type to find a Poshmark style tag…"
+          }
+          className={`${controlClass} disabled:opacity-60`}
+          autoComplete="off"
+          role="combobox"
+          aria-expanded={showDropdown}
+          aria-autocomplete="list"
+        />
 
-      <div className="max-h-44 overflow-y-auto rounded-lg border border-[var(--border)] bg-white">
-        {filtered.length === 0 ? (
-          <p className="px-3 py-2 text-sm text-[var(--muted)]">No matching tags</p>
-        ) : (
-          <ul className="divide-y divide-[var(--border)]">
-            {filtered.map((option) => {
-              const isOn = selectedSet.has(option.toLowerCase());
-              const disabled = !isOn && selected.length >= max;
-              return (
-                <li key={option}>
-                  <button
-                    type="button"
-                    disabled={disabled}
-                    onClick={() => toggle(option)}
-                    className={`flex w-full items-center justify-between px-3 py-2 text-left text-sm disabled:opacity-40 ${
-                      isOn
-                        ? "bg-[var(--surface-muted)] font-semibold text-[var(--foreground)]"
-                        : "text-[var(--foreground)] hover:bg-[var(--surface-muted)]"
-                    }`}
-                  >
-                    <span>{option}</span>
-                    {isOn ? <span className="text-[var(--muted)]">Selected</span> : null}
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        )}
+        {showDropdown ? (
+          <div className="absolute left-0 right-0 top-full z-20 mt-1 max-h-52 overflow-y-auto rounded-lg border border-[var(--border)] bg-white shadow-lg">
+            {filtered.length === 0 ? (
+              <p className="px-3 py-2 text-sm text-[var(--muted)]">
+                No matching tags
+              </p>
+            ) : (
+              <ul role="listbox">
+                {filtered.map((option, index) => (
+                  <li key={option} role="option" aria-selected={index === activeIndex}>
+                    <button
+                      type="button"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => addTag(option)}
+                      onMouseEnter={() => setActiveIndex(index)}
+                      className={`flex w-full px-3 py-2 text-left text-sm text-[var(--foreground)] ${
+                        index === activeIndex
+                          ? "bg-[var(--surface-muted)] font-semibold"
+                          : "hover:bg-[var(--surface-muted)]"
+                      }`}
+                    >
+                      {option}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        ) : null}
       </div>
 
       <p className="text-xs text-[var(--muted)]">
-        {selected.length}/{max} selected · same options as Poshmark create-listing
+        {selected.length}/{max} selected · type to choose from Poshmark’s list
       </p>
     </div>
+  );
+}
+
+function FieldLabel({ label, hint }: { label: string; hint?: string }) {
+  return (
+    <span className="inline-flex items-center gap-1 text-sm font-semibold text-[var(--foreground)]">
+      <span>{label}</span>
+      {hint ? <FieldHelp text={hint} /> : null}
+    </span>
+  );
+}
+
+function FieldHelp({ text }: { text: string }) {
+  return (
+    <span className="group/help relative inline-flex shrink-0">
+      <span
+        tabIndex={0}
+        aria-label={text}
+        className="inline-flex h-3.5 w-3.5 cursor-help items-center justify-center rounded-full border border-[var(--border)] text-[9px] font-semibold leading-none text-[var(--muted)] outline-none hover:border-[var(--muted)] hover:text-[var(--foreground)] focus-visible:ring-1 focus-visible:ring-[var(--accent)]"
+      >
+        ?
+      </span>
+      <span
+        role="tooltip"
+        className="pointer-events-none absolute left-1/2 top-full z-30 mt-1.5 w-64 -translate-x-1/2 rounded-lg border border-[var(--border)] bg-white px-2.5 py-2 text-left text-xs font-normal leading-snug text-[var(--foreground)] opacity-0 shadow-lg transition-opacity group-hover/help:opacity-100 group-focus-within/help:opacity-100 sm:w-72"
+      >
+        {text}
+      </span>
+    </span>
   );
 }
 
@@ -536,9 +639,7 @@ function Field({
 }) {
   return (
     <div className={`flex flex-col gap-1 ${className ?? ""}`.trim()}>
-      <span className="text-sm font-semibold text-[var(--foreground)]" title={hint}>
-        {label}
-      </span>
+      <FieldLabel label={label} hint={hint} />
       {children}
     </div>
   );

@@ -1507,12 +1507,12 @@ export function AiBgDebugConsole({
                           ) : null}
                           {ratings &&
                           (ratings.upCount > 0 || ratings.downCount > 0) ? (
-                            <span className="ml-2 inline-flex items-center gap-1.5 font-normal tabular-nums text-[var(--muted)]">
-                              <span className="inline-flex items-center gap-0.5 text-emerald-700">
+                            <span className="ml-2 inline-flex items-center gap-1.5 font-normal tabular-nums">
+                              <span className="inline-flex items-center gap-0.5 text-green-600">
                                 <ThumbUpIcon className="h-3 w-3" />
                                 {ratings.upCount}
                               </span>
-                              <span className="inline-flex items-center gap-0.5 text-rose-700">
+                              <span className="inline-flex items-center gap-0.5 text-red-600">
                                 <ThumbDownIcon className="h-3 w-3" />
                                 {ratings.downCount}
                               </span>
@@ -1835,7 +1835,7 @@ export function AiBgDebugConsole({
                         </div>
                       ) : null}
                       {result.ok && result.id ? (
-                        <div className="mt-1.5 flex items-center justify-center gap-1">
+                        <div className="mt-1.5 flex items-center justify-center gap-1.5">
                           <button
                             type="button"
                             title="Thumbs up — good result"
@@ -1845,8 +1845,8 @@ export function AiBgDebugConsole({
                             onClick={() => void rateResult(result, "up")}
                             className={`inline-flex h-7 w-7 items-center justify-center rounded-md transition disabled:opacity-40 ${
                               result.rating === "up"
-                                ? "bg-emerald-100 text-emerald-700 ring-1 ring-emerald-400"
-                                : "text-[var(--muted)] hover:bg-emerald-50 hover:text-emerald-700"
+                                ? "bg-green-100 text-green-700 ring-1 ring-green-500"
+                                : "text-[var(--muted)] hover:bg-green-50 hover:text-green-700"
                             }`}
                           >
                             <ThumbUpIcon className="h-4 w-4" />
@@ -1860,12 +1860,34 @@ export function AiBgDebugConsole({
                             onClick={() => void rateResult(result, "down")}
                             className={`inline-flex h-7 w-7 items-center justify-center rounded-md transition disabled:opacity-40 ${
                               result.rating === "down"
-                                ? "bg-rose-100 text-rose-700 ring-1 ring-rose-400"
-                                : "text-[var(--muted)] hover:bg-rose-50 hover:text-rose-700"
+                                ? "bg-red-100 text-red-700 ring-1 ring-red-500"
+                                : "text-[var(--muted)] hover:bg-red-50 hover:text-red-700"
                             }`}
                           >
                             <ThumbDownIcon className="h-4 w-4" />
                           </button>
+                          {(() => {
+                            const totals = ratingStatsByModel.get(entry.modelId);
+                            if (
+                              !totals ||
+                              (totals.upCount === 0 && totals.downCount === 0)
+                            ) {
+                              return null;
+                            }
+                            return (
+                              <span
+                                className="ml-0.5 inline-flex items-center gap-1.5 text-xs font-semibold tabular-nums"
+                                title="All-time totals for this model across every photo"
+                              >
+                                <span className="text-green-600">
+                                  +{totals.upCount}
+                                </span>
+                                <span className="text-red-600">
+                                  −{totals.downCount}
+                                </span>
+                              </span>
+                            );
+                          })()}
                         </div>
                       ) : null}
                     </div>
@@ -1971,6 +1993,13 @@ export function AiBgDebugConsole({
           backdrop={labBackdrop}
           index={preview.index}
           total={preview.items.length}
+          modelRatingTotals={
+            preview.items[preview.index]?.result?.modelId
+              ? ratingStatsByModel.get(
+                  preview.items[preview.index]!.result!.modelId,
+                ) ?? null
+              : null
+          }
           ratingBusy={
             preview.items[preview.index]?.result?.id != null &&
             ratingBusyId === preview.items[preview.index]?.result?.id
@@ -2245,6 +2274,7 @@ function ImageLightbox({
   backdrop = "white",
   index = 0,
   total = 1,
+  modelRatingTotals = null,
   ratingBusy = false,
   onRate,
   onPrev,
@@ -2255,6 +2285,7 @@ function ImageLightbox({
   backdrop?: LabBackdrop;
   index?: number;
   total?: number;
+  modelRatingTotals?: { upCount: number; downCount: number } | null;
   ratingBusy?: boolean;
   onRate?: (next: "up" | "down") => void;
   onPrev?: () => void;
@@ -2452,10 +2483,25 @@ function ImageLightbox({
                 ) : null}
               </dl>
               {result.ok && result.id && onRate ? (
-                <div className="flex items-center gap-2 border-t border-[var(--border)] pt-3">
+                <div className="flex flex-wrap items-center gap-2 border-t border-[var(--border)] pt-3">
                   <p className="mr-auto text-sm font-semibold text-[var(--foreground)]">
                     Rate result
                   </p>
+                  {modelRatingTotals &&
+                  (modelRatingTotals.upCount > 0 ||
+                    modelRatingTotals.downCount > 0) ? (
+                    <span
+                      className="inline-flex items-center gap-1.5 text-sm font-semibold tabular-nums"
+                      title="All-time totals for this model across every photo"
+                    >
+                      <span className="text-green-600">
+                        +{modelRatingTotals.upCount}
+                      </span>
+                      <span className="text-red-600">
+                        −{modelRatingTotals.downCount}
+                      </span>
+                    </span>
+                  ) : null}
                   <button
                     type="button"
                     title="Thumbs up — good result"
@@ -2465,8 +2511,8 @@ function ImageLightbox({
                     onClick={() => onRate("up")}
                     className={`inline-flex h-9 w-9 items-center justify-center rounded-md transition disabled:opacity-40 ${
                       result.rating === "up"
-                        ? "bg-emerald-100 text-emerald-700 ring-1 ring-emerald-400"
-                        : "text-[var(--muted)] hover:bg-emerald-50 hover:text-emerald-700"
+                        ? "bg-green-100 text-green-700 ring-1 ring-green-500"
+                        : "text-[var(--muted)] hover:bg-green-50 hover:text-green-700"
                     }`}
                   >
                     <ThumbUpIcon className="h-5 w-5" />
@@ -2480,8 +2526,8 @@ function ImageLightbox({
                     onClick={() => onRate("down")}
                     className={`inline-flex h-9 w-9 items-center justify-center rounded-md transition disabled:opacity-40 ${
                       result.rating === "down"
-                        ? "bg-rose-100 text-rose-700 ring-1 ring-rose-400"
-                        : "text-[var(--muted)] hover:bg-rose-50 hover:text-rose-700"
+                        ? "bg-red-100 text-red-700 ring-1 ring-red-500"
+                        : "text-[var(--muted)] hover:bg-red-50 hover:text-red-700"
                     }`}
                   >
                     <ThumbDownIcon className="h-5 w-5" />

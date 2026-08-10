@@ -46,7 +46,7 @@ export default async function AdminAiDebugPage({ searchParams }: PageProps) {
         limit: 24,
       }),
       listBgLabModelCostAverages({ userId: admin.id }),
-      listBgLabModelRatingStats({ userId: admin.id }),
+      listBgLabModelRatingStats(),
       deepPhotoId ? getAdminPhotoById(deepPhotoId) : Promise.resolve(null),
     ]);
 

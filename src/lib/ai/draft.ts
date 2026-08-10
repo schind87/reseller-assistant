@@ -276,20 +276,22 @@ export async function rewriteListingDescription(params: {
       messages: [
         {
           role: "user",
-          content: `Rewrite the ${PLATFORM_LABELS[platform]} listing description using ONLY the facts below.
-Do not invent brand, size, measurements, or flaws that are not provided.
+          content: `Write a fresh ${PLATFORM_LABELS[platform]} listing description from the CURRENT listing fields below.
+The structured fields and title/price are the source of truth — they may have been updated since any prior description.
+Use ONLY those facts. Do not invent brand, size, measurements, or flaws that are not provided.
+Ignore outdated details in the current description when they conflict with the structured fields.
 Keep it buyer-friendly, clothing-focused, and within ${limits.descriptionMax} characters.
-Honor seller preferences in tone and required disclosures.
+Honor seller preferences in tone and required disclosures (including smoke/pet notes from the fields).
 
 Seller preferences:
 ${sellerContext ?? "None provided."}
 
 Title: ${title || "(none)"}
 Price: ${price == null ? "(none)" : price}
-Structured fields:
+Structured fields (authoritative — reflect these exactly):
 ${JSON.stringify(fields, null, 2)}
 
-Current description (optional reference — improve it with the updated fields):
+Previous description (reference only; prefer updated fields above):
 ${currentDescription?.trim() || "(none)"}
 
 Return only the new description text.`,

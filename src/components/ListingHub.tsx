@@ -13,6 +13,7 @@ import {
 } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+import { AiGlyph, AiPhotoBackgroundPicker } from "@/components/AiPhotoBackgroundPicker";
 import { BigButton } from "@/components/BigButton";
 import { ListingSchemaForm } from "@/components/ListingSchemaForm";
 import { ListingTweakDialog } from "@/components/ListingTweakDialog";
@@ -37,15 +38,12 @@ import {
   requestExtensionPair,
   waitForExtensionPairAck,
 } from "@/lib/extension-bridge";
-import { isCurrentBgPipeline } from "@/lib/ai/bg-pipeline";
 import {
   FAL_BG_MODELS,
-  type FalBgModelDef,
   type FalBgModelId,
 } from "@/lib/ai/fal-bg-models";
 import {
   EMPTY_BG_MODEL_CATALOG_PREFS,
-  isFalBgModelId,
   readBgModelCatalogPrefs,
   resolveDefaultListingModelId,
   scopedBgModels,
@@ -281,6 +279,7 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
   const [processing, setProcessing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [rewritingDescription, setRewritingDescription] = useState(false);
+  const [descriptionAiWritten, setDescriptionAiWritten] = useState(false);
   const [deletingListing, setDeletingListing] = useState(false);
   const [openingSell, setOpeningSell] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
@@ -293,6 +292,8 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
   const uploading = uploadingSection !== null;
   const [deletingPhotoId, setDeletingPhotoId] = useState<string | null>(null);
   const [bgPhotoId, setBgPhotoId] = useState<string | null>(null);
+  const [aiPickerPhoto, setAiPickerPhoto] =
+    useState<ListingPhotoWithUrl | null>(null);
   const [pickListingRole, setPickListingRole] = useState(false);
   const [movingPhotoId, setMovingPhotoId] = useState<string | null>(null);
   const [dragOverSection, setDragOverSection] = useState<PhotoSection | null>(
@@ -333,6 +334,7 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
   const [draftDirty, setDraftDirty] = useState(false);
   const draftHydrated = useRef(false);
   const schemaLoadedFor = useRef<string | null>(null);
+  const smokeNotesHydratedFor = useRef<string | null>(null);
 
   const syncDraftFromListing = useCallback((listing: Listing) => {
     const draft = applyListingToDraft(listing);
@@ -340,8 +342,13 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
     setDescription(draft.description);
     setPrice(draft.price);
     setFields(draft.fields);
+    setDescriptionAiWritten(Boolean(draft.description.trim()));
     setDraftDirty(false);
     draftHydrated.current = true;
+    // Re-allow preference backfill when the listing still has empty smoke/pet notes.
+    smokeNotesHydratedFor.current = draft.fields.smokePetNotes?.trim()
+      ? listing.id
+      : null;
   }, [setTitle, setDescription, setPrice, setFields, setDraftDirty]);
 
   const load = useCallback(
@@ -405,7 +412,53 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
   useEffect(() => {
     draftHydrated.current = false;
     schemaLoadedFor.current = null;
+    smokeNotesHydratedFor.current = null;
   }, [listingId]);
+
+  useEffect(() => {
+    if (!data?.listing || !draftHydrated.current) return;
+    if (smokeNotesHydratedFor.current === listingId) return;
+
+    const existing = fields.smokePetNotes?.trim();
+    if (existing) {
+      smokeNotesHydratedFor.current = listingId;
+      return;
+    }
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch("/api/auth/preferences");
+        const json = (await res.json().catch(() => ({}))) as {
+          smokePetNotes?: string;
+          completed?: boolean;
+        };
+        if (cancelled || !res.ok) return;
+        if (!json.completed) {
+          smokeNotesHydratedFor.current = listingId;
+          return;
+        }
+        const notes =
+          typeof json.smokePetNotes === "string" ? json.smokePetNotes.trim() : "";
+        if (!notes) {
+          smokeNotesHydratedFor.current = listingId;
+          return;
+        }
+        setFields((prev) => {
+          if (prev.smokePetNotes?.trim()) return prev;
+          return { ...prev, smokePetNotes: notes };
+        });
+        setDraftDirty(true);
+        smokeNotesHydratedFor.current = listingId;
+      } catch {
+        // Preferences are optional for drafting; leave the field empty.
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [data?.listing, fields.smokePetNotes, listingId]);
 
   function chooseCleanBgModel(next: FalBgModelId | "") {
     writeBgModelCatalogPrefs({ defaultListingModelId: next });
@@ -443,16 +496,6 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
       cancelled = true;
     };
   }, [isAdmin]);
-
-  function cleanBgModelOptionLabel(model: FalBgModelDef): string {
-    const cost = formatApproxCostCents(model.approxCost);
-    const ratings = bgModelRatingStats.get(model.id);
-    const parts = [model.label, cost];
-    if (ratings && (ratings.upCount > 0 || ratings.downCount > 0)) {
-      parts.push(`↑${ratings.upCount} ↓${ratings.downCount}`);
-    }
-    return parts.join(" · ");
-  }
 
   const closeTweak = useCallback(() => {
     if (searchParams.get("tweak") === "1") {
@@ -874,67 +917,32 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
     }
   }
 
-  async function toggleCleanBackground(photo: ListingPhotoWithUrl) {
-    const enable = !photo.replace_background;
-    setBgPhotoId(photo.id);
+  async function handleAiBackgroundClick(photo: ListingPhotoWithUrl) {
     setError(null);
-    setStatusMessage(
-      enable
-        ? isCurrentBgPipeline(photo.processed_path) && !cleanBgModelId
-          ? "Restoring clean background…"
-          : cleanBgModelId
-            ? `Cleaning background with ${
-                FAL_BG_MODELS.find((m) => m.id === cleanBgModelId)?.label ??
-                "selected model"
-              }…`
-            : "Cleaning background (keeping hangers)…"
-        : "Restoring original…"
-    );
+    setBgPhotoId(photo.id);
+    setStatusMessage("Checking AI results for this photo…");
     try {
       const res = await fetch(
-        `/api/listings/${listingId}/photos/${photo.id}/replace-background`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            replaceBackground: enable,
-            run: enable,
-            ...(isAdmin && cleanBgModelId && enable
-              ? { modelId: cleanBgModelId }
-              : {}),
-          }),
-        }
+        `/api/listings/${listingId}/photos/${photo.id}/ai-background`
       );
       const json = await res.json().catch(() => ({}));
       if (!res.ok) {
         throw new Error(
           typeof json.error === "string"
             ? json.error
-            : "Could not update background"
+            : "Could not check AI results"
         );
       }
-      const nextPhoto = json.photo as ListingPhotoWithUrl;
-      setData((prev) =>
-        prev
-          ? {
-              ...prev,
-              photos: prev.photos.map((p) =>
-                p.id === nextPhoto.id ? nextPhoto : p
-              ),
-            }
-          : prev
-      );
-      setStatusMessage(
-        enable
-          ? isCurrentBgPipeline(photo.processed_path)
-            ? "Clean background restored."
-            : "Clean background applied — hanger kept when detected."
-          : "Original photo restored."
-      );
-      await load({ syncDraft: false });
+      const results = Array.isArray(json.results) ? json.results : [];
+      if (results.length > 0 || photo.replace_background) {
+        setAiPickerPhoto(photo);
+        setStatusMessage(null);
+        return;
+      }
+      await runAiBackground(photo, { force: false });
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : "Could not update background"
+        err instanceof Error ? err.message : "Could not start AI background"
       );
       setStatusMessage(null);
     } finally {
@@ -942,17 +950,20 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
     }
   }
 
-  async function redoCleanBackground(photo: ListingPhotoWithUrl) {
-    if (!photo.replace_background) return;
+  async function runAiBackground(
+    photo: ListingPhotoWithUrl,
+    opts?: { force?: boolean }
+  ) {
+    const force = opts?.force === true;
     setBgPhotoId(photo.id);
     setError(null);
     setStatusMessage(
-      cleanBgModelId
-        ? `Re-cleaning with ${
+      isAdmin && cleanBgModelId
+        ? `Running AI with ${
             FAL_BG_MODELS.find((m) => m.id === cleanBgModelId)?.label ??
             "selected model"
           }…`
-        : "Re-cleaning background from original photo…"
+        : "Running AI background (keeping hangers)…"
     );
     try {
       const res = await fetch(
@@ -963,7 +974,7 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
           body: JSON.stringify({
             replaceBackground: true,
             run: true,
-            force: true,
+            force,
             ...(isAdmin && cleanBgModelId ? { modelId: cleanBgModelId } : {}),
           }),
         }
@@ -973,7 +984,7 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
         throw new Error(
           typeof json.error === "string"
             ? json.error
-            : "Could not re-clean background"
+            : "Could not run AI background"
         );
       }
       const nextPhoto = json.photo as ListingPhotoWithUrl;
@@ -987,16 +998,35 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
             }
           : prev
       );
-      setStatusMessage("Clean background redone from original.");
+      setStatusMessage("AI background applied.");
+      setAiPickerPhoto(null);
       await load({ syncDraft: false });
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : "Could not re-clean background"
+        err instanceof Error ? err.message : "Could not run AI background"
       );
       setStatusMessage(null);
     } finally {
       setBgPhotoId(null);
     }
+  }
+
+  async function rateAiResult(
+    resultId: string,
+    rating: "up" | "down" | null
+  ): Promise<"up" | "down" | null> {
+    const res = await fetch("/api/admin/bg-debug/rate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ resultId, rating }),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(
+        typeof json.error === "string" ? json.error : "Could not save rating"
+      );
+    }
+    return json.rating === "up" || json.rating === "down" ? json.rating : null;
   }
 
   async function runProcess() {
@@ -1034,9 +1064,14 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
   }
 
   async function rewriteDescription() {
+    const wasAiWritten = descriptionAiWritten;
     setRewritingDescription(true);
     setError(null);
-    setStatusMessage("Rewriting description from your current fields…");
+    setStatusMessage(
+      wasAiWritten
+        ? "Rewriting description from your current fields…"
+        : "Writing description from your current fields…"
+    );
     try {
       const priceNum = price.trim() === "" ? null : Number(price);
       const res = await fetch(
@@ -1065,12 +1100,15 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
         throw new Error("Could not rewrite description");
       }
       setDescription(json.description);
+      setDescriptionAiWritten(true);
       setDraftDirty(true);
       setStatusMessage(
         json.degraded
           ? json.message ??
               "Filled a simple description from your fields — edit as needed."
-          : "Description rewritten from your fields — review and save."
+          : wasAiWritten
+            ? "Description rewritten from your fields — review and save."
+            : "Description written from your fields — review and save."
       );
     } catch (err) {
       setStatusMessage(null);
@@ -1233,43 +1271,90 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
 
             <div className="space-y-3">
               {isAdmin ? (
-                <div className="flex flex-col gap-3 rounded-xl border border-dashed border-[var(--border)] bg-[var(--surface-muted)] px-3 py-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
-                  <label className="flex min-w-0 flex-1 flex-col gap-1 text-sm">
-                    <span className="font-semibold text-[var(--foreground)]">
-                      Clean bg model (admin)
-                    </span>
-                    <select
-                      value={cleanBgModelId}
-                      onChange={(e) => {
-                        const next = e.target.value;
-                        chooseCleanBgModel(
-                          next && isFalBgModelId(next) ? next : ""
-                        );
-                      }}
-                      className="rounded-lg border border-[var(--border)] bg-white px-3 py-2 text-base text-[var(--foreground)]"
+                <div className="flex flex-col gap-3 rounded-xl border border-dashed border-[var(--border)] bg-[var(--surface-muted)] px-3 py-3">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-[var(--foreground)]">
+                        AI model (admin)
+                      </p>
+                      <p className="mt-0.5 text-xs text-[var(--muted)]">
+                        Votes are all-time totals for each model across every
+                        photo.
+                      </p>
+                    </div>
+                    <a
+                      href={`/app/admin/bg-lab?listingId=${encodeURIComponent(listingId)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="shrink-0 text-base font-semibold text-[var(--accent)] hover:underline"
                     >
-                      <option value="">Production default (hanger-safe)</option>
-                      {selectableCleanBgModels.map((model) => (
-                        <option key={model.id} value={model.id}>
-                          {cleanBgModelOptionLabel(model)}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <a
-                    href={`/app/admin/bg-lab?listingId=${encodeURIComponent(listingId)}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="shrink-0 text-base font-semibold text-[var(--accent)] hover:underline"
-                  >
-                    Open AI Photo Lab →
-                  </a>
+                      Open AI Photo Lab →
+                    </a>
+                  </div>
+                  <ul className="grid gap-2 sm:grid-cols-2">
+                    <li>
+                      <button
+                        type="button"
+                        onClick={() => chooseCleanBgModel("")}
+                        className={`flex w-full items-start justify-between gap-2 rounded-lg border px-3 py-2 text-left text-sm transition ${
+                          !cleanBgModelId
+                            ? "border-[var(--accent)] bg-[var(--accent-soft)]"
+                            : "border-[var(--border)] bg-white hover:bg-[var(--surface-muted)]"
+                        }`}
+                      >
+                        <span className="font-semibold text-[var(--foreground)]">
+                          Production default (hanger-safe)
+                        </span>
+                      </button>
+                    </li>
+                    {selectableCleanBgModels.map((model) => {
+                      const selected = cleanBgModelId === model.id;
+                      const ratings = bgModelRatingStats.get(model.id);
+                      const cost = formatApproxCostCents(model.approxCost);
+                      return (
+                        <li key={model.id}>
+                          <button
+                            type="button"
+                            onClick={() => chooseCleanBgModel(model.id)}
+                            className={`flex w-full items-start justify-between gap-2 rounded-lg border px-3 py-2 text-left text-sm transition ${
+                              selected
+                                ? "border-[var(--accent)] bg-[var(--accent-soft)]"
+                                : "border-[var(--border)] bg-white hover:bg-[var(--surface-muted)]"
+                            }`}
+                          >
+                            <span className="min-w-0">
+                              <span className="block font-semibold text-[var(--foreground)]">
+                                {model.label}
+                              </span>
+                              <span className="mt-0.5 block text-xs text-[var(--muted)]">
+                                {cost}
+                              </span>
+                            </span>
+                            {ratings &&
+                            (ratings.upCount > 0 || ratings.downCount > 0) ? (
+                              <span
+                                className="inline-flex shrink-0 items-center gap-1.5 text-xs font-semibold tabular-nums"
+                                title="All-time totals for this model across every photo"
+                              >
+                                <span className="text-green-600">
+                                  +{ratings.upCount}
+                                </span>
+                                <span className="text-red-600">
+                                  −{ratings.downCount}
+                                </span>
+                              </span>
+                            ) : null}
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
                 </div>
               ) : null}
               <PhotoGroup
                 title="Photos shoppers will see"
                 badge="Listing photos · posted"
-                description="Cover, front, back, details, and flaws for the marketplace listing. You can add multiple photos of each type. Use Clean bg on a shot to swap the backdrop for white while keeping hangers intact."
+                description="Cover, front, back, details, and flaws for the marketplace listing. You can add multiple photos of each type. Use AI on a shot to swap the backdrop for white while keeping hangers intact."
                 photos={listingPhotos}
                 empty="No listing photos yet — drop images here or start with a clean cover shot."
                 section="listing"
@@ -1277,9 +1362,8 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
                 onAdd={() => setPickListingRole(true)}
                 onDelete={(photoId) => void deletePhoto(photoId)}
                 onToggleCleanBackground={(photo) =>
-                  void toggleCleanBackground(photo)
+                  void handleAiBackgroundClick(photo)
                 }
-                onRedoCleanBackground={(photo) => void redoCleanBackground(photo)}
                 onPreview={setPreviewPhoto}
                 onDropFiles={(files) => void uploadFilesToSection(files, "listing")}
                 onDropPhoto={(photoId) =>
@@ -1347,7 +1431,7 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
                     <p className="text-sm font-semibold text-[var(--muted)]">
                       Optional · brand & care tags for AI
                     </p>
-                    <p className="mt-0.5 text-sm leading-relaxed text-[var(--muted)]">
+                    <p className="mt-0.5 hidden text-sm leading-relaxed text-[var(--muted)] group-open:block">
                       Want AI to try to identify the clothing? Add close-ups of
                       brand and care tags here. These won&apos;t be posted.
                     </p>
@@ -1355,7 +1439,7 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
                   <span className="shrink-0 rounded-md bg-white/80 px-2 py-1 text-xs font-semibold text-[var(--muted)] ring-1 ring-[var(--border)]">
                     {identifyPhotos.length > 0
                       ? `${identifyPhotos.length} photo${identifyPhotos.length === 1 ? "" : "s"}`
-                      : "Closed"}
+                      : "Empty"}
                     <span className="ml-1 text-[var(--accent)] group-open:hidden">
                       · open
                     </span>
@@ -1364,6 +1448,33 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
                     </span>
                   </span>
                 </div>
+                {identifyPhotos.length > 0 ? (
+                  <div className="mt-3 flex flex-wrap gap-1.5 group-open:hidden">
+                    {identifyPhotos.map((photo) => {
+                      const src = photoThumbUrl(photo);
+                      return (
+                        <div
+                          key={photo.id}
+                          className="h-12 w-12 overflow-hidden rounded-md bg-white ring-1 ring-[var(--border)]"
+                        >
+                          {src ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={src}
+                              alt=""
+                              className="h-full w-full object-cover"
+                              draggable={false}
+                            />
+                          ) : null}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="mt-2 text-xs text-[var(--muted)] group-open:hidden">
+                    No tag photos yet — open to add.
+                  </p>
+                )}
               </summary>
               <div className="border-t border-[var(--border)] px-3 pb-3 pt-2">
                 <PhotoGroup
@@ -1418,7 +1529,7 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
             </h2>
             <p className="text-base text-[var(--muted)]">
               Fills the editable fields below from your photos. Listing photos
-              marked Clean bg also get a white studio backdrop (hangers kept).
+              marked AI also get a white studio backdrop (hangers kept).
               You can change anything afterward.
             </p>
             <BigButton
@@ -1473,6 +1584,7 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
                 }}
                 onRewriteDescription={() => void rewriteDescription()}
                 rewritingDescription={rewritingDescription}
+                descriptionAiWritten={descriptionAiWritten}
                 onSubmit={(e) => void saveDraft(e)}
                 footer={
                   <div className="flex flex-col gap-2 pt-1 sm:flex-row">
@@ -1595,6 +1707,36 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
         />
       ) : null}
 
+      {aiPickerPhoto ? (
+        <AiPhotoBackgroundPicker
+          listingId={listingId}
+          photo={aiPickerPhoto}
+          isAdmin={isAdmin}
+          busy={bgPhotoId === aiPickerPhoto.id}
+          onClose={() => setAiPickerPhoto(null)}
+          onApplied={(nextPhoto) => {
+            setData((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    photos: prev.photos.map((p) =>
+                      p.id === nextPhoto.id ? nextPhoto : p
+                    ),
+                  }
+                : prev
+            );
+            setAiPickerPhoto(null);
+            setStatusMessage("AI background applied.");
+            void load({ syncDraft: false });
+          }}
+          onRunNew={() => {
+            const photo = aiPickerPhoto;
+            void runAiBackground(photo, { force: true });
+          }}
+          onRate={isAdmin ? rateAiResult : undefined}
+        />
+      ) : null}
+
       {tweakOpen && schema ? (
         <ListingTweakDialog
           platform={platform}
@@ -1621,6 +1763,7 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
           }}
           onRewriteDescription={() => void rewriteDescription()}
           rewritingDescription={rewritingDescription}
+          descriptionAiWritten={descriptionAiWritten}
           saving={saving}
           draftDirty={draftDirty}
           onSubmit={(e) => void saveDraft(e)}
@@ -1656,7 +1799,6 @@ function PhotoGroup({
   onDelete,
   onUseInListing,
   onToggleCleanBackground,
-  onRedoCleanBackground,
   onPreview,
   onDropFiles,
   onDropPhoto,
@@ -1686,7 +1828,6 @@ function PhotoGroup({
   onDelete: (photoId: string) => void;
   onUseInListing?: (photoId: string) => void;
   onToggleCleanBackground?: (photo: ListingPhotoWithUrl) => void;
-  onRedoCleanBackground?: (photo: ListingPhotoWithUrl) => void;
   onPreview: (photo: ListingPhotoWithUrl) => void;
   onDropFiles: (files: File[]) => void;
   onDropPhoto: (photoId: string) => void;
@@ -1854,11 +1995,6 @@ function PhotoGroup({
                   ? () => onToggleCleanBackground(photo)
                   : undefined
               }
-              onRedoCleanBackground={
-                onRedoCleanBackground && photo.replace_background
-                  ? () => onRedoCleanBackground(photo)
-                  : undefined
-              }
               labHref={labPhotoHref?.(photo.id)}
               onDelete={() => onDelete(photo.id)}
               onBeginMove={() => onBeginMove(photo.id)}
@@ -1927,7 +2063,6 @@ function PhotoTile({
   onPreview,
   onUseInListing,
   onToggleCleanBackground,
-  onRedoCleanBackground,
   labHref,
   onDelete,
   onBeginMove,
@@ -1945,7 +2080,6 @@ function PhotoTile({
   onPreview: () => void;
   onUseInListing?: () => void;
   onToggleCleanBackground?: () => void;
-  onRedoCleanBackground?: () => void;
   labHref?: string;
   onDelete: () => void;
   onBeginMove: () => void;
@@ -2177,34 +2311,21 @@ function PhotoTile({
               aria-pressed={Boolean(photo.replace_background)}
               title={
                 photo.replace_background
-                  ? "Restore original background"
-                  : "Replace background with white; keeps hangers"
+                  ? "AI background on — click to choose another result or run again"
+                  : "Run AI background (or choose a prior result for this photo)"
               }
-              className={`rounded-md border px-2 py-1 text-sm font-semibold transition disabled:opacity-50 ${
+              className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-sm font-semibold transition disabled:opacity-50 ${
                 photo.replace_background
                   ? "border-[var(--accent)] bg-[var(--accent)] text-white"
                   : "border-[var(--border)] bg-transparent text-[var(--foreground)] hover:bg-[var(--surface-muted)]"
               }`}
             >
+              <AiGlyph className="h-3.5 w-3.5" />
               {cleaningBg
-                ? "Clean bg…"
+                ? "AI…"
                 : photo.replace_background
-                  ? "Clean bg on"
-                  : "Clean bg"}
-            </button>
-          ) : null}
-          {onRedoCleanBackground ? (
-            <button
-              type="button"
-              disabled={disabled || cleaningBg}
-              onClick={(e) => {
-                e.stopPropagation();
-                onRedoCleanBackground();
-              }}
-              title="Re-run clean background from the original photo"
-              className="rounded-md border border-[var(--border)] px-2 py-1 text-sm font-semibold text-[var(--muted)] transition hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)] disabled:opacity-50"
-            >
-              Redo
+                  ? "AI on"
+                  : "AI"}
             </button>
           ) : null}
           {labHref ? (

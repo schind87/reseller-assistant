@@ -20,6 +20,7 @@ type ListingTweakDialogProps = {
   onSubmit: (e: FormEvent) => void;
   onRewriteDescription?: () => void;
   rewritingDescription?: boolean;
+  descriptionAiWritten?: boolean;
   saving?: boolean;
   draftDirty?: boolean;
   footerExtra?: ReactNode;
@@ -40,6 +41,7 @@ export function ListingTweakDialog({
   onSubmit,
   onRewriteDescription,
   rewritingDescription = false,
+  descriptionAiWritten = false,
   saving = false,
   draftDirty = false,
   footerExtra,
@@ -108,6 +110,7 @@ export function ListingTweakDialog({
             onFieldsChange={onFieldsChange}
             onRewriteDescription={onRewriteDescription}
             rewritingDescription={rewritingDescription}
+            descriptionAiWritten={descriptionAiWritten}
             onSubmit={onSubmit}
             footer={
               <div className="sticky bottom-0 -mx-1 flex flex-col gap-3 border-t border-[var(--border)] bg-[var(--surface)] px-1 pt-4">

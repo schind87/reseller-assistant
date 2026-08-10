@@ -136,7 +136,7 @@ export async function GET(request: Request) {
             limit: 24,
           }),
           listBgLabModelCostAverages({ userId: auth.user.id }),
-          listBgLabModelRatingStats({ userId: auth.user.id }),
+          listBgLabModelRatingStats(),
         ])
       : [[], [], []];
     return NextResponse.json({
@@ -353,6 +353,7 @@ export async function POST(request: Request) {
           listingId: photo.listing_id,
           runByUserId: auth.user.id,
           compositeWhite: false,
+          sourceStoragePath: photo.storage_path,
         });
 
         const orientedSource = await uploadBgLabOrientedSource({

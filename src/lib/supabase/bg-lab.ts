@@ -33,6 +33,7 @@ export type BgLabRunRow = {
   listing_id: string;
   run_by_user_id: string | null;
   composite_white: boolean;
+  source_storage_path: string | null;
   created_at: string;
   results: BgLabResultRow[];
 };
@@ -50,6 +51,7 @@ export async function createBgLabRun(params: {
   listingId: string;
   runByUserId: string | null;
   compositeWhite: boolean;
+  sourceStoragePath?: string | null;
 }): Promise<{ id: string }> {
   const supabase = createAdminClient();
   const { data, error } = await supabase
@@ -59,6 +61,7 @@ export async function createBgLabRun(params: {
       listing_id: params.listingId,
       run_by_user_id: params.runByUserId,
       composite_white: params.compositeWhite,
+      source_storage_path: params.sourceStoragePath ?? null,
     })
     .select("id")
     .single();
@@ -275,9 +278,104 @@ export async function listBgLabRunsForPhoto(
     listing_id: r.listing_id as string,
     run_by_user_id: (r.run_by_user_id as string | null) ?? null,
     composite_white: Boolean(r.composite_white),
+    source_storage_path: (r.source_storage_path as string | null) ?? null,
     created_at: r.created_at as string,
     results: byRun.get(r.id as string) ?? [],
   }));
+}
+
+/**
+ * Successful AI outputs for this photo row that were generated from the
+ * current original file (same storage_path / crop).
+ */
+export async function listBgLabResultsForPhotoSource(params: {
+  photoId: string;
+  sourceStoragePath: string;
+  limit?: number;
+}): Promise<BgLabResultRow[]> {
+  const runs = await listBgLabRunsForPhoto(params.photoId, params.limit ?? 40);
+  const matched = runs.filter(
+    (run) => run.source_storage_path === params.sourceStoragePath
+  );
+  const results: BgLabResultRow[] = [];
+  for (const run of matched) {
+    for (const result of run.results) {
+      if (result.ok && result.storage_path && result.imageUrl) {
+        results.push(result);
+      }
+    }
+  }
+  // Newest first
+  results.sort((a, b) => b.created_at.localeCompare(a.created_at));
+  return results;
+}
+
+export async function getBgLabResultById(
+  resultId: string
+): Promise<
+  | (BgLabResultRow & {
+      listing_photo_id: string;
+      listing_id: string;
+      source_storage_path: string | null;
+      composite_white: boolean;
+    })
+  | null
+> {
+  const supabase = createAdminClient();
+  const { data: raw, error } = await supabase
+    .from("bg_lab_results")
+    .select(
+      "*, bg_lab_runs!inner(listing_photo_id, listing_id, source_storage_path, composite_white)"
+    )
+    .eq("id", resultId)
+    .maybeSingle();
+  if (error) throw new Error(`getBgLabResultById: ${error.message}`);
+  if (!raw) return null;
+
+  const run = raw.bg_lab_runs as {
+    listing_photo_id: string;
+    listing_id: string;
+    source_storage_path: string | null;
+    composite_white: boolean;
+  };
+  const storagePath = (raw.storage_path as string | null) ?? null;
+  const signed = storagePath
+    ? await getSignedPhotoUrls([storagePath])
+    : new Map<string, string>();
+
+  return {
+    id: raw.id as string,
+    run_id: raw.run_id as string,
+    model_id: raw.model_id as string,
+    model_label: raw.model_label as string,
+    provider: raw.provider as "fal" | "photoroom",
+    ok: Boolean(raw.ok),
+    ms: Number(raw.ms ?? 0),
+    storage_path: storagePath,
+    fal_request_id: (raw.fal_request_id as string | null) ?? null,
+    fal_endpoint: (raw.fal_endpoint as string | null) ?? null,
+    cost_usd: raw.cost_usd == null ? null : Number(raw.cost_usd),
+    cost_unit_price:
+      raw.cost_unit_price == null ? null : Number(raw.cost_unit_price),
+    cost_units: raw.cost_units == null ? null : Number(raw.cost_units),
+    cost_currency: (raw.cost_currency as string | null) ?? "USD",
+    cost_source: (raw.cost_source as string | null) ?? null,
+    error: (raw.error as string | null) ?? null,
+    rating:
+      raw.rating === "up" || raw.rating === "down"
+        ? (raw.rating as BgLabResultRating)
+        : null,
+    created_at: raw.created_at as string,
+    imageUrl: storagePath ? (signed.get(storagePath) ?? null) : null,
+    dashboardUrl: dashboardUrlFor(
+      (raw.fal_request_id as string | null) ?? null,
+      (raw.fal_endpoint as string | null) ?? null
+    ),
+    listing_photo_id: run.listing_photo_id,
+    listing_id: run.listing_id,
+    source_storage_path: run.source_storage_path,
+    composite_white: Boolean(run.composite_white),
+  };
 }
 
 export type BgLabRecentRunSummary = {
@@ -364,8 +462,9 @@ export async function listBgLabModelCostAverages(opts?: {
     .sort((a, b) => a.modelId.localeCompare(b.modelId));
 }
 
-/** Thumbs-up / thumbs-down counts per model (optionally for one admin). */
+/** Thumbs-up / thumbs-down totals per model across all lab results. */
 export async function listBgLabModelRatingStats(opts?: {
+  /** When set, only count ratings from this admin's runs. Omit for global totals. */
   userId?: string | null;
 }): Promise<BgLabModelRatingStats[]> {
   const supabase = createAdminClient();
