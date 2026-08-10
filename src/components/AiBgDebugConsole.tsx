@@ -905,8 +905,8 @@ export function AiBgDebugConsole({
       ) : null}
 
       <div className="grid items-start gap-5 lg:grid-cols-[13.5rem_minmax(0,1fr)]">
-        <aside className="order-first rounded-xl border border-[var(--border)] bg-white lg:sticky lg:top-4">
-          <div className="flex items-center justify-between gap-2 border-b border-[var(--border)] px-3 py-2">
+        <aside className="order-first flex max-h-[calc(100vh-1rem)] flex-col overflow-hidden rounded-xl border border-[var(--border)] bg-white lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)]">
+          <div className="flex shrink-0 items-center justify-between gap-2 border-b border-[var(--border)] px-3 py-2">
             <h2 className="text-sm font-semibold text-[var(--foreground)]">
               Recent runs
             </h2>
@@ -924,7 +924,7 @@ export function AiBgDebugConsole({
               No runs yet — pick a photo and run models.
             </p>
           ) : (
-            <ul className="max-h-[min(70vh,40rem)] overflow-y-auto p-1.5">
+            <ul className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-1.5">
               {recentRuns.map((run) => {
                 const active = selectedRunId === run.id;
                 const roleLabel = run.photoRole
