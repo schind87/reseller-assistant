@@ -2,8 +2,16 @@
  * Background replacement providers (tried in order):
  * 1) Pixelcut Product Photo on fal (FAL_KEY) — e-commerce specialist
  * 2) Pixelcut/BiRefNet cutout + hanger-aware white composite (fallback)
+ * Admins may override with a specific fal lab model via options.modelId.
  */
 import sharp from "sharp";
+import {
+  buildFalInput,
+  extractFalImageUrl,
+  getFalBgModel,
+  type FalBgModelId,
+} from "@/lib/ai/fal-bg-models";
+import { falQueueInfer } from "@/lib/ai/fal-lab";
 
 export { BG_PIPELINE_TAG, isCurrentBgPipeline } from "@/lib/ai/bg-pipeline";
 
@@ -20,6 +28,11 @@ export type ReplaceBackgroundOptions = {
   backgroundColor?: string;
   /** Preserve full hanger (hook + bar) when present. Default true. */
   keepHanger?: boolean;
+  /**
+   * Admin override: run one fal lab model instead of the production pipeline.
+   * Transparent cutouts are composited onto backgroundColor.
+   */
+  modelId?: FalBgModelId;
 };
 
 function falKey(): string | null {
@@ -659,6 +672,10 @@ export async function replaceBackground(
     };
   }
 
+  if (options.modelId) {
+    return replaceBackgroundWithModel(imageUrl, options.modelId, options);
+  }
+
   const backgroundColor = normalizeHexColor(options.backgroundColor);
   const keepHanger = options.keepHanger !== false;
   const { r, g, b } = hexToRgb(backgroundColor);
@@ -710,6 +727,106 @@ export async function replaceBackground(
       ok: false,
       reason: "process_failed",
       detail: err instanceof Error ? err.message : "Background compose failed.",
+    };
+  }
+}
+
+async function replaceBackgroundWithModel(
+  imageUrl: string,
+  modelId: FalBgModelId,
+  options: ReplaceBackgroundOptions
+): Promise<ReplaceBackgroundResult> {
+  const model = getFalBgModel(modelId);
+  if (!model) {
+    return {
+      ok: false,
+      reason: "process_failed",
+      detail: `Unknown background model: ${modelId}`,
+    };
+  }
+
+  const backgroundColor = normalizeHexColor(options.backgroundColor);
+
+  try {
+    const originalBytes = await fetchImageBytes(imageUrl);
+    if (!originalBytes) {
+      return {
+        ok: false,
+        reason: "process_failed",
+        detail: "Could not download the original photo.",
+      };
+    }
+
+    const meta = await sharp(Buffer.from(originalBytes.bytes)).metadata();
+    const width = meta.width ?? 0;
+    const height = meta.height ?? 0;
+    if (!width || !height) {
+      return {
+        ok: false,
+        reason: "process_failed",
+        detail: "Photo has no readable dimensions.",
+      };
+    }
+
+    const { data } = await falQueueInfer(
+      model.falPath,
+      buildFalInput(model, imageUrl, width, height)
+    );
+    const remoteUrl = extractFalImageUrl(data);
+    if (!remoteUrl) {
+      return {
+        ok: false,
+        reason: "fal_failed",
+        detail: `${model.label} returned no image.`,
+      };
+    }
+
+    const downloaded = await fetchImageBytes(remoteUrl);
+    if (!downloaded) {
+      return {
+        ok: false,
+        reason: "fal_failed",
+        detail: `Could not download ${model.label} output.`,
+      };
+    }
+
+    if (model.solidBackground) {
+      return {
+        ok: true,
+        bytes: Buffer.from(downloaded.bytes),
+        contentType: "image/png",
+      };
+    }
+
+    const { r, g, b } = hexToRgb(backgroundColor);
+    const cutout = await sharp(Buffer.from(downloaded.bytes))
+      .ensureAlpha()
+      .resize(width, height, { fit: "fill" })
+      .png()
+      .toBuffer();
+
+    const composed = await sharp({
+      create: {
+        width,
+        height,
+        channels: 3,
+        background: { r, g, b },
+      },
+    })
+      .composite([{ input: cutout, blend: "over" }])
+      .png()
+      .toBuffer();
+
+    return { ok: true, bytes: composed, contentType: "image/png" };
+  } catch (err) {
+    console.error("replaceBackgroundWithModel failed:", modelId, err);
+    return {
+      ok: false,
+      reason: "fal_failed",
+      detail:
+        err instanceof Error
+          ? err.message
+          : `${model.label} background removal failed.`,
     };
   }
 }

@@ -5,6 +5,7 @@ import {
   useEffect,
   useRef,
   useState,
+  useSyncExternalStore,
   type ChangeEvent,
   type FormEvent,
   type DragEvent,
@@ -30,6 +31,10 @@ import {
   waitForExtensionPairAck,
 } from "@/lib/extension-bridge";
 import { isCurrentBgPipeline } from "@/lib/ai/bg-pipeline";
+import {
+  FAL_BG_MODELS,
+  type FalBgModelId,
+} from "@/lib/ai/fal-bg-models";
 import type {
   Listing,
   ListingPhotoWithUrl,
@@ -45,7 +50,46 @@ import {
 
 type ListingHubProps = {
   listingId: string;
+  isAdmin?: boolean;
 };
+
+const LISTING_CLEAN_BG_MODEL_KEY = "ra-listing-clean-bg-model-v1";
+
+function getFalBgModelId(value: string): FalBgModelId | null {
+  return FAL_BG_MODELS.some((m) => m.id === value)
+    ? (value as FalBgModelId)
+    : null;
+}
+
+function readStoredCleanBgModel(): FalBgModelId | "" {
+  if (typeof window === "undefined") return "";
+  try {
+    const raw = window.localStorage.getItem(LISTING_CLEAN_BG_MODEL_KEY);
+    if (!raw) return "";
+    return getFalBgModelId(raw) ?? "";
+  } catch {
+    return "";
+  }
+}
+
+function writeStoredCleanBgModel(modelId: FalBgModelId | "") {
+  try {
+    if (!modelId) window.localStorage.removeItem(LISTING_CLEAN_BG_MODEL_KEY);
+    else window.localStorage.setItem(LISTING_CLEAN_BG_MODEL_KEY, modelId);
+    window.dispatchEvent(new Event("ra-listing-clean-bg-model"));
+  } catch {
+    /* ignore quota / private mode */
+  }
+}
+
+function subscribeCleanBgModel(onStoreChange: () => void) {
+  window.addEventListener("storage", onStoreChange);
+  window.addEventListener("ra-listing-clean-bg-model", onStoreChange);
+  return () => {
+    window.removeEventListener("storage", onStoreChange);
+    window.removeEventListener("ra-listing-clean-bg-model", onStoreChange);
+  };
+}
 
 type ListingPayload = {
   listing: Listing;
@@ -180,11 +224,16 @@ function applyListingToDraft(listing: Listing) {
   };
 }
 
-export function ListingHub({ listingId }: ListingHubProps) {
+export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const tweakOpen = searchParams.get("tweak") === "1";
   const [data, setData] = useState<ListingPayload | null>(null);
+  const cleanBgModelId = useSyncExternalStore(
+    subscribeCleanBgModel,
+    readStoredCleanBgModel,
+    () => "" as FalBgModelId | ""
+  );
   const [joinUrl, setJoinUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [processing, setProcessing] = useState(false);
@@ -293,6 +342,10 @@ export function ListingHub({ listingId }: ListingHubProps) {
     draftHydrated.current = false;
     schemaLoadedFor.current = null;
   }, [listingId]);
+
+  function chooseCleanBgModel(next: FalBgModelId | "") {
+    writeStoredCleanBgModel(next);
+  }
 
   const closeTweak = useCallback(() => {
     if (searchParams.get("tweak") === "1") {
@@ -643,9 +696,14 @@ export function ListingHub({ listingId }: ListingHubProps) {
     setError(null);
     setStatusMessage(
       enable
-        ? isCurrentBgPipeline(photo.processed_path)
+        ? isCurrentBgPipeline(photo.processed_path) && !cleanBgModelId
           ? "Restoring clean background…"
-          : "Cleaning background (keeping hangers)…"
+          : cleanBgModelId
+            ? `Cleaning background with ${
+                FAL_BG_MODELS.find((m) => m.id === cleanBgModelId)?.label ??
+                "selected model"
+              }…`
+            : "Cleaning background (keeping hangers)…"
         : "Restoring original…"
     );
     try {
@@ -657,6 +715,9 @@ export function ListingHub({ listingId }: ListingHubProps) {
           body: JSON.stringify({
             replaceBackground: enable,
             run: enable,
+            ...(isAdmin && cleanBgModelId && enable
+              ? { modelId: cleanBgModelId }
+              : {}),
           }),
         }
       );
@@ -701,7 +762,14 @@ export function ListingHub({ listingId }: ListingHubProps) {
     if (!photo.replace_background) return;
     setBgPhotoId(photo.id);
     setError(null);
-    setStatusMessage("Re-cleaning background from original photo…");
+    setStatusMessage(
+      cleanBgModelId
+        ? `Re-cleaning with ${
+            FAL_BG_MODELS.find((m) => m.id === cleanBgModelId)?.label ??
+            "selected model"
+          }…`
+        : "Re-cleaning background from original photo…"
+    );
     try {
       const res = await fetch(
         `/api/listings/${listingId}/photos/${photo.id}/replace-background`,
@@ -712,6 +780,7 @@ export function ListingHub({ listingId }: ListingHubProps) {
             replaceBackground: true,
             run: true,
             force: true,
+            ...(isAdmin && cleanBgModelId ? { modelId: cleanBgModelId } : {}),
           }),
         }
       );
@@ -1093,6 +1162,40 @@ export function ListingHub({ listingId }: ListingHubProps) {
         ) : null}
 
         <div className="space-y-3">
+          {isAdmin ? (
+            <div className="flex flex-col gap-3 rounded-xl border border-dashed border-[var(--border)] bg-[var(--surface-muted)] px-3 py-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
+              <label className="flex min-w-0 flex-1 flex-col gap-1 text-sm">
+                <span className="font-semibold text-[var(--foreground)]">
+                  Clean bg model (admin)
+                </span>
+                <select
+                  value={cleanBgModelId}
+                  onChange={(e) => {
+                    const next = e.target.value;
+                    chooseCleanBgModel(
+                      next ? (getFalBgModelId(next) ?? "") : ""
+                    );
+                  }}
+                  className="rounded-lg border border-[var(--border)] bg-white px-3 py-2 text-base text-[var(--foreground)]"
+                >
+                  <option value="">Production default (hanger-safe)</option>
+                  {FAL_BG_MODELS.map((model) => (
+                    <option key={model.id} value={model.id}>
+                      {model.label} · {model.approxCost}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <a
+                href={`/app/admin/bg-lab?listingId=${encodeURIComponent(listingId)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="shrink-0 text-base font-semibold text-[var(--accent)] hover:underline"
+              >
+                Open bg lab →
+              </a>
+            </div>
+          ) : null}
           <PhotoGroup
             title="Photos shoppers will see"
             badge="Listing photos · posted"
@@ -1123,6 +1226,12 @@ export function ListingHub({ listingId }: ListingHubProps) {
             }
             deletingPhotoId={deletingPhotoId}
             bgPhotoId={bgPhotoId}
+            labPhotoHref={
+              isAdmin
+                ? (photoId) =>
+                    `/app/admin/bg-lab?photoId=${encodeURIComponent(photoId)}`
+                : undefined
+            }
             disabled={
               uploading ||
               Boolean(deletingPhotoId) ||
@@ -1314,6 +1423,7 @@ function PhotoGroup({
   onDragOverChange,
   deletingPhotoId,
   bgPhotoId,
+  labPhotoHref,
   disabled,
   tone = "listing",
 }: {
@@ -1344,6 +1454,7 @@ function PhotoGroup({
   onDragOverChange: (over: boolean) => void;
   deletingPhotoId?: string | null;
   bgPhotoId?: string | null;
+  labPhotoHref?: (photoId: string) => string;
   disabled?: boolean;
   tone?: "private" | "listing";
 }) {
@@ -1466,6 +1577,7 @@ function PhotoGroup({
                   ? () => onRedoCleanBackground(photo)
                   : undefined
               }
+              labHref={labPhotoHref?.(photo.id)}
               onDelete={() => onDelete(photo.id)}
               onBeginMove={() => onBeginMove(photo.id)}
               onCancelMove={onCancelMove}
@@ -1518,6 +1630,7 @@ function PhotoTile({
   onUseInListing,
   onToggleCleanBackground,
   onRedoCleanBackground,
+  labHref,
   onDelete,
   onBeginMove,
   onCancelMove,
@@ -1535,6 +1648,7 @@ function PhotoTile({
   onUseInListing?: () => void;
   onToggleCleanBackground?: () => void;
   onRedoCleanBackground?: () => void;
+  labHref?: string;
   onDelete: () => void;
   onBeginMove: () => void;
   onCancelMove: () => void;
@@ -1792,6 +1906,19 @@ function PhotoTile({
             >
               Redo
             </button>
+          ) : null}
+          {labHref ? (
+            <a
+              href={labHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              onPointerDown={(e) => e.stopPropagation()}
+              title="Open this photo in the background model lab"
+              className="rounded-md border border-[var(--border)] px-2 py-1 text-sm font-semibold text-[var(--accent)] transition hover:bg-[var(--accent-soft)]"
+            >
+              Lab
+            </a>
           ) : null}
           <button
             type="button"

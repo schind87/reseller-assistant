@@ -1,5 +1,7 @@
 import { Suspense } from "react";
 import { ListingHub } from "@/components/ListingHub";
+import { isAdminEmail } from "@/lib/admin";
+import { getAuthUser } from "@/lib/api-auth";
 
 type PageProps = {
   params: Promise<{ id: string }>;
@@ -7,6 +9,9 @@ type PageProps = {
 
 export default async function ListingHubPage({ params }: PageProps) {
   const { id } = await params;
+  const user = await getAuthUser();
+  const isAdmin = isAdminEmail(user?.email);
+
   return (
     <Suspense
       fallback={
@@ -15,7 +20,7 @@ export default async function ListingHubPage({ params }: PageProps) {
         </div>
       }
     >
-      <ListingHub listingId={id} />
+      <ListingHub listingId={id} isAdmin={isAdmin} />
     </Suspense>
   );
 }

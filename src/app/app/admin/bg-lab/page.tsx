@@ -2,30 +2,51 @@ import { redirect } from "next/navigation";
 import { AiBgDebugConsole } from "@/components/AiBgDebugConsole";
 import { FAL_BG_MODELS } from "@/lib/ai/fal-bg-models";
 import { getAdminUser } from "@/lib/admin";
-import { listAdminPhotos } from "@/lib/supabase/admin-queries";
+import {
+  getAdminPhotoById,
+  listAdminPhotos,
+} from "@/lib/supabase/admin-queries";
 import { listRecentBgLabRuns } from "@/lib/supabase/bg-lab";
 
-export default async function AdminAiDebugPage() {
+type PageProps = {
+  searchParams: Promise<{ photoId?: string; listingId?: string }>;
+};
+
+export default async function AdminAiDebugPage({ searchParams }: PageProps) {
   const admin = await getAdminUser();
   if (!admin) {
     redirect("/app");
   }
 
-  const [{ photos, total }, recentRuns] = await Promise.all([
+  const sp = await searchParams;
+  const deepPhotoId = sp.photoId?.trim() || null;
+  const deepListingId = sp.listingId?.trim() || null;
+
+  const [{ photos: listed, total }, recentRuns, deepPhoto] = await Promise.all([
     listAdminPhotos({
       limit: 48,
       role: "all",
+      q: deepListingId || deepPhotoId || undefined,
     }),
     listRecentBgLabRuns({
       userId: admin.id,
       limit: 24,
     }),
+    deepPhotoId ? getAdminPhotoById(deepPhotoId) : Promise.resolve(null),
   ]);
+
+  const photos = (() => {
+    if (!deepPhoto) return listed;
+    if (listed.some((p) => p.id === deepPhoto.id)) return listed;
+    return [deepPhoto, ...listed];
+  })();
 
   return (
     <AiBgDebugConsole
       initialPhotos={photos}
-      initialTotal={total}
+      initialTotal={deepPhoto && total === listed.length ? total + 1 : total}
+      initialSelectedPhotoId={deepPhotoId}
+      initialListingFilter={deepListingId}
       initialRecentRuns={recentRuns.map((run) => ({
         id: run.id,
         createdAt: run.created_at,

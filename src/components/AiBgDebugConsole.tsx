@@ -144,6 +144,8 @@ type Props = {
   initialPhotos: AdminPhoto[];
   initialTotal: number;
   initialRecentRuns?: RecentRunSummary[];
+  initialSelectedPhotoId?: string | null;
+  initialListingFilter?: string | null;
   models: FalBgModelDef[];
   hasFalKey: boolean;
 };
@@ -293,6 +295,8 @@ export function AiBgDebugConsole({
   initialPhotos,
   initialTotal,
   initialRecentRuns = [],
+  initialSelectedPhotoId = null,
+  initialListingFilter = null,
   models,
   hasFalKey,
 }: Props) {
@@ -301,10 +305,13 @@ export function AiBgDebugConsole({
   const [loading, setLoading] = useState(false);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [q, setQ] = useState("");
+  const [q, setQ] = useState(initialListingFilter ?? "");
   const [role, setRole] = useState<PhotoRole | "all">("all");
   const [selectedPhotoId, setSelectedPhotoId] = useState<string | null>(
-    initialPhotos[0]?.id ?? null,
+    initialSelectedPhotoId &&
+      initialPhotos.some((p) => p.id === initialSelectedPhotoId)
+      ? initialSelectedPhotoId
+      : (initialPhotos[0]?.id ?? null),
   );
   const storedPrefs = useSyncExternalStore(
     subscribeLabPrefs,

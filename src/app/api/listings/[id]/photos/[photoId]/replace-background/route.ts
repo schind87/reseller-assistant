@@ -6,6 +6,8 @@ import {
   isCurrentBgPipeline,
   replaceBackground,
 } from "@/lib/ai/background";
+import { getFalBgModel, type FalBgModelId } from "@/lib/ai/fal-bg-models";
+import { getAdminUser } from "@/lib/admin";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   getListingPhoto,
@@ -34,11 +36,28 @@ export async function POST(request: Request, context: RouteContext) {
     run?: boolean;
     force?: boolean;
     backgroundColor?: string;
+    modelId?: string;
   } = {};
   try {
     body = (await request.json()) as typeof body;
   } catch {
     body = {};
+  }
+
+  let adminModelId: FalBgModelId | undefined;
+  if (typeof body.modelId === "string" && body.modelId.trim()) {
+    const admin = await getAdminUser();
+    if (!admin) {
+      return NextResponse.json({ error: "Admin only" }, { status: 403 });
+    }
+    const model = getFalBgModel(body.modelId.trim());
+    if (!model) {
+      return NextResponse.json(
+        { error: "Unknown background model" },
+        { status: 400 }
+      );
+    }
+    adminModelId = model.id;
   }
 
   const photo = await getListingPhoto(id, photoId);
@@ -61,7 +80,7 @@ export async function POST(request: Request, context: RouteContext) {
       ? body.replaceBackground
       : true;
   const runNow = body.run !== false;
-  const force = body.force === true;
+  const force = body.force === true || Boolean(adminModelId);
 
   try {
     let updated = await updatePhoto(photoId, {
@@ -101,6 +120,7 @@ export async function POST(request: Request, context: RouteContext) {
       const processed = await replaceBackground(signedUrl, {
         backgroundColor: body.backgroundColor,
         keepHanger: true,
+        modelId: adminModelId,
       });
 
       if (!processed.ok) {
