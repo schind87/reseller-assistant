@@ -2,6 +2,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getSignedPhotoUrls } from "@/lib/supabase/queries";
 import { falDashboardUrl } from "@/lib/ai/fal-lab";
 
+export type BgLabResultRating = "up" | "down";
+
 export type BgLabResultRow = {
   id: string;
   run_id: string;
@@ -19,6 +21,7 @@ export type BgLabResultRow = {
   cost_currency: string | null;
   cost_source: string | null;
   error: string | null;
+  rating: BgLabResultRating | null;
   created_at: string;
   imageUrl: string | null;
   dashboardUrl: string | null;
@@ -79,26 +82,49 @@ export async function insertBgLabResult(params: {
   costCurrency?: string | null;
   costSource?: string | null;
   error?: string | null;
-}): Promise<void> {
+}): Promise<{ id: string }> {
   const supabase = createAdminClient();
-  const { error } = await supabase.from("bg_lab_results").insert({
-    run_id: params.runId,
-    model_id: params.modelId,
-    model_label: params.modelLabel,
-    provider: params.provider,
-    ok: params.ok,
-    ms: params.ms,
-    storage_path: params.storagePath ?? null,
-    fal_request_id: params.falRequestId ?? null,
-    fal_endpoint: params.falEndpoint ?? null,
-    cost_usd: params.costUsd ?? null,
-    cost_unit_price: params.costUnitPrice ?? null,
-    cost_units: params.costUnits ?? null,
-    cost_currency: params.costCurrency ?? "USD",
-    cost_source: params.costSource ?? null,
-    error: params.error ?? null,
-  });
+  const { data, error } = await supabase
+    .from("bg_lab_results")
+    .insert({
+      run_id: params.runId,
+      model_id: params.modelId,
+      model_label: params.modelLabel,
+      provider: params.provider,
+      ok: params.ok,
+      ms: params.ms,
+      storage_path: params.storagePath ?? null,
+      fal_request_id: params.falRequestId ?? null,
+      fal_endpoint: params.falEndpoint ?? null,
+      cost_usd: params.costUsd ?? null,
+      cost_unit_price: params.costUnitPrice ?? null,
+      cost_units: params.costUnits ?? null,
+      cost_currency: params.costCurrency ?? "USD",
+      cost_source: params.costSource ?? null,
+      error: params.error ?? null,
+    })
+    .select("id")
+    .single();
   if (error) throw new Error(`insertBgLabResult: ${error.message}`);
+  return { id: data.id as string };
+}
+
+export async function updateBgLabResultRating(params: {
+  resultId: string;
+  rating: BgLabResultRating | null;
+}): Promise<BgLabResultRating | null> {
+  const supabase = createAdminClient();
+  const { data, error } = await supabase
+    .from("bg_lab_results")
+    .update({ rating: params.rating })
+    .eq("id", params.resultId)
+    .select("rating")
+    .maybeSingle();
+  if (error) throw new Error(`updateBgLabResultRating: ${error.message}`);
+  if (!data) throw new Error("Result not found");
+  const rating = data.rating as string | null;
+  if (rating === "up" || rating === "down") return rating;
+  return null;
 }
 
 export async function updateBgLabResultCost(params: {
@@ -201,6 +227,10 @@ export async function listBgLabRunsForPhoto(
       cost_currency: (raw.cost_currency as string | null) ?? "USD",
       cost_source: (raw.cost_source as string | null) ?? null,
       error: (raw.error as string | null) ?? null,
+      rating:
+        raw.rating === "up" || raw.rating === "down"
+          ? (raw.rating as BgLabResultRating)
+          : null,
       created_at: raw.created_at as string,
       imageUrl,
       dashboardUrl: dashboardUrlFor(
@@ -244,6 +274,12 @@ export type BgLabModelCostAvg = {
   modelId: string;
   avgUsd: number;
   sampleCount: number;
+};
+
+export type BgLabModelRatingStats = {
+  modelId: string;
+  upCount: number;
+  downCount: number;
 };
 
 /**
@@ -299,6 +335,54 @@ export async function listBgLabModelCostAverages(opts?: {
       avgUsd: sum / count,
       sampleCount: count,
     }))
+    .sort((a, b) => a.modelId.localeCompare(b.modelId));
+}
+
+/** Thumbs-up / thumbs-down counts per model (optionally for one admin). */
+export async function listBgLabModelRatingStats(opts?: {
+  userId?: string | null;
+}): Promise<BgLabModelRatingStats[]> {
+  const supabase = createAdminClient();
+
+  let runIds: string[] | null = null;
+  if (opts?.userId) {
+    const { data: runs, error: runsError } = await supabase
+      .from("bg_lab_runs")
+      .select("id")
+      .eq("run_by_user_id", opts.userId);
+    if (runsError) {
+      throw new Error(`listBgLabModelRatingStats runs: ${runsError.message}`);
+    }
+    runIds = (runs ?? []).map((r) => r.id as string);
+    if (runIds.length === 0) return [];
+  }
+
+  let query = supabase
+    .from("bg_lab_results")
+    .select("model_id, rating")
+    .not("rating", "is", null)
+    .limit(5000);
+
+  if (runIds) {
+    query = query.in("run_id", runIds);
+  }
+
+  const { data, error } = await query;
+  if (error) throw new Error(`listBgLabModelRatingStats: ${error.message}`);
+
+  const counts = new Map<string, { upCount: number; downCount: number }>();
+  for (const raw of data ?? []) {
+    const modelId = raw.model_id as string;
+    const rating = raw.rating as string | null;
+    if (!modelId || (rating !== "up" && rating !== "down")) continue;
+    const cur = counts.get(modelId) ?? { upCount: 0, downCount: 0 };
+    if (rating === "up") cur.upCount += 1;
+    else cur.downCount += 1;
+    counts.set(modelId, cur);
+  }
+
+  return [...counts.entries()]
+    .map(([modelId, stats]) => ({ modelId, ...stats }))
     .sort((a, b) => a.modelId.localeCompare(b.modelId));
 }
 

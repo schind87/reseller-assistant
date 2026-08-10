@@ -1,5 +1,7 @@
 import { randomBytes } from "crypto";
 import { v4 as uuidv4 } from "uuid";
+import { getProfileById } from "@/lib/auth/otp";
+import { composeSmokePetNotes } from "@/lib/seller-preferences";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { PlatformListingSchema } from "@/lib/listing-schemas";
 import {
@@ -16,6 +18,7 @@ import {
   type Platform,
   type StructuredFields,
   type Workspace,
+  isIdentifyPhotoRole,
   isPostingPhotoRole,
 } from "@/lib/types";
 
@@ -190,6 +193,15 @@ export async function createListing(
 ): Promise<Listing> {
   const workspace = await getWorkspace();
   const supabase = createAdminClient();
+  const profile = await getProfileById(userId).catch(() => null);
+  const structured_fields = emptyStructuredFields();
+  if (profile?.listing_prefs_completed_at) {
+    structured_fields.smokePetNotes = composeSmokePetNotes(
+      profile.listing_preferences
+    );
+  } else if (workspace.default_smoke_pet_notes) {
+    structured_fields.smokePetNotes = workspace.default_smoke_pet_notes;
+  }
 
   let lastError: Error | null = null;
   for (let attempt = 0; attempt < 8; attempt++) {
@@ -206,7 +218,7 @@ export async function createListing(
         title: null,
         description: null,
         price: null,
-        structured_fields: emptyStructuredFields(),
+        structured_fields,
         identified_attrs: emptyIdentifiedAttrs("Not identified yet."),
         cover_processed_path: null,
       })
@@ -565,6 +577,11 @@ export async function duplicatePhotoAsListingRole(
   const photo = await getListingPhoto(listingId, photoId);
   if (!photo) {
     throw new Error("Photo not found");
+  }
+  if (isIdentifyPhotoRole(photo.role)) {
+    throw new Error(
+      "Identification tag photos stay private and can’t be added to the listing.",
+    );
   }
 
   return addPhoto({

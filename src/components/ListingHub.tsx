@@ -276,8 +276,6 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
   const [deletingPhotoId, setDeletingPhotoId] = useState<string | null>(null);
   const [bgPhotoId, setBgPhotoId] = useState<string | null>(null);
   const [pickListingRole, setPickListingRole] = useState(false);
-  const [promotePhotoId, setPromotePhotoId] = useState<string | null>(null);
-  const [promotingPhoto, setPromotingPhoto] = useState(false);
   const [movingPhotoId, setMovingPhotoId] = useState<string | null>(null);
   const [dragOverSection, setDragOverSection] = useState<PhotoSection | null>(
     null
@@ -527,6 +525,14 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
       return;
     }
 
+    if (isIdentifyPhotoRole(photo.role) && section === "listing") {
+      endPhotoDrag();
+      setError(
+        "Tag photos stay private for AI identification and can’t be moved into the listing.",
+      );
+      return;
+    }
+
     const targetRole = roleForSection(section, data?.photos ?? [], photo.role);
     setMovingPhoto(true);
     setError(null);
@@ -725,7 +731,6 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
           typeof json.error === "string" ? json.error : "Could not delete photo"
         );
       }
-      if (promotePhotoId === photoId) setPromotePhotoId(null);
       setData((prev) =>
         prev
           ? {
@@ -865,40 +870,6 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
       setStatusMessage(null);
     } finally {
       setBgPhotoId(null);
-    }
-  }
-
-  async function addPhotoToListing(photoId: string, role: PhotoRole) {
-    setPromotingPhoto(true);
-    setError(null);
-    try {
-      const res = await fetch(
-        `/api/listings/${listingId}/photos/${photoId}/use-in-listing`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ role }),
-        }
-      );
-      const json = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        throw new Error(
-          typeof json.error === "string"
-            ? json.error
-            : "Could not add photo to listing"
-        );
-      }
-      setPromotePhotoId(null);
-      setStatusMessage(
-        `Also added as ${photoRoleLabel(role)} for shoppers to see.`
-      );
-      await load({ syncDraft: false });
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Could not add photo to listing"
-      );
-    } finally {
-      setPromotingPhoto(false);
     }
   }
 
@@ -1134,51 +1105,71 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
               </div>
             ) : null}
 
-            <PhotoGroup
-              title="Brand & care tags"
-              badge="For Product Identification, not shown in listing."
-              description="Close-ups of brand, size, care, and style/SKU tags. Private by default — tap Use in listing on any shot you also want shoppers to see."
-              photos={identifyPhotos}
-              empty="No tag photos yet — drop images here or add every label you can read."
-              section="identify"
-              onAdd={() => pickFilesForRole("id_tag")}
-              onDelete={(photoId) => void deletePhoto(photoId)}
-              onUseInListing={(photoId) => setPromotePhotoId(photoId)}
-              onPreview={setPreviewPhoto}
-              onDropFiles={(files) => void uploadFilesToSection(files, "identify")}
-              onDropPhoto={(photoId) => void movePhotoToSection(photoId, "identify")}
-              onReorderPhoto={(draggedId, targetId, place) =>
-                void reorderPhotoInSection("identify", draggedId, targetId, place)
-              }
-              onBeginMove={(photoId) => beginPhotoDrag(photoId)}
-              onCancelMove={endPhotoDrag}
-              movingPhotoId={movingPhotoId}
-              promotePhotoId={promotePhotoId}
-              dragOver={dragOverSection === "identify"}
-              onDragOverChange={(over) =>
-                setDragOverSection(over ? "identify" : null)
-              }
-              deletingPhotoId={deletingPhotoId}
-              disabled={
-                uploading ||
-                Boolean(deletingPhotoId) ||
-                promotingPhoto ||
-                movingPhoto
-              }
-              tone="private"
-            />
-
-            {promotePhotoId ? (
-              <PhotoRolePickerDialog
-                title="Use this photo in the listing as…"
-                description="Keeps the original private photo and adds a copy for shoppers. Pick a type below."
-                roles={LISTING_ROLES}
-                roleHint={(role) => roleCountLabel(photos, role)}
-                disabled={promotingPhoto}
-                onPick={(role) => void addPhotoToListing(promotePhotoId, role)}
-                onClose={() => setPromotePhotoId(null)}
-              />
-            ) : null}
+            <details className="group rounded-xl border border-dashed border-[var(--border)] bg-[var(--surface-muted)]/50 open:border-solid">
+              <summary className="cursor-pointer list-none px-4 py-3 marker:content-none [&::-webkit-details-marker]:hidden">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-[var(--muted)]">
+                      Optional · brand & care tags for AI
+                    </p>
+                    <p className="mt-0.5 text-sm leading-relaxed text-[var(--muted)]">
+                      Want AI to try to identify the clothing? Add close-ups of
+                      brand and care tags here. These won&apos;t be posted.
+                    </p>
+                  </div>
+                  <span className="shrink-0 rounded-md bg-white/80 px-2 py-1 text-xs font-semibold text-[var(--muted)] ring-1 ring-[var(--border)]">
+                    {identifyPhotos.length > 0
+                      ? `${identifyPhotos.length} photo${identifyPhotos.length === 1 ? "" : "s"}`
+                      : "Closed"}
+                    <span className="ml-1 text-[var(--accent)] group-open:hidden">
+                      · open
+                    </span>
+                    <span className="ml-1 hidden text-[var(--accent)] group-open:inline">
+                      · close
+                    </span>
+                  </span>
+                </div>
+              </summary>
+              <div className="border-t border-[var(--border)] px-3 pb-3 pt-2">
+                <PhotoGroup
+                  title="Tag photos"
+                  description="Private identification only — never posted with the listing."
+                  photos={identifyPhotos}
+                  empty="No tag photos yet — drop images here or add brand and care labels."
+                  section="identify"
+                  onAdd={() => pickFilesForRole("id_tag")}
+                  onDelete={(photoId) => void deletePhoto(photoId)}
+                  onPreview={setPreviewPhoto}
+                  onDropFiles={(files) =>
+                    void uploadFilesToSection(files, "identify")
+                  }
+                  onDropPhoto={(photoId) =>
+                    void movePhotoToSection(photoId, "identify")
+                  }
+                  onReorderPhoto={(draggedId, targetId, place) =>
+                    void reorderPhotoInSection(
+                      "identify",
+                      draggedId,
+                      targetId,
+                      place,
+                    )
+                  }
+                  onBeginMove={(photoId) => beginPhotoDrag(photoId)}
+                  onCancelMove={endPhotoDrag}
+                  movingPhotoId={movingPhotoId}
+                  dragOver={dragOverSection === "identify"}
+                  onDragOverChange={(over) =>
+                    setDragOverSection(over ? "identify" : null)
+                  }
+                  deletingPhotoId={deletingPhotoId}
+                  disabled={
+                    uploading || Boolean(deletingPhotoId) || movingPhoto
+                  }
+                  tone="private"
+                  compact
+                />
+              </div>
+            </details>
 
             <div className="space-y-3">
               {isAdmin ? (
@@ -1476,7 +1467,6 @@ function PhotoGroup({
   onBeginMove,
   onCancelMove,
   movingPhotoId,
-  promotePhotoId,
   dragOver,
   onDragOverChange,
   deletingPhotoId,
@@ -1484,6 +1474,7 @@ function PhotoGroup({
   labPhotoHref,
   disabled,
   tone = "listing",
+  compact = false,
 }: {
   title: string;
   badge?: string;
@@ -1507,7 +1498,6 @@ function PhotoGroup({
   onBeginMove: (photoId: string) => void;
   onCancelMove: () => void;
   movingPhotoId?: string | null;
-  promotePhotoId?: string | null;
   dragOver?: boolean;
   onDragOverChange: (over: boolean) => void;
   deletingPhotoId?: string | null;
@@ -1515,6 +1505,7 @@ function PhotoGroup({
   labPhotoHref?: (photoId: string) => string;
   disabled?: boolean;
   tone?: "private" | "listing";
+  compact?: boolean;
 }) {
   const badgeClass =
     tone === "private"
@@ -1577,33 +1568,39 @@ function PhotoGroup({
       className={`rounded-2xl border p-4 transition ${
         isDropTarget
           ? "border-[var(--accent)] bg-[var(--accent-soft)] ring-2 ring-[var(--accent)]"
-          : tone === "private"
-            ? "border-amber-200/80 bg-amber-50/40"
-            : "border-[var(--border)] bg-white"
+          : compact
+            ? "border-transparent bg-transparent p-0"
+            : tone === "private"
+              ? "border-amber-200/80 bg-amber-50/40"
+              : "border-[var(--border)] bg-white"
       } ${moveArmed ? "cursor-pointer" : ""}`}
     >
-      <div className="mb-2 space-y-1">
-        <h3 className="text-lg font-semibold text-[var(--foreground)]">
-          {title}
-        </h3>
-        {badge ? (
-          <p
-            className={`inline-block rounded-md px-2 py-1 text-xs font-semibold uppercase tracking-wide ${badgeClass}`}
-          >
-            {badge}
+      {!compact ? (
+        <div className="mb-2 space-y-1">
+          <h3 className="text-lg font-semibold text-[var(--foreground)]">
+            {title}
+          </h3>
+          {badge ? (
+            <p
+              className={`inline-block rounded-md px-2 py-1 text-xs font-semibold uppercase tracking-wide ${badgeClass}`}
+            >
+              {badge}
+            </p>
+          ) : null}
+          {description ? (
+            <p className="text-sm leading-relaxed text-[var(--muted)]">
+              {description}
+            </p>
+          ) : null}
+          <p className="text-xs text-[var(--muted)]">
+            {moveArmed
+              ? "Tap or drop here to move the photo"
+              : "Drop images here to upload · drag to reorder · tap a photo to enlarge"}
           </p>
-        ) : null}
-        {description ? (
-          <p className="text-sm leading-relaxed text-[var(--muted)]">
-            {description}
-          </p>
-        ) : null}
-        <p className="text-xs text-[var(--muted)]">
-          {moveArmed
-            ? "Tap or drop here to move the photo"
-            : "Drop images here to upload · drag to reorder · tap a photo to enlarge"}
-        </p>
-      </div>
+        </div>
+      ) : description ? (
+        <p className="mb-2 text-xs text-[var(--muted)]">{description}</p>
+      ) : null}
       {photos.length === 0 ? (
         <p className="text-sm text-[var(--muted)]">{empty}</p>
       ) : (
@@ -1613,7 +1610,6 @@ function PhotoGroup({
               key={photo.id}
               photo={photo}
               deleting={deletingPhotoId === photo.id}
-              promoting={promotePhotoId === photo.id}
               cleaningBg={bgPhotoId === photo.id}
               moving={movingPhotoId === photo.id}
               movingPhotoId={movingPhotoId ?? null}
@@ -1678,7 +1674,6 @@ function PhotoGroup({
 function PhotoTile({
   photo,
   deleting,
-  promoting,
   cleaningBg,
   moving,
   movingPhotoId,
@@ -1696,7 +1691,6 @@ function PhotoTile({
 }: {
   photo: ListingPhotoWithUrl;
   deleting: boolean;
-  promoting: boolean;
   cleaningBg?: boolean;
   moving: boolean;
   movingPhotoId: string | null;
@@ -1843,7 +1837,7 @@ function PhotoTile({
         onPreview();
       }}
       className={`relative overflow-hidden rounded-xl ring-1 select-none ${
-        moving || promoting
+        moving
           ? "ring-2 ring-[var(--accent)]"
           : dropEdge
             ? "ring-2 ring-[var(--accent)]"
@@ -1914,14 +1908,9 @@ function PhotoTile({
                 e.stopPropagation();
                 onUseInListing();
               }}
-              aria-pressed={promoting}
-              className={`rounded-md border px-2 py-1 text-sm font-semibold transition disabled:opacity-50 ${
-                promoting
-                  ? "border-[var(--accent)] bg-[var(--accent)] text-white"
-                  : "border-[var(--accent)] bg-transparent text-[var(--accent)] hover:bg-[var(--accent-soft)]"
-              }`}
+              className="rounded-md border border-[var(--accent)] bg-transparent px-2 py-1 text-sm font-semibold text-[var(--accent)] transition hover:bg-[var(--accent-soft)] disabled:opacity-50"
             >
-              {promoting ? "Choosing…" : "Use in listing"}
+              Use in listing
             </button>
           ) : null}
           {onToggleCleanBackground ? (

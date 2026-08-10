@@ -1,6 +1,12 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getSignedPhotoUrl, getSignedPhotoUrls } from "@/lib/supabase/queries";
-import type { ListingPhoto, PhotoRole, Platform } from "@/lib/types";
+import {
+  IDENTIFY_PHOTO_ROLES,
+  isIdentifyPhotoRole,
+  type ListingPhoto,
+  type PhotoRole,
+  type Platform,
+} from "@/lib/types";
 
 export type AdminPhotoRow = ListingPhoto & {
   listing_title: string | null;
@@ -42,7 +48,17 @@ export async function listAdminPhotos(opts?: {
     .range(offset, offset + limit - 1);
 
   if (opts?.role && opts.role !== "all") {
+    if (isIdentifyPhotoRole(opts.role)) {
+      return { photos: [], total: 0 };
+    }
     query = query.eq("role", opts.role);
+  } else {
+    // Lab is for listing/posting shots — hide identification (tag) photos.
+    query = query.not(
+      "role",
+      "in",
+      `(${IDENTIFY_PHOTO_ROLES.map((r) => `"${r}"`).join(",")})`,
+    );
   }
 
   const { data, error, count } = await query;

@@ -266,7 +266,7 @@ export function PhotoCoach({ listing, initialPhotos }: PhotoCoachProps) {
         showAspectGuide={step.purpose === "listing"}
         guideNote={
           step.purpose === "identify"
-            ? "Identification tag — private by default"
+            ? "For AI identification only — won’t be posted"
             : step.purpose === "inventory"
               ? "Stocking photo — private by default"
               : undefined
@@ -322,7 +322,7 @@ export function PhotoCoach({ listing, initialPhotos }: PhotoCoachProps) {
 
   const purposeBanner =
     step.purpose === "identify"
-      ? "Identification photos — private by default"
+      ? "Tag photos for AI — won’t be posted"
       : step.purpose === "inventory"
         ? "Stocking photo — private by default"
         : `Listing photo for ${PLATFORM_LABELS[platform]} · ${aspect.label}`;

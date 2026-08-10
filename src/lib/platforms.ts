@@ -36,7 +36,7 @@ const SHARED_PHOTO_STEPS: PhotoStepDef[] = [
     role: "id_tag",
     title: "Identification tags",
     instruction:
-      "Photo every tag on the garment — brand, size, care, style or SKU numbers, and any other labels. Take as many as you need. These are for identification by default; you can also add any of them to the listing later.",
+      "Optional: photo every tag on the garment — brand, size, care, style or SKU numbers. These help AI identify the item and will not be posted with the listing.",
     optional: true,
     purpose: "identify",
     allowMultiple: true,

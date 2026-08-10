@@ -1,6 +1,6 @@
 "use client";
 
-import { startTransition, useEffect, useMemo, useState, useSyncExternalStore, type CSSProperties } from "react";
+import { startTransition, useEffect, useMemo, useState, useSyncExternalStore, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 import Link from "next/link";
 import { BigButton } from "@/components/BigButton";
 import type { FalBgModelDef, FalBgModelId } from "@/lib/ai/fal-bg-models";
@@ -15,7 +15,11 @@ import {
   writeBgModelCatalogPrefs,
 } from "@/lib/ai/bg-model-prefs";
 import { photoRoleLabel, PLATFORM_LABELS } from "@/lib/platforms";
-import type { PhotoRole, Platform } from "@/lib/types";
+import {
+  isIdentifyPhotoRole,
+  type PhotoRole,
+  type Platform,
+} from "@/lib/types";
 
 type AdminPhoto = {
   id: string;
@@ -48,6 +52,7 @@ type RunResult = {
   costUnits?: number | null;
   costSource?: string | null;
   costLabel?: string | null;
+  rating?: "up" | "down" | null;
   createdAt?: string;
 };
 
@@ -82,6 +87,12 @@ type ModelCostAverage = {
   modelId: string;
   avgUsd: number;
   sampleCount: number;
+};
+
+type ModelRatingStats = {
+  modelId: string;
+  upCount: number;
+  downCount: number;
 };
 
 type PreviewImage = {
@@ -176,6 +187,7 @@ type Props = {
   initialTotal: number;
   initialRecentRuns?: RecentRunSummary[];
   initialModelCostAverages?: ModelCostAverage[];
+  initialModelRatingStats?: ModelRatingStats[];
   initialSelectedPhotoId?: string | null;
   initialListingFilter?: string | null;
   models: FalBgModelDef[];
@@ -334,6 +346,7 @@ export function AiBgDebugConsole({
   initialTotal,
   initialRecentRuns = [],
   initialModelCostAverages = [],
+  initialModelRatingStats = [],
   initialSelectedPhotoId = null,
   initialListingFilter = null,
   models,
@@ -413,6 +426,10 @@ export function AiBgDebugConsole({
   const [modelCostAverages, setModelCostAverages] = useState<
     ModelCostAverage[]
   >(initialModelCostAverages);
+  const [modelRatingStats, setModelRatingStats] = useState<ModelRatingStats[]>(
+    initialModelRatingStats,
+  );
+  const [ratingBusyId, setRatingBusyId] = useState<string | null>(null);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [refreshingCosts, setRefreshingCosts] = useState(false);
   const [runProgress, setRunProgress] = useState<{
@@ -447,11 +464,46 @@ export function AiBgDebugConsole({
     [recentRuns, selectedRunId],
   );
 
+  /** Model ids whose currently shown version is cheapest within its lab run. */
+  const cheapestModelIds = useMemo(() => {
+    const byRun = new Map<string, { modelId: string; cost: number }[]>();
+    for (const entry of modelHistories) {
+      const index = Math.min(
+        versionIndexByModel[entry.modelId] ?? 0,
+        entry.versions.length - 1,
+      );
+      const result = entry.versions[index];
+      if (!result?.ok) continue;
+      const cost = result.costUsd;
+      if (typeof cost !== "number" || !Number.isFinite(cost)) continue;
+      const runId = result.runId ?? "unknown";
+      const list = byRun.get(runId) ?? [];
+      list.push({ modelId: entry.modelId, cost });
+      byRun.set(runId, list);
+    }
+    const winners = new Set<string>();
+    for (const list of byRun.values()) {
+      if (list.length < 2) continue;
+      let min = Infinity;
+      for (const row of list) min = Math.min(min, row.cost);
+      for (const row of list) {
+        if (row.cost === min) winners.add(row.modelId);
+      }
+    }
+    return winners;
+  }, [modelHistories, versionIndexByModel]);
+
   const avgCostByModel = useMemo(() => {
     const map = new Map<string, ModelCostAverage>();
     for (const row of modelCostAverages) map.set(row.modelId, row);
     return map;
   }, [modelCostAverages]);
+
+  const ratingStatsByModel = useMemo(() => {
+    const map = new Map<string, ModelRatingStats>();
+    for (const row of modelRatingStats) map.set(row.modelId, row);
+    return map;
+  }, [modelRatingStats]);
 
   const selectedRunCostEstimate = useMemo(() => {
     let totalUsd = 0;
@@ -526,9 +578,17 @@ export function AiBgDebugConsole({
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "Could not load recent runs");
       startTransition(() => {
-        setRecentRuns((json.recentRuns as RecentRunSummary[]) ?? []);
+        const runs = ((json.recentRuns as RecentRunSummary[]) ?? []).filter(
+          (run) =>
+            !run.photoRole ||
+            !isIdentifyPhotoRole(run.photoRole as PhotoRole),
+        );
+        setRecentRuns(runs);
         if (Array.isArray(json.modelCostAverages)) {
           setModelCostAverages(json.modelCostAverages as ModelCostAverage[]);
+        }
+        if (Array.isArray(json.modelRatingStats)) {
+          setModelRatingStats(json.modelRatingStats as ModelRatingStats[]);
         }
       });
     } catch (err) {
@@ -578,7 +638,9 @@ export function AiBgDebugConsole({
       const res = await fetch(`/api/admin/photos?${params}`);
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "Could not load photos");
-      const list = json.photos as AdminPhoto[];
+      const list = (json.photos as AdminPhoto[]).filter(
+        (photo) => !isIdentifyPhotoRole(photo.role),
+      );
       startTransition(() => {
         setPhotos(list);
         setTotal(json.total as number);
@@ -661,7 +723,9 @@ export function AiBgDebugConsole({
         const res = await fetch(`/api/admin/photos?${params}`);
         const json = await res.json();
         if (res.ok) {
-          const list = (json.photos as AdminPhoto[]) ?? [];
+          const list = ((json.photos as AdminPhoto[]) ?? []).filter(
+            (photo) => !isIdentifyPhotoRole(photo.role),
+          );
           startTransition(() => {
             setRole("all");
             setPhotos((prev) => {
@@ -682,6 +746,74 @@ export function AiBgDebugConsole({
   function selectPhoto(photoId: string) {
     setSelectedRunId(null);
     setSelectedPhotoId(photoId);
+  }
+
+  function patchResultRating(
+    resultId: string,
+    modelId: string,
+    rating: "up" | "down" | null,
+    previous: "up" | "down" | null | undefined,
+  ) {
+    setHistory((prev) =>
+      prev.map((run) => ({
+        ...run,
+        results: run.results.map((result) =>
+          result.id === resultId ? { ...result, rating } : result,
+        ),
+      })),
+    );
+
+    setModelRatingStats((prev) => {
+      const next = [...prev];
+      const idx = next.findIndex((row) => row.modelId === modelId);
+      const row =
+        idx >= 0
+          ? { ...next[idx] }
+          : { modelId, upCount: 0, downCount: 0 };
+      if (previous === "up") row.upCount = Math.max(0, row.upCount - 1);
+      if (previous === "down") row.downCount = Math.max(0, row.downCount - 1);
+      if (rating === "up") row.upCount += 1;
+      if (rating === "down") row.downCount += 1;
+      if (idx >= 0) next[idx] = row;
+      else if (row.upCount > 0 || row.downCount > 0) next.push(row);
+      return next.filter((r) => r.upCount > 0 || r.downCount > 0);
+    });
+  }
+
+  async function rateResult(
+    result: RunResult,
+    next: "up" | "down",
+  ) {
+    if (!result.id) return;
+    const previous = result.rating ?? null;
+    const rating = previous === next ? null : next;
+    setRatingBusyId(result.id);
+    setError(null);
+    // Optimistic update
+    patchResultRating(result.id, result.modelId, rating, previous);
+    try {
+      const res = await fetch("/api/admin/bg-debug/rate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ resultId: result.id, rating }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(
+          typeof json.error === "string" ? json.error : "Could not save rating",
+        );
+      }
+      const saved =
+        json.rating === "up" || json.rating === "down" ? json.rating : null;
+      if (saved !== rating) {
+        patchResultRating(result.id, result.modelId, saved, rating);
+      }
+    } catch (err) {
+      patchResultRating(result.id, result.modelId, previous, rating);
+      setError(err instanceof Error ? err.message : "Could not save rating");
+    } finally {
+      setRatingBusyId(null);
+    }
   }
 
   async function runModels() {
@@ -893,7 +1025,7 @@ export function AiBgDebugConsole({
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-8 sm:px-6">
+    <div className="mx-auto flex w-full max-w-[96rem] flex-col gap-6 px-4 py-8 sm:px-6">
       <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="text-sm font-semibold uppercase tracking-wide text-[var(--muted)]">
@@ -936,116 +1068,10 @@ export function AiBgDebugConsole({
         />
       ) : null}
 
-      <div className="grid items-start gap-5 lg:grid-cols-[13.5rem_minmax(0,1fr)]">
-        <aside className="order-first flex max-h-[calc(100vh-1rem)] flex-col overflow-hidden rounded-xl border border-[var(--border)] bg-white lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)]">
-          <div className="flex shrink-0 items-center justify-between gap-2 border-b border-[var(--border)] px-3 py-2">
-            <h2 className="text-sm font-semibold text-[var(--foreground)]">
-              Recent runs
-            </h2>
-            <button
-              type="button"
-              onClick={() => void loadRecentRuns()}
-              className="rounded-md px-2 py-1 text-xs font-semibold text-[var(--muted)] transition hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)]"
-              title="Refresh recent runs"
-            >
-              Refresh
-            </button>
-          </div>
-          {recentRuns.length === 0 ? (
-            <p className="px-3 py-3 text-xs text-[var(--muted)]">
-              No runs yet — pick a photo and run models.
-            </p>
-          ) : (
-            <ul className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-1.5">
-              {recentRuns.map((run) => {
-                const active = selectedRunId === run.id;
-                const roleLabel = run.photoRole
-                  ? photoRoleLabel(run.photoRole as PhotoRole)
-                  : "Photo";
-                const platform =
-                  run.listingPlatform &&
-                  run.listingPlatform in PLATFORM_LABELS
-                    ? PLATFORM_LABELS[run.listingPlatform as Platform]
-                    : run.listingPlatform;
-                return (
-                  <li key={run.id}>
-                    <button
-                      type="button"
-                      onClick={() => void openRecentRun(run)}
-                      title={`${run.listingTitle || platform || "Listing"} · ${roleLabel}`}
-                      className={`flex w-full items-center gap-2 rounded-lg px-1.5 py-1.5 text-left transition ${
-                        active
-                          ? "bg-[var(--accent-soft)] ring-1 ring-[var(--accent)]"
-                          : "hover:bg-[var(--surface-muted)]"
-                      }`}
-                    >
-                      <div
-                        className="h-10 w-10 shrink-0 overflow-hidden rounded-md ring-1 ring-[var(--border)]"
-                        style={resultBackdropStyle(labBackdrop)}
-                      >
-                        {run.thumbUrl ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img
-                            src={run.thumbUrl}
-                            alt=""
-                            loading="lazy"
-                            decoding="async"
-                            className="h-full w-full object-contain"
-                          />
-                        ) : (
-                          <div className="flex h-full items-center justify-center text-[9px] text-[var(--muted)]">
-                            —
-                          </div>
-                        )}
-                      </div>
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate text-xs font-semibold leading-tight text-[var(--foreground)]">
-                          {run.listingTitle || platform || "Listing"}
-                        </span>
-                        <span className="mt-0.5 block truncate text-[10px] leading-tight text-[var(--muted)]">
-                          {roleLabel} · {run.okCount}/{run.resultCount}
-                          {run.createdAt ? (
-                            <>
-                              {" · "}
-                              <LocalDateTime
-                                iso={run.createdAt}
-                                className="inline"
-                              />
-                            </>
-                          ) : null}
-                        </span>
-                      </span>
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </aside>
-
-        <div className="flex min-w-0 flex-col gap-5">
-      <div className="flex flex-wrap items-center gap-2">
-        <span
-          className={`rounded-lg px-2.5 py-1 text-sm font-semibold ${
-            hasFalKey
-              ? "bg-[var(--accent-soft)] text-[var(--accent)]"
-              : "bg-red-50 text-red-800"
-          }`}
-        >
-          FAL_KEY {hasFalKey ? "ready" : "missing"}
-        </span>
-      </div>
-
-      {error ? (
-        <p className="rounded-xl bg-red-50 px-4 py-3 text-base text-red-800">
-          {error}
-        </p>
-      ) : null}
-
-      <section className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)] lg:items-start">
-        <div className="flex flex-col gap-5 rounded-2xl border border-[var(--border)] bg-white p-5">
+      <div className="grid items-start gap-5 lg:grid-cols-[minmax(22rem,28rem)_minmax(0,1fr)_13.5rem]">
+        <div className="flex max-h-[calc(100vh-1rem)] flex-col gap-4 overflow-hidden rounded-2xl border border-[var(--border)] bg-white p-5 lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)]">
           <form
-            className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:items-center"
+            className="grid shrink-0 gap-3 sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:items-center"
             onSubmit={(e) => {
               e.preventDefault();
               void loadPhotos();
@@ -1082,11 +1108,11 @@ export function AiBgDebugConsole({
             </button>
           </form>
 
-          <p className="text-sm text-[var(--muted)]">
+          <p className="shrink-0 text-sm text-[var(--muted)]">
             {loading ? "Loading…" : `${photos.length} shown · ${total} total`}
           </p>
 
-          <ul className="grid max-h-[70vh] grid-cols-2 gap-3 overflow-y-auto">
+          <ul className="grid min-h-0 flex-1 grid-cols-2 gap-3 overflow-y-auto overscroll-contain sm:grid-cols-3">
             {photos.map((photo) => {
               const active = photo.id === selectedPhoto?.id;
               const previewLabel =
@@ -1150,7 +1176,25 @@ export function AiBgDebugConsole({
           </ul>
         </div>
 
-        <div className="flex flex-col gap-5">
+        <div className="flex min-w-0 flex-col gap-5">
+      <div className="flex flex-wrap items-center gap-2">
+        <span
+          className={`rounded-lg px-2.5 py-1 text-sm font-semibold ${
+            hasFalKey
+              ? "bg-[var(--accent-soft)] text-[var(--accent)]"
+              : "bg-red-50 text-red-800"
+          }`}
+        >
+          FAL_KEY {hasFalKey ? "ready" : "missing"}
+        </span>
+      </div>
+
+      {error ? (
+        <p className="rounded-xl bg-red-50 px-4 py-3 text-base text-red-800">
+          {error}
+        </p>
+      ) : null}
+
           <div className="rounded-2xl border border-[var(--border)] bg-white p-5">
             <h2 className="text-lg font-semibold text-[var(--foreground)]">
               Selected photo
@@ -1231,6 +1275,7 @@ export function AiBgDebugConsole({
               {selectableModels.map((model) => {
                 const savedCount = savedCountByModel.get(model.id) ?? 0;
                 const avg = avgCostByModel.get(model.id);
+                const ratings = ratingStatsByModel.get(model.id);
                 const catalogCents = formatApproxCostCents(model.approxCost);
                 const avgCents =
                   avg && avg.sampleCount > 0
@@ -1269,6 +1314,12 @@ export function AiBgDebugConsole({
                           {savedCount > 0 ? (
                             <span className="ml-2 font-normal text-[var(--accent)]">
                               · {savedCount} saved
+                            </span>
+                          ) : null}
+                          {ratings &&
+                          (ratings.upCount > 0 || ratings.downCount > 0) ? (
+                            <span className="ml-2 font-normal tabular-nums text-[var(--muted)]">
+                              · 👍 {ratings.upCount} · 👎 {ratings.downCount}
                             </span>
                           ) : null}
                         </span>
@@ -1357,8 +1408,6 @@ export function AiBgDebugConsole({
               backdrop are remembered for your next visit.
             </p>
           </div>
-        </div>
-      </section>
 
       {selectedPhoto ? (
         <section className="rounded-2xl border border-[var(--border)] bg-white p-5">
@@ -1448,9 +1497,6 @@ export function AiBgDebugConsole({
                       </p>
                       <p className="mt-1 text-xs text-[var(--muted)]">
                         Running…
-                        {runProgress
-                          ? ` · ${runProgress.completed}/${runProgress.total} done`
-                          : ""}
                       </p>
                     </div>
                     <div
@@ -1498,67 +1544,114 @@ export function AiBgDebugConsole({
                             </span>
                           ) : null}
                         </p>
-                        <CostBadge result={result} />
+                        <div className="flex flex-col items-end gap-0.5">
+                          <CostBadge result={result} />
+                          {cheapestModelIds.has(entry.modelId) ? (
+                            <span className="text-[10px] font-semibold leading-none text-[var(--accent)]">
+                              cheapest
+                            </span>
+                          ) : null}
+                        </div>
                       </div>
                       <p className="mt-1 text-xs text-[var(--muted)]">
                         {result.provider} · {formatDurationSeconds(result.ms)}
                         {result.ok ? "" : " · failed"}
                       </p>
-                      {result.createdAt ? (
-                        <p className="text-xs text-[var(--muted)]">
-                          <LocalDateTime iso={result.createdAt} />
-                        </p>
+                      {result.createdAt || result.falDashboardUrl ? (
+                        <div className="mt-0.5 flex items-baseline justify-between gap-2 text-xs text-[var(--muted)]">
+                          <span className="min-w-0 truncate">
+                            {result.createdAt ? (
+                              <LocalDateTime iso={result.createdAt} />
+                            ) : null}
+                          </span>
+                          <FalRequestMeta result={result} />
+                        </div>
                       ) : null}
-                      <FalRequestMeta result={result} />
-                      <div className="mt-2 flex items-center justify-between gap-2">
-                        <button
-                          type="button"
-                          disabled={!canNewer || running}
-                          onClick={() =>
-                            stepVersion(entry.modelId, -1, entry.versions.length)
-                          }
-                          className="touch-target rounded-lg border border-[var(--border)] px-2.5 text-sm font-semibold disabled:opacity-40"
-                        >
-                          ← Newer
-                        </button>
-                        <span className="text-xs text-[var(--muted)]">
-                          {index + 1} / {entry.versions.length}
-                        </span>
-                        <button
-                          type="button"
-                          disabled={!canOlder || running}
-                          onClick={() =>
-                            stepVersion(entry.modelId, 1, entry.versions.length)
-                          }
-                          className="touch-target rounded-lg border border-[var(--border)] px-2.5 text-sm font-semibold disabled:opacity-40"
-                        >
-                          Older →
-                        </button>
-                      </div>
+                      {entry.versions.length > 1 ? (
+                        <div className="mt-1 flex items-center justify-center gap-1">
+                          <button
+                            type="button"
+                            disabled={!canNewer || running}
+                            onClick={() =>
+                              stepVersion(
+                                entry.modelId,
+                                -1,
+                                entry.versions.length,
+                              )
+                            }
+                            className="rounded px-1 py-0.5 text-[10px] font-semibold text-[var(--foreground)] hover:bg-[var(--surface-muted)] disabled:opacity-30"
+                          >
+                            Newer
+                          </button>
+                          <span className="text-[10px] tabular-nums text-[var(--muted)]">
+                            {index + 1}/{entry.versions.length}
+                          </span>
+                          <button
+                            type="button"
+                            disabled={!canOlder || running}
+                            onClick={() =>
+                              stepVersion(
+                                entry.modelId,
+                                1,
+                                entry.versions.length,
+                              )
+                            }
+                            className="rounded px-1 py-0.5 text-[10px] font-semibold text-[var(--foreground)] hover:bg-[var(--surface-muted)] disabled:opacity-30"
+                          >
+                            Older
+                          </button>
+                        </div>
+                      ) : null}
+                      {result.ok && result.id ? (
+                        <div className="mt-1.5 flex items-center justify-center gap-1">
+                          <button
+                            type="button"
+                            title="Thumbs up — good result"
+                            aria-label="Thumbs up"
+                            aria-pressed={result.rating === "up"}
+                            disabled={ratingBusyId === result.id || running}
+                            onClick={() => void rateResult(result, "up")}
+                            className={`rounded-md px-2 py-0.5 text-sm transition disabled:opacity-40 ${
+                              result.rating === "up"
+                                ? "bg-emerald-100 text-emerald-900 ring-1 ring-emerald-300"
+                                : "text-[var(--muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)]"
+                            }`}
+                          >
+                            👍
+                          </button>
+                          <button
+                            type="button"
+                            title="Thumbs down — poor result"
+                            aria-label="Thumbs down"
+                            aria-pressed={result.rating === "down"}
+                            disabled={ratingBusyId === result.id || running}
+                            onClick={() => void rateResult(result, "down")}
+                            className={`rounded-md px-2 py-0.5 text-sm transition disabled:opacity-40 ${
+                              result.rating === "down"
+                                ? "bg-red-100 text-red-900 ring-1 ring-red-300"
+                                : "text-[var(--muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)]"
+                            }`}
+                          >
+                            👎
+                          </button>
+                        </div>
+                      ) : null}
                     </div>
                     {result.ok && result.imageUrl ? (
-                      <div className="relative">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          src={result.imageUrl}
-                          alt={entry.label}
-                          loading="lazy"
-                          decoding="async"
-                          className="aspect-square w-full object-contain"
-                          style={resultBackdropStyle(labBackdrop)}
-                        />
-                        <MagnifyButton
-                          onClick={() =>
-                            openPreview(result.imageUrl, entry.label)
-                          }
-                        />
-                      </div>
+                      <ResultCompareImage
+                        resultUrl={result.imageUrl}
+                        originalUrl={selectedPhoto?.signedUrl ?? null}
+                        label={entry.label}
+                        backdrop={labBackdrop}
+                        onOpenFull={() =>
+                          openPreview(result.imageUrl, entry.label)
+                        }
+                      />
                     ) : (
                       <p className="bg-red-50 px-3 py-6 text-sm text-red-800">
                         {result.error || "No image"}
                       </p>
-                    )}
-                  </article>
+                    )}                  </article>
                 );
               })}
             </div>
@@ -1566,6 +1659,92 @@ export function AiBgDebugConsole({
         </section>
       ) : null}
         </div>
+
+        <aside className="flex max-h-[calc(100vh-1rem)] flex-col overflow-hidden rounded-xl border border-[var(--border)] bg-white lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)]">
+          <div className="flex shrink-0 items-center justify-between gap-2 border-b border-[var(--border)] px-3 py-2">
+            <h2 className="text-sm font-semibold text-[var(--foreground)]">
+              Recent runs
+            </h2>
+            <button
+              type="button"
+              onClick={() => void loadRecentRuns()}
+              className="rounded-md px-2 py-1 text-xs font-semibold text-[var(--muted)] transition hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)]"
+              title="Refresh recent runs"
+            >
+              Refresh
+            </button>
+          </div>
+          {recentRuns.length === 0 ? (
+            <p className="px-3 py-3 text-xs text-[var(--muted)]">
+              No runs yet — pick a photo and run models.
+            </p>
+          ) : (
+            <ul className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-1.5">
+              {recentRuns.map((run) => {
+                const active = selectedRunId === run.id;
+                const roleLabel = run.photoRole
+                  ? photoRoleLabel(run.photoRole as PhotoRole)
+                  : "Photo";
+                const platform =
+                  run.listingPlatform &&
+                  run.listingPlatform in PLATFORM_LABELS
+                    ? PLATFORM_LABELS[run.listingPlatform as Platform]
+                    : run.listingPlatform;
+                return (
+                  <li key={run.id}>
+                    <button
+                      type="button"
+                      onClick={() => void openRecentRun(run)}
+                      title={`${run.listingTitle || platform || "Listing"} · ${roleLabel}`}
+                      className={`flex w-full items-center gap-2 rounded-lg px-1.5 py-1.5 text-left transition ${
+                        active
+                          ? "bg-[var(--accent-soft)] ring-1 ring-[var(--accent)]"
+                          : "hover:bg-[var(--surface-muted)]"
+                      }`}
+                    >
+                      <div
+                        className="h-10 w-10 shrink-0 overflow-hidden rounded-md ring-1 ring-[var(--border)]"
+                        style={resultBackdropStyle(labBackdrop)}
+                      >
+                        {run.thumbUrl ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={run.thumbUrl}
+                            alt=""
+                            loading="lazy"
+                            decoding="async"
+                            className="h-full w-full object-contain"
+                          />
+                        ) : (
+                          <div className="flex h-full items-center justify-center text-[9px] text-[var(--muted)]">
+                            —
+                          </div>
+                        )}
+                      </div>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-xs font-semibold leading-tight text-[var(--foreground)]">
+                          {run.listingTitle || platform || "Listing"}
+                        </span>
+                        <span className="mt-0.5 block truncate text-[10px] leading-tight text-[var(--muted)]">
+                          {roleLabel} · {run.okCount}/{run.resultCount}
+                          {run.createdAt ? (
+                            <>
+                              {" · "}
+                              <LocalDateTime
+                                iso={run.createdAt}
+                                className="inline"
+                              />
+                            </>
+                          ) : null}
+                        </span>
+                      </span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </aside>
       </div>
 
       {preview ? (
@@ -1585,16 +1764,98 @@ function FalRequestMeta({ result }: { result: RunResult }) {
   if (!href) return null;
 
   return (
-    <div className="mt-1 text-xs">
-      <a
-        href={href}
-        target="_blank"
-        rel="noreferrer"
-        className="font-semibold text-[var(--accent)] hover:underline"
-        title="Opens this request in fal Recent History (includes billed cost when available)"
+    <a
+      href={href}
+      target="_blank"
+      rel="noreferrer"
+      className="shrink-0 font-semibold text-[var(--accent)] hover:underline"
+      title="Opens this request in fal Recent History (includes billed cost when available)"
+    >
+      fal request
+    </a>
+  );
+}
+
+function ResultCompareImage({
+  resultUrl,
+  originalUrl,
+  label,
+  backdrop,
+  onOpenFull,
+}: {
+  resultUrl: string;
+  originalUrl: string | null;
+  label: string;
+  backdrop: LabBackdrop;
+  onOpenFull: () => void;
+}) {
+  const [showOriginal, setShowOriginal] = useState(false);
+  const showingOriginal = Boolean(showOriginal && originalUrl);
+  const src = showingOriginal && originalUrl ? originalUrl : resultUrl;
+
+  function holdStart(e: ReactPointerEvent<HTMLButtonElement>) {
+    e.preventDefault();
+    e.stopPropagation();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    setShowOriginal(true);
+  }
+
+  function holdEnd(e: ReactPointerEvent<HTMLButtonElement>) {
+    e.stopPropagation();
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    }
+    setShowOriginal(false);
+  }
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={onOpenFull}
+        title="View full size"
+        className="block w-full cursor-zoom-in"
       >
-        fal request →
-      </a>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={src}
+          alt={label}
+          loading="lazy"
+          decoding="async"
+          draggable={false}
+          className="aspect-square w-full object-contain"
+          style={
+            showingOriginal
+              ? { backgroundColor: "#f3f4f6" }
+              : resultBackdropStyle(backdrop)
+          }
+        />
+      </button>
+      {showingOriginal ? (
+        <span className="pointer-events-none absolute left-2 top-2 rounded bg-black/55 px-1.5 py-0.5 text-[10px] font-semibold text-white">
+          Original
+        </span>
+      ) : null}
+      {originalUrl ? (
+        <button
+          type="button"
+          title="Hold to compare with original"
+          aria-label="Hold to compare with original"
+          onPointerDown={holdStart}
+          onPointerUp={holdEnd}
+          onPointerCancel={holdEnd}
+          onLostPointerCapture={() => setShowOriginal(false)}
+          onClick={(e) => e.stopPropagation()}
+          onContextMenu={(e) => e.preventDefault()}
+          className={`absolute bottom-2 left-2 z-10 select-none rounded-md px-2 py-1 text-[10px] font-semibold text-white shadow-sm backdrop-blur-[1px] transition touch-none ${
+            showingOriginal
+              ? "bg-[var(--accent)]"
+              : "bg-black/45 hover:bg-black/60"
+          }`}
+        >
+          Hold original
+        </button>
+      ) : null}
     </div>
   );
 }

@@ -18,11 +18,13 @@ import {
   createBgLabRun,
   insertBgLabResult,
   listBgLabModelCostAverages,
+  listBgLabModelRatingStats,
   listBgLabRunsForPhoto,
   listRecentBgLabRuns,
   updateBgLabResultCost,
   uploadBgLabImage,
 } from "@/lib/supabase/bg-lab";
+import { isIdentifyPhotoRole, type PhotoRole } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -114,19 +116,25 @@ export async function GET(request: Request) {
   const wantRecent = url.searchParams.get("recent") === "1";
 
   if (!photoId) {
-    const [recentRuns, modelCostAverages] = wantRecent
+    const [recentRuns, modelCostAverages, modelRatingStats] = wantRecent
       ? await Promise.all([
           listRecentBgLabRuns({
             userId: auth.user.id,
             limit: 24,
           }),
           listBgLabModelCostAverages({ userId: auth.user.id }),
+          listBgLabModelRatingStats({ userId: auth.user.id }),
         ])
-      : [[], []];
+      : [[], [], []];
     return NextResponse.json({
       models: FAL_BG_MODELS,
       hasFalKey: Boolean(falKey()),
-      recentRuns: recentRuns.map((run) => ({
+      recentRuns: recentRuns
+        .filter((run) => {
+          const role = run.photo_role as PhotoRole | null;
+          return !role || !isIdentifyPhotoRole(role);
+        })
+        .map((run) => ({
         id: run.id,
         createdAt: run.created_at,
         photoId: run.listing_photo_id,
@@ -143,6 +151,11 @@ export async function GET(request: Request) {
         modelId: row.modelId,
         avgUsd: row.avgUsd,
         sampleCount: row.sampleCount,
+      })),
+      modelRatingStats: modelRatingStats.map((row) => ({
+        modelId: row.modelId,
+        upCount: row.upCount,
+        downCount: row.downCount,
       })),
     });
   }
@@ -175,6 +188,7 @@ export async function GET(request: Request) {
         costSource: r.cost_source,
         storagePath: r.storage_path,
         costLabel: formatCostUsd(r.cost_usd),
+        rating: r.rating,
         createdAt: r.created_at,
       })),
     })),
@@ -268,6 +282,7 @@ export async function POST(request: Request) {
             costSource: r.cost_source,
             storagePath: r.storage_path,
             costLabel: formatCostUsd(r.cost_usd),
+            rating: r.rating,
             createdAt: r.created_at,
           })),
         })),
@@ -423,7 +438,7 @@ export async function POST(request: Request) {
           }
 
           const ms = Date.now() - started;
-          await insertBgLabResult({
+          const inserted = await insertBgLabResult({
             runId: run.id,
             modelId: model.id,
             modelLabel: model.label,
@@ -442,6 +457,7 @@ export async function POST(request: Request) {
           });
 
           const result: ModelRunResult = {
+            id: inserted.id,
             modelId: model.id,
             label: model.label,
             provider: model.provider,
@@ -471,6 +487,7 @@ export async function POST(request: Request) {
             result: {
               ...result,
               runId: run.id,
+              rating: null,
               costLabel: formatCostUsd(result.costUsd ?? null),
               createdAt: new Date().toISOString(),
             },
