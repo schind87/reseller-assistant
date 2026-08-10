@@ -1307,18 +1307,17 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
             ) : null}
           </section>
 
-          <section className="flex flex-col gap-4 rounded-2xl border border-[var(--border)] bg-white p-6">
+          <section className="flex flex-col gap-3 rounded-2xl border border-[var(--border)] bg-white p-4 sm:p-5">
             <div>
-              <h2 className="font-[family-name:var(--font-brand)] text-2xl">
+              <h2 className="font-[family-name:var(--font-brand)] text-xl sm:text-2xl">
                 {PLATFORM_LABELS[platform]} listing fields
               </h2>
-              <p className="mt-2 text-base text-[var(--muted)]">
-                Edit these directly — same fields you will enter on{" "}
-                {PLATFORM_LABELS[platform]}. While posting, use{" "}
+              <p className="mt-1 text-sm text-[var(--muted)]">
+                Same fields you&apos;ll enter on {PLATFORM_LABELS[platform]}. Use{" "}
                 <span className="font-semibold text-[var(--foreground)]">
                   Tweak listing fields
                 </span>{" "}
-                in the Chrome extension for a larger editor popup.
+                in the extension for a larger editor while posting.
               </p>
             </div>
 
@@ -1349,7 +1348,7 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
                 rewritingDescription={rewritingDescription}
                 onSubmit={(e) => void saveDraft(e)}
                 footer={
-                  <div className="flex flex-col gap-3 pt-2 sm:flex-row">
+                  <div className="flex flex-col gap-2 pt-1 sm:flex-row">
                     <BigButton
                       type="submit"
                       disabled={saving || processing || rewritingDescription}
