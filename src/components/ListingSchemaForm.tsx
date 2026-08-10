@@ -25,6 +25,21 @@ type ListingSchemaFormProps = {
   rewritingDescription?: boolean;
 };
 
+function SyncedAtLabel({ syncedAt }: { syncedAt: string }) {
+  let text = syncedAt;
+  try {
+    text = new Date(syncedAt).toLocaleString();
+  } catch {
+    /* keep iso */
+  }
+  return (
+    <span suppressHydrationWarning>
+      {" · last synced "}
+      {text}
+    </span>
+  );
+}
+
 function readStructured(
   fields: StructuredFields,
   key: string
@@ -90,9 +105,11 @@ export function ListingSchemaForm({
       <p className="rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] px-4 py-3 text-base text-[var(--muted)]">
         Fields mirror the {schema.platform === "mercari" ? "Mercari" : "Poshmark"}{" "}
         sell form
-        {schema.source === "extension" && schema.syncedAt
-          ? ` · last synced ${new Date(schema.syncedAt).toLocaleString()}`
-          : " · using built-in clothing listing layout"}
+        {schema.source === "extension" && schema.syncedAt ? (
+          <SyncedAtLabel syncedAt={schema.syncedAt} />
+        ) : (
+          " · using built-in clothing listing layout"
+        )}
         . Category choices match the marketplace. Open the sell page with the
         Chrome extension and tap{" "}
         <span className="font-semibold text-[var(--foreground)]">

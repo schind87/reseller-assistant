@@ -189,18 +189,30 @@ function CostBadge({
   );
 }
 
-function formatRunTime(iso: string | undefined): string {
-  if (!iso) return "";
+function LocalDateTime({
+  iso,
+  className,
+}: {
+  iso: string | undefined;
+  className?: string;
+}) {
+  if (!iso) return null;
+  let text = iso;
   try {
-    return new Date(iso).toLocaleString(undefined, {
+    text = new Date(iso).toLocaleString(undefined, {
       month: "short",
       day: "numeric",
       hour: "numeric",
       minute: "2-digit",
     });
   } catch {
-    return iso;
+    /* keep iso */
   }
+  return (
+    <span className={className} suppressHydrationWarning>
+      {text}
+    </span>
+  );
 }
 
 /** Newest-first history for each model across all saved runs for a photo. */
@@ -710,7 +722,7 @@ export function AiBgDebugConsole({
           <ul className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {recentRuns.map((run) => {
               const active = selectedPhotoId === run.photoId;
-              const when = formatRunTime(run.createdAt);
+              const when = run.createdAt;
               const roleLabel = run.photoRole
                 ? photoRoleLabel(run.photoRole as PhotoRole)
                 : "Photo";
@@ -753,7 +765,12 @@ export function AiBgDebugConsole({
                       </span>
                       <span className="block text-xs text-[var(--muted)]">
                         {roleLabel} · {run.okCount}/{run.resultCount} ok
-                        {when ? ` · ${when}` : ""}
+                        {when ? (
+                          <>
+                            {" · "}
+                            <LocalDateTime iso={when} />
+                          </>
+                        ) : null}
                       </span>
                       <span className="mt-0.5 block truncate text-xs text-[var(--muted)]">
                         {run.modelLabels.join(", ") || "No models"}
@@ -1156,7 +1173,6 @@ export function AiBgDebugConsole({
                 );
                 const result = entry.versions[index];
                 if (!result) return null;
-                const when = formatRunTime(result.createdAt);
                 const canNewer = index > 0;
                 const canOlder = index < entry.versions.length - 1;
                 const isFresh = freshModelIds.has(entry.modelId);
@@ -1190,8 +1206,10 @@ export function AiBgDebugConsole({
                           ? ` · ${result.costUnits} × ${formatCostUsd(Number(result.costUnitPrice)) ?? ""}`
                           : ""}
                       </p>
-                      {when ? (
-                        <p className="text-xs text-[var(--muted)]">{when}</p>
+                      {result.createdAt ? (
+                        <p className="text-xs text-[var(--muted)]">
+                          <LocalDateTime iso={result.createdAt} />
+                        </p>
                       ) : null}
                       <FalRequestMeta result={result} />
                       <div className="mt-2 flex items-center justify-between gap-2">
