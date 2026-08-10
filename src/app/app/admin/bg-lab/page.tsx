@@ -37,7 +37,8 @@ export default async function AdminAiDebugPage({ searchParams }: PageProps) {
       listAdminPhotos({
         limit: 48,
         role: "all",
-        q: deepListingId || deepPhotoId || undefined,
+        // Only listing deep-links narrow the picker; photo deep-links just select.
+        q: deepListingId || undefined,
       }),
       listRecentBgLabRuns({
         userId: admin.id,
