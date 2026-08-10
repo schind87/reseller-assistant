@@ -7,6 +7,7 @@ import {
   listAdminPhotos,
 } from "@/lib/supabase/admin-queries";
 import {
+  countBgLabSavedResultsByPhotoIds,
   listBgLabModelCostAverages,
   listBgLabModelRatingStats,
   listRecentBgLabRuns,
@@ -55,6 +56,10 @@ export default async function AdminAiDebugPage({ searchParams }: PageProps) {
     return [deepPhoto, ...listed];
   })();
 
+  const savedResultCounts = await countBgLabSavedResultsByPhotoIds(
+    photos.map((p) => p.id),
+  );
+
   const selectedPhotoId =
     deepPhotoId && deepPhoto && !isIdentifyPhotoRole(deepPhoto.role)
       ? deepPhotoId
@@ -72,6 +77,7 @@ export default async function AdminAiDebugPage({ searchParams }: PageProps) {
       }
       initialSelectedPhotoId={selectedPhotoId}
       initialListingFilter={deepListingId}
+      initialSavedResultCounts={savedResultCounts}
       initialRecentRuns={recentRuns
         .filter((run) => {
           const role = run.photo_role as PhotoRole | null;

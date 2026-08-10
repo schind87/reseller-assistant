@@ -492,3 +492,54 @@ export async function listRecentBgLabRuns(opts?: {
 
   return summaries;
 }
+
+/** Count of saved AI output images (ok + storage) per listing photo. */
+export async function countBgLabSavedResultsByPhotoIds(
+  photoIds: string[],
+): Promise<Record<string, number>> {
+  const unique = [...new Set(photoIds.filter(Boolean))];
+  const counts: Record<string, number> = {};
+  for (const id of unique) counts[id] = 0;
+  if (unique.length === 0) return counts;
+
+  const supabase = createAdminClient();
+  const { data: runs, error: runsError } = await supabase
+    .from("bg_lab_runs")
+    .select("id, listing_photo_id")
+    .in("listing_photo_id", unique);
+  if (runsError) {
+    throw new Error(`countBgLabSavedResultsByPhotoIds runs: ${runsError.message}`);
+  }
+
+  const runRows = runs ?? [];
+  if (runRows.length === 0) return counts;
+
+  const photoByRunId = new Map<string, string>();
+  for (const run of runRows) {
+    photoByRunId.set(
+      run.id as string,
+      run.listing_photo_id as string,
+    );
+  }
+
+  const runIds = [...photoByRunId.keys()];
+  const { data: results, error: resultsError } = await supabase
+    .from("bg_lab_results")
+    .select("run_id")
+    .in("run_id", runIds)
+    .eq("ok", true)
+    .not("storage_path", "is", null);
+  if (resultsError) {
+    throw new Error(
+      `countBgLabSavedResultsByPhotoIds results: ${resultsError.message}`,
+    );
+  }
+
+  for (const row of results ?? []) {
+    const photoId = photoByRunId.get(row.run_id as string);
+    if (!photoId) continue;
+    counts[photoId] = (counts[photoId] ?? 0) + 1;
+  }
+
+  return counts;
+}

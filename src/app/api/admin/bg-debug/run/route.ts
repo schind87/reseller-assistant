@@ -16,6 +16,7 @@ import {
 import { getAdminPhotoById } from "@/lib/supabase/admin-queries";
 import {
   createBgLabRun,
+  countBgLabSavedResultsByPhotoIds,
   insertBgLabResult,
   listBgLabModelCostAverages,
   listBgLabModelRatingStats,
@@ -114,6 +115,27 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const photoId = url.searchParams.get("photoId")?.trim();
   const wantRecent = url.searchParams.get("recent") === "1";
+  const savedCountPhotoIds = url.searchParams
+    .get("photoIds")
+    ?.split(",")
+    .map((id) => id.trim())
+    .filter(Boolean);
+
+  if (savedCountPhotoIds && savedCountPhotoIds.length > 0) {
+    try {
+      const counts = await countBgLabSavedResultsByPhotoIds(savedCountPhotoIds);
+      return NextResponse.json({ counts });
+    } catch (err) {
+      console.error("admin bg-debug saved counts error:", err);
+      return NextResponse.json(
+        {
+          error:
+            err instanceof Error ? err.message : "Could not load saved counts",
+        },
+        { status: 500 },
+      );
+    }
+  }
 
   if (!photoId) {
     const [recentRuns, modelCostAverages, modelRatingStats] = wantRecent
@@ -319,6 +341,7 @@ export async function POST(request: Request) {
       { status: 404 },
     );
   }
+  const photoSignedUrl = photo.signedUrl;
 
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
@@ -328,7 +351,7 @@ export async function POST(request: Request) {
       };
 
       try {
-        const sourceBytes = await downloadImageBuffer(photo.signedUrl!);
+        const sourceBytes = await downloadImageBuffer(photoSignedUrl);
         const sourceMeta = await sharp(sourceBytes).metadata();
         const width = sourceMeta.width ?? 1024;
         const height = sourceMeta.height ?? 1024;
@@ -352,21 +375,19 @@ export async function POST(request: Request) {
             listingId: photo.listing_id,
             listingTitle: photo.listing_title,
             ownerEmail: photo.owner_email,
-            signedUrl: photo.signedUrl,
+            signedUrl: photoSignedUrl,
             processedSignedUrl: photo.processedSignedUrl,
           },
         });
 
-        const results: ModelRunResult[] = [];
         let completed = 0;
 
-        for (const rawId of modelIds) {
+        async function runOneModel(rawId: string): Promise<ModelRunResult> {
           const model = getFalBgModel(rawId);
           const started = Date.now();
 
           if (!model) {
-            completed += 1;
-            const failed: ModelRunResult = {
+            return {
               modelId: rawId,
               label: rawId,
               provider: "fal",
@@ -375,19 +396,6 @@ export async function POST(request: Request) {
               imageUrl: null,
               error: "Unknown model id",
             };
-            results.push(failed);
-            write({
-              type: "result",
-              runId: run.id,
-              completed,
-              total,
-              result: {
-                ...failed,
-                costLabel: null,
-                createdAt: new Date().toISOString(),
-              },
-            });
-            continue;
           }
 
           let ok = false;
@@ -405,7 +413,7 @@ export async function POST(request: Request) {
           try {
             const { requestId, data } = await falQueueInfer(
               model.falPath,
-              buildFalInput(model, photo.signedUrl!, width, height),
+              buildFalInput(model, photoSignedUrl, width, height),
             );
             falRequestId = requestId;
             const remoteUrl = extractFalImageUrl(data);
@@ -456,7 +464,7 @@ export async function POST(request: Request) {
             error: error ?? null,
           });
 
-          const result: ModelRunResult = {
+          return {
             id: inserted.id,
             modelId: model.id,
             label: model.label,
@@ -477,72 +485,80 @@ export async function POST(request: Request) {
             costSource,
             storagePath,
           };
-          results.push(result);
-          completed += 1;
-          write({
-            type: "result",
-            runId: run.id,
-            completed,
-            total,
-            result: {
-              ...result,
-              runId: run.id,
-              rating: null,
-              costLabel: formatCostUsd(result.costUsd ?? null),
-              createdAt: new Date().toISOString(),
-            },
-          });
         }
 
-        // Second pass: upgrade catalog estimates to actual fal billing when ready.
-        for (let i = 0; i < results.length; i++) {
-          const result = results[i];
-          if (
-            !result.ok ||
-            !result.falRequestId ||
-            !result.falEndpoint ||
-            result.costSource === "billing"
-          ) {
-            continue;
-          }
-          try {
-            const modelDef = getFalBgModel(result.modelId);
-            const billing = await resolveFalCost({
-              requestId: result.falRequestId,
-              endpointId: result.falEndpoint,
-              settleMs: i === 0 ? 1500 : 0,
-              approxCostHint: modelDef?.approxCost,
-            });
-            if (billing.source !== "billing_event") continue;
-            const next = applyBillingToResult(result, billing);
-            results[i] = next;
-            await updateBgLabResultCost({
-              runId: run.id,
-              modelId: result.modelId,
-              costUsd: next.costUsd ?? null,
-              costUnitPrice: next.costUnitPrice ?? null,
-              costUnits: next.costUnits ?? null,
-              costCurrency: next.costCurrency ?? "USD",
-              costSource: next.costSource ?? null,
-            });
+        // Fan out all fal jobs at once; stream each result as it finishes.
+        const results = await Promise.all(
+          modelIds.map(async (rawId) => {
+            const result = await runOneModel(rawId);
+            completed += 1;
             write({
-              type: "cost",
+              type: "result",
               runId: run.id,
+              completed,
+              total,
               result: {
-                modelId: next.modelId,
-                costUsd: next.costUsd,
-                costUnitPrice: next.costUnitPrice,
-                costUnits: next.costUnits,
-                costCurrency: next.costCurrency,
-                costSource: next.costSource,
-                falDashboardUrl: next.falDashboardUrl,
-                costLabel: formatCostUsd(next.costUsd ?? null),
+                ...result,
+                runId: run.id,
+                rating: null,
+                costLabel: formatCostUsd(result.costUsd ?? null),
+                createdAt: new Date().toISOString(),
               },
             });
-          } catch {
-            /* keep prior cost */
-          }
-        }
+            return result;
+          }),
+        );
+
+        // Second pass: upgrade catalog estimates to actual fal billing when ready.
+        await Promise.all(
+          results.map(async (result, i) => {
+            if (
+              !result.ok ||
+              !result.falRequestId ||
+              !result.falEndpoint ||
+              result.costSource === "billing"
+            ) {
+              return;
+            }
+            try {
+              const modelDef = getFalBgModel(result.modelId);
+              const billing = await resolveFalCost({
+                requestId: result.falRequestId,
+                endpointId: result.falEndpoint,
+                settleMs: 1500,
+                approxCostHint: modelDef?.approxCost,
+              });
+              if (billing.source !== "billing_event") return;
+              const next = applyBillingToResult(result, billing);
+              results[i] = next;
+              await updateBgLabResultCost({
+                runId: run.id,
+                modelId: result.modelId,
+                costUsd: next.costUsd ?? null,
+                costUnitPrice: next.costUnitPrice ?? null,
+                costUnits: next.costUnits ?? null,
+                costCurrency: next.costCurrency ?? "USD",
+                costSource: next.costSource ?? null,
+              });
+              write({
+                type: "cost",
+                runId: run.id,
+                result: {
+                  modelId: next.modelId,
+                  costUsd: next.costUsd,
+                  costUnitPrice: next.costUnitPrice,
+                  costUnits: next.costUnits,
+                  costCurrency: next.costCurrency,
+                  costSource: next.costSource,
+                  falDashboardUrl: next.falDashboardUrl,
+                  costLabel: formatCostUsd(next.costUsd ?? null),
+                },
+              });
+            } catch {
+              /* keep prior cost */
+            }
+          }),
+        );
 
         write({ type: "done", runId: run.id, total: results.length });
       } catch (err) {

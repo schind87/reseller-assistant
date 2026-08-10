@@ -1,6 +1,6 @@
 "use client";
 
-import { startTransition, useEffect, useMemo, useState, useSyncExternalStore, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
+import { startTransition, useCallback, useEffect, useMemo, useState, useSyncExternalStore, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 import Link from "next/link";
 import { BigButton } from "@/components/BigButton";
 import type { FalBgModelDef, FalBgModelId } from "@/lib/ai/fal-bg-models";
@@ -99,6 +99,22 @@ type PreviewImage = {
   src: string;
   label: string;
   originalUrl?: string | null;
+  /** Present when previewing a lab model result. */
+  result?: RunResult | null;
+  costScale?: number | null;
+  isCheapest?: boolean;
+  /** Present when previewing a source listing photo. */
+  photoMeta?: {
+    role: string;
+    listingTitle: string | null;
+    platform: string;
+    ownerEmail: string | null;
+  } | null;
+};
+
+type PreviewState = {
+  items: PreviewImage[];
+  index: number;
 };
 
 type LabBackdrop = "white" | "dark";
@@ -191,6 +207,8 @@ type Props = {
   initialModelRatingStats?: ModelRatingStats[];
   initialSelectedPhotoId?: string | null;
   initialListingFilter?: string | null;
+  /** Saved AI result image counts keyed by listing photo id. */
+  initialSavedResultCounts?: Record<string, number>;
   models: FalBgModelDef[];
   hasFalKey: boolean;
 };
@@ -236,12 +254,35 @@ function costSourceLabel(source: string | null | undefined): string | null {
   }
 }
 
+function costScaleStyles(
+  scale: number,
+  isActual: boolean,
+): { backgroundColor: string; color: string; boxShadow?: string } {
+  const t = Math.min(1, Math.max(0, scale));
+  // 0 = cheapest (green), 1 = most expensive (red)
+  const hue = 120 * (1 - t);
+  if (isActual) {
+    return {
+      backgroundColor: `hsl(${hue} 62% 38%)`,
+      color: "#ffffff",
+    };
+  }
+  return {
+    backgroundColor: `hsl(${hue} 72% 90%)`,
+    color: `hsl(${hue} 60% 26%)`,
+    boxShadow: `inset 0 0 0 1px hsl(${hue} 45% 72%)`,
+  };
+}
+
 function CostBadge({
   result,
   size = "md",
+  costScale = null,
 }: {
   result: RunResult;
   size?: "sm" | "md";
+  /** 0 = cheapest in run (green), 1 = most expensive (red). */
+  costScale?: number | null;
 }) {
   const cost = formatCostUsd(result.costUsd);
   const source = costSourceLabel(result.costSource);
@@ -258,13 +299,18 @@ function CostBadge({
     );
   }
   const isActual = source === "actual";
+  const scaleStyles =
+    costScale != null ? costScaleStyles(costScale, isActual) : null;
   return (
     <span
       className={`inline-flex items-center gap-1 rounded-md font-bold tabular-nums shadow-sm ${
-        isActual
-          ? "bg-[var(--accent)] text-white"
-          : "bg-amber-100 text-amber-950 ring-1 ring-amber-200"
+        scaleStyles
+          ? ""
+          : isActual
+            ? "bg-[var(--accent)] text-white"
+            : "bg-amber-100 text-amber-950 ring-1 ring-amber-200"
       } ${size === "sm" ? "px-1.5 py-0.5 text-[10px]" : "px-2 py-1 text-sm"}`}
+      style={scaleStyles ?? undefined}
       title={
         isActual
           ? "Actual amount charged by fal for this request"
@@ -350,11 +396,15 @@ export function AiBgDebugConsole({
   initialModelRatingStats = [],
   initialSelectedPhotoId = null,
   initialListingFilter = null,
+  initialSavedResultCounts = {},
   models,
   hasFalKey,
 }: Props) {
   const [photos, setPhotos] = useState(initialPhotos);
   const [total, setTotal] = useState(initialTotal);
+  const [savedResultCounts, setSavedResultCounts] = useState<
+    Record<string, number>
+  >(initialSavedResultCounts);
   const [loading, setLoading] = useState(false);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -445,7 +495,7 @@ export function AiBgDebugConsole({
   const [versionIndexByModel, setVersionIndexByModel] = useState<
     Record<string, number>
   >({});
-  const [preview, setPreview] = useState<PreviewImage | null>(null);
+  const [preview, setPreview] = useState<PreviewState | null>(null);
 
   const selectedPhoto =
     photos.find((p) => p.id === selectedPhotoId) ?? photos[0] ?? null;
@@ -465,8 +515,8 @@ export function AiBgDebugConsole({
     [recentRuns, selectedRunId],
   );
 
-  /** Model ids whose currently shown version is cheapest within its lab run. */
-  const cheapestModelIds = useMemo(() => {
+  /** Per-model cost rank in the currently shown run(s): 0 cheap → 1 expensive. */
+  const costScaleByModelId = useMemo(() => {
     const byRun = new Map<string, { modelId: string; cost: number }[]>();
     for (const entry of modelHistories) {
       const index = Math.min(
@@ -482,17 +532,36 @@ export function AiBgDebugConsole({
       list.push({ modelId: entry.modelId, cost });
       byRun.set(runId, list);
     }
+    const scales = new Map<string, number>();
     const winners = new Set<string>();
+    // Wait until every model in the live batch finishes before crowning
+    // cheapest — otherwise the badge jumps as partial results stream in.
+    const runBatchComplete = !running && pendingModelIds.length === 0;
     for (const list of byRun.values()) {
-      if (list.length < 2) continue;
+      if (list.length === 0) continue;
       let min = Infinity;
-      for (const row of list) min = Math.min(min, row.cost);
+      let max = -Infinity;
       for (const row of list) {
-        if (row.cost === min) winners.add(row.modelId);
+        min = Math.min(min, row.cost);
+        max = Math.max(max, row.cost);
+      }
+      const span = max - min;
+      for (const row of list) {
+        const scale = span <= 0 ? 0 : (row.cost - min) / span;
+        scales.set(row.modelId, scale);
+        if (
+          runBatchComplete &&
+          row.cost === min &&
+          list.length >= 2
+        ) {
+          winners.add(row.modelId);
+        }
       }
     }
-    return winners;
-  }, [modelHistories, versionIndexByModel]);
+    return { scales, winners };
+  }, [modelHistories, versionIndexByModel, running, pendingModelIds.length]);
+
+  const cheapestModelIds = costScaleByModelId.winners;
 
   const avgCostByModel = useMemo(() => {
     const map = new Map<string, ModelCostAverage>();
@@ -543,10 +612,79 @@ export function AiBgDebugConsole({
     src: string | null | undefined,
     label: string,
     originalUrl?: string | null,
+    gallery?: PreviewImage[],
   ) {
     if (!src) return;
-    setPreview({ src, label, originalUrl: originalUrl ?? null });
+    const item: PreviewImage = {
+      src,
+      label,
+      originalUrl: originalUrl ?? null,
+    };
+    const items =
+      gallery && gallery.length > 0 ? [...gallery] : [item];
+    let index = items.findIndex((entry) => entry.src === src);
+    if (index < 0) {
+      items.unshift(item);
+      index = 0;
+    }
+    setPreview({ items, index });
   }
+
+  const stepPreview = useCallback((delta: number) => {
+    setPreview((prev) => {
+      if (!prev || prev.items.length < 2) return prev;
+      const next =
+        (prev.index + delta + prev.items.length) % prev.items.length;
+      return { ...prev, index: next };
+    });
+  }, []);
+
+  const previewGalleryItems = useMemo(() => {
+    const originalUrl = selectedPhoto?.signedUrl ?? null;
+    const items: PreviewImage[] = [];
+    for (const entry of modelHistories) {
+      const index = Math.min(
+        versionIndexByModel[entry.modelId] ?? 0,
+        entry.versions.length - 1,
+      );
+      const result = entry.versions[index];
+      if (!result?.ok || !result.imageUrl) continue;
+      items.push({
+        src: result.imageUrl,
+        label: entry.label,
+        originalUrl,
+        result,
+        costScale: costScaleByModelId.scales.get(entry.modelId) ?? null,
+        isCheapest: costScaleByModelId.winners.has(entry.modelId),
+      });
+    }
+    return items;
+  }, [
+    modelHistories,
+    versionIndexByModel,
+    selectedPhoto?.signedUrl,
+    costScaleByModelId,
+  ]);
+
+  const photoPickerGallery = useMemo(
+    () =>
+      photos
+        .filter((photo) => Boolean(photo.signedUrl))
+        .map(
+          (photo): PreviewImage => ({
+            src: photo.signedUrl as string,
+            label: photo.listing_title || photoRoleLabel(photo.role),
+            originalUrl: null,
+            photoMeta: {
+              role: photoRoleLabel(photo.role),
+              listingTitle: photo.listing_title,
+              platform: PLATFORM_LABELS[photo.listing_platform],
+              ownerEmail: photo.owner_email,
+            },
+          }),
+        ),
+    [photos],
+  );
 
   function applyHistory(runs: SavedRun[], preferLatest = true) {
     setHistory(runs);
@@ -631,6 +769,23 @@ export function AiBgDebugConsole({
     };
   }, [selectedPhotoId, running]);
 
+  async function loadSavedResultCounts(photoIds: string[]) {
+    const ids = [...new Set(photoIds.filter(Boolean))];
+    if (ids.length === 0) return;
+    try {
+      const params = new URLSearchParams({
+        photoIds: ids.join(","),
+      });
+      const res = await fetch(`/api/admin/bg-debug/run?${params}`);
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) return;
+      const counts = (json.counts ?? {}) as Record<string, number>;
+      setSavedResultCounts((prev) => ({ ...prev, ...counts }));
+    } catch {
+      /* non-fatal */
+    }
+  }
+
   async function loadPhotos(nextRole = role, nextQ = q) {
     setLoading(true);
     setError(null);
@@ -654,6 +809,7 @@ export function AiBgDebugConsole({
           return list[0]?.id ?? null;
         });
       });
+      void loadSavedResultCounts(list.map((p) => p.id));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not load photos");
     } finally {
@@ -740,6 +896,7 @@ export function AiBgDebugConsole({
             });
             setTotal(json.total ?? list.length);
           });
+          void loadSavedResultCounts(list.map((p) => p.id));
         }
       } catch {
         /* history load for photoId still proceeds */
@@ -767,6 +924,18 @@ export function AiBgDebugConsole({
         ),
       })),
     );
+
+    setPreview((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        items: prev.items.map((item) =>
+          item.result?.id === resultId && item.result
+            ? { ...item, result: { ...item.result, rating } }
+            : item,
+        ),
+      };
+    });
 
     setModelRatingStats((prev) => {
       const next = [...prev];
@@ -825,6 +994,7 @@ export function AiBgDebugConsole({
     if (!selectedPhoto || selectedModels.size === 0) return;
     const modelIds = [...selectedModels] as FalBgModelId[];
     const total = modelIds.length;
+    const photoIdForRun = selectedPhoto.id;
     writeStoredLabPrefs({
       selectedModels: modelIds,
       labBackdrop,
@@ -870,6 +1040,12 @@ export function AiBgDebugConsole({
         next.add(result.modelId);
         return next;
       });
+      if (result.ok && result.imageUrl) {
+        setSavedResultCounts((prev) => ({
+          ...prev,
+          [photoIdForRun]: (prev[photoIdForRun] ?? 0) + 1,
+        }));
+      }
     };
 
     const patchCost = (
@@ -996,6 +1172,7 @@ export function AiBgDebugConsole({
       setRunning(false);
       setRunProgress(null);
       setPendingModelIds([]);
+      void loadSavedResultCounts([photoIdForRun]);
       // Keep fresh highlights briefly until user starts another run / leaves.
     }
   }
@@ -1075,6 +1252,14 @@ export function AiBgDebugConsole({
 
       <div className="grid items-start gap-5 lg:grid-cols-[minmax(22rem,28rem)_minmax(0,1fr)_13.5rem]">
         <div className="flex max-h-[calc(100vh-1rem)] flex-col gap-4 overflow-hidden rounded-2xl border border-[var(--border)] bg-white p-5 lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)]">
+          <div className="shrink-0">
+            <h2 className="text-lg font-semibold text-[var(--foreground)]">
+              Photo selection
+            </h2>
+            <p className="mt-0.5 text-sm text-[var(--muted)]">
+              {loading ? "Loading…" : `${photos.length} shown · ${total} total`}
+            </p>
+          </div>
           <form
             className="grid shrink-0 gap-3 sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:items-center"
             onSubmit={(e) => {
@@ -1113,15 +1298,12 @@ export function AiBgDebugConsole({
             </button>
           </form>
 
-          <p className="shrink-0 text-sm text-[var(--muted)]">
-            {loading ? "Loading…" : `${photos.length} shown · ${total} total`}
-          </p>
-
           <ul className="grid min-h-0 flex-1 grid-cols-2 gap-3 overflow-y-auto overscroll-contain sm:grid-cols-3">
             {photos.map((photo) => {
               const active = photo.id === selectedPhoto?.id;
               const previewLabel =
                 photo.listing_title || photoRoleLabel(photo.role);
+              const savedCount = savedResultCounts[photo.id] ?? 0;
               return (
                 <li key={photo.id}>
                   <div
@@ -1148,10 +1330,23 @@ export function AiBgDebugConsole({
                           className="aspect-square w-full bg-[var(--surface-muted)] object-cover"
                         />
                       </button>
+                      {savedCount > 0 ? (
+                        <span
+                          className="pointer-events-none absolute right-1.5 top-1.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-black/70 px-1.5 text-[11px] font-bold tabular-nums text-white"
+                          title={`${savedCount} saved AI result${savedCount === 1 ? "" : "s"}`}
+                        >
+                          {savedCount}
+                        </span>
+                      ) : null}
                       <MagnifyButton
                         disabled={!photo.signedUrl}
                         onClick={() =>
-                          openPreview(photo.signedUrl, previewLabel)
+                          openPreview(
+                            photo.signedUrl,
+                            previewLabel,
+                            null,
+                            photoPickerGallery,
+                          )
                         }
                       />
                     </div>
@@ -1221,6 +1416,8 @@ export function AiBgDebugConsole({
                         selectedPhoto.signedUrl,
                         selectedPhoto.listing_title ||
                           photoRoleLabel(selectedPhoto.role),
+                        null,
+                        photoPickerGallery,
                       )
                     }
                   />
@@ -1545,11 +1742,9 @@ export function AiBgDebugConsole({
                   <article
                     key={entry.modelId}
                     className={`overflow-hidden rounded-xl ring-1 transition ${
-                      isCheapest
-                        ? "ring-2 ring-amber-400 shadow-[0_0_0_3px_rgba(251,191,36,0.25)]"
-                        : isFresh
-                          ? "ring-[var(--accent)]"
-                          : "ring-[var(--border)]"
+                      isFresh
+                        ? "ring-[var(--accent)]"
+                        : "ring-[var(--border)]"
                     }`}
                   >
                     {result.ok && result.imageUrl ? (
@@ -1563,6 +1758,7 @@ export function AiBgDebugConsole({
                             result.imageUrl,
                             entry.label,
                             selectedPhoto?.signedUrl ?? null,
+                            previewGalleryItems,
                           )
                         }
                       />
@@ -1587,9 +1783,15 @@ export function AiBgDebugConsole({
                           ) : null}
                         </p>
                         <div className="flex shrink-0 flex-col items-end gap-1">
-                          <CostBadge result={result} />
+                          <CostBadge
+                            result={result}
+                            costScale={
+                              costScaleByModelId.scales.get(entry.modelId) ??
+                              null
+                            }
+                          />
                           {isCheapest ? (
-                            <span className="inline-flex animate-pulse items-center gap-1 rounded-full bg-gradient-to-r from-amber-400 via-yellow-300 to-amber-400 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-amber-950 shadow-sm ring-1 ring-amber-500/60">
+                            <span className="inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-amber-400 via-yellow-300 to-amber-400 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-amber-950 shadow-sm ring-1 ring-amber-500/60">
                               <CheapestStarIcon className="h-3 w-3" />
                               Cheapest!
                             </span>
@@ -1778,10 +1980,28 @@ export function AiBgDebugConsole({
 
       {preview ? (
         <ImageLightbox
-          src={preview.src}
-          label={preview.label}
-          originalUrl={preview.originalUrl}
+          item={preview.items[preview.index]!}
           backdrop={labBackdrop}
+          index={preview.index}
+          total={preview.items.length}
+          ratingBusy={
+            preview.items[preview.index]?.result?.id != null &&
+            ratingBusyId === preview.items[preview.index]?.result?.id
+          }
+          onRate={
+            preview.items[preview.index]?.result
+              ? (next) => {
+                  const result = preview.items[preview.index]?.result;
+                  if (result) void rateResult(result, next);
+                }
+              : undefined
+          }
+          onPrev={
+            preview.items.length > 1 ? () => stepPreview(-1) : undefined
+          }
+          onNext={
+            preview.items.length > 1 ? () => stepPreview(1) : undefined
+          }
           onClose={() => setPreview(null)}
         />
       ) : null}
@@ -2034,25 +2254,54 @@ function MagnifyButton({
 }
 
 function ImageLightbox({
-  src,
-  label,
-  originalUrl = null,
+  item,
   backdrop = "white",
+  index = 0,
+  total = 1,
+  ratingBusy = false,
+  onRate,
+  onPrev,
+  onNext,
   onClose,
 }: {
-  src: string;
-  label: string;
-  originalUrl?: string | null;
+  item: PreviewImage;
   backdrop?: LabBackdrop;
+  index?: number;
+  total?: number;
+  ratingBusy?: boolean;
+  onRate?: (next: "up" | "down") => void;
+  onPrev?: () => void;
+  onNext?: () => void;
   onClose: () => void;
 }) {
   const [showOriginal, setShowOriginal] = useState(false);
+  const originalUrl = item.originalUrl ?? null;
   const showingOriginal = Boolean(showOriginal && originalUrl);
-  const displaySrc = showingOriginal && originalUrl ? originalUrl : src;
+  const displaySrc =
+    showingOriginal && originalUrl ? originalUrl : item.src;
+  const canNav = Boolean(onPrev && onNext && total > 1);
+  const result = item.result ?? null;
+  const photoMeta = item.photoMeta ?? null;
+
+  useEffect(() => {
+    setShowOriginal(false);
+  }, [item.src]);
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") {
+        onClose();
+        return;
+      }
+      if (e.key === "ArrowLeft" && onPrev) {
+        e.preventDefault();
+        onPrev();
+        return;
+      }
+      if (e.key === "ArrowRight" && onNext) {
+        e.preventDefault();
+        onNext();
+      }
     }
     window.addEventListener("keydown", onKeyDown);
     const prev = document.body.style.overflow;
@@ -2061,7 +2310,7 @@ function ImageLightbox({
       window.removeEventListener("keydown", onKeyDown);
       document.body.style.overflow = prev;
     };
-  }, [onClose]);
+  }, [onClose, onPrev, onNext]);
 
   function holdStart(e: ReactPointerEvent<HTMLButtonElement>) {
     e.preventDefault();
@@ -2082,28 +2331,56 @@ function ImageLightbox({
     <div
       role="dialog"
       aria-modal="true"
-      aria-label={label}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
+      aria-label={item.label}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-3 sm:p-4"
       onClick={onClose}
     >
       <button
         type="button"
         onClick={onClose}
-        className="absolute right-4 top-4 touch-target rounded-xl bg-white/95 px-4 text-base font-semibold text-[var(--foreground)]"
+        className="absolute right-4 top-4 z-20 touch-target rounded-xl bg-white/95 px-4 text-base font-semibold text-[var(--foreground)]"
       >
         Close
       </button>
+      {canNav ? (
+        <>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onPrev?.();
+            }}
+            className="absolute left-2 top-1/2 z-20 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-white/95 text-xl font-semibold text-[var(--foreground)] shadow-sm transition hover:bg-white sm:left-4"
+            aria-label="Previous photo"
+            title="Previous (←)"
+          >
+            ‹
+          </button>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onNext?.();
+            }}
+            className="absolute right-2 top-1/2 z-20 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-white/95 text-xl font-semibold text-[var(--foreground)] shadow-sm transition hover:bg-white sm:right-4"
+            aria-label="Next photo"
+            title="Next (→)"
+          >
+            ›
+          </button>
+        </>
+      ) : null}
       <div
-        className="relative flex max-h-full max-w-full flex-col items-center gap-3"
+        className="relative flex max-h-full w-full max-w-[min(96vw,1200px)] flex-col items-stretch gap-3 lg:flex-row lg:items-start lg:gap-4"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="relative">
+        <div className="relative min-w-0 flex-1">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={displaySrc}
-            alt={label}
+            alt={item.label}
             draggable={false}
-            className="max-h-[min(90vh,1100px)] max-w-[min(96vw,1100px)] rounded-lg object-contain shadow-2xl"
+            className="max-h-[min(78vh,1000px)] w-full rounded-lg object-contain shadow-2xl"
             style={
               showingOriginal
                 ? { backgroundColor: "#f3f4f6" }
@@ -2129,9 +2406,131 @@ function ImageLightbox({
             />
           ) : null}
         </div>
-        <p className="rounded-lg bg-black/50 px-3 py-1 text-sm font-medium text-white">
-          {showingOriginal ? `${label} · original` : label}
-        </p>
+
+        <aside className="flex w-full shrink-0 flex-col gap-3 rounded-xl bg-white p-4 shadow-xl lg:w-72">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
+              {result ? "Model result" : "Photo"}
+            </p>
+            <h2 className="mt-1 text-lg font-semibold leading-snug text-[var(--foreground)]">
+              {showingOriginal ? `${item.label} · original` : item.label}
+            </h2>
+            {canNav ? (
+              <p className="mt-1 text-xs font-semibold tabular-nums text-[var(--muted)]">
+                {index + 1} / {total}
+              </p>
+            ) : null}
+          </div>
+
+          {result ? (
+            <>
+              <div className="flex flex-wrap items-center gap-2">
+                <CostBadge result={result} costScale={item.costScale ?? null} />
+                {item.isCheapest ? (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-amber-400 via-yellow-300 to-amber-400 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-amber-950 shadow-sm ring-1 ring-amber-500/60">
+                    <CheapestStarIcon className="h-3 w-3" />
+                    Cheapest!
+                  </span>
+                ) : null}
+              </div>
+              <dl className="space-y-1.5 text-sm text-[var(--muted)]">
+                <div className="flex justify-between gap-3">
+                  <dt>Provider</dt>
+                  <dd className="font-semibold text-[var(--foreground)]">
+                    {result.provider}
+                  </dd>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <dt>Time</dt>
+                  <dd className="font-semibold text-[var(--foreground)]">
+                    {formatDurationSeconds(result.ms)}
+                    {result.ok ? "" : " · failed"}
+                  </dd>
+                </div>
+                {result.createdAt ? (
+                  <div className="flex justify-between gap-3">
+                    <dt>Saved</dt>
+                    <dd className="font-semibold text-[var(--foreground)]">
+                      <LocalDateTime iso={result.createdAt} />
+                    </dd>
+                  </div>
+                ) : null}
+                {result.falDashboardUrl ? (
+                  <div className="flex justify-between gap-3">
+                    <dt>Request</dt>
+                    <dd>
+                      <FalRequestMeta result={result} />
+                    </dd>
+                  </div>
+                ) : null}
+              </dl>
+              {result.ok && result.id && onRate ? (
+                <div className="flex items-center gap-2 border-t border-[var(--border)] pt-3">
+                  <p className="mr-auto text-sm font-semibold text-[var(--foreground)]">
+                    Rate result
+                  </p>
+                  <button
+                    type="button"
+                    title="Thumbs up — good result"
+                    aria-label="Thumbs up"
+                    aria-pressed={result.rating === "up"}
+                    disabled={ratingBusy}
+                    onClick={() => onRate("up")}
+                    className={`inline-flex h-9 w-9 items-center justify-center rounded-md transition disabled:opacity-40 ${
+                      result.rating === "up"
+                        ? "bg-emerald-100 text-emerald-700 ring-1 ring-emerald-400"
+                        : "text-[var(--muted)] hover:bg-emerald-50 hover:text-emerald-700"
+                    }`}
+                  >
+                    <ThumbUpIcon className="h-5 w-5" />
+                  </button>
+                  <button
+                    type="button"
+                    title="Thumbs down — poor result"
+                    aria-label="Thumbs down"
+                    aria-pressed={result.rating === "down"}
+                    disabled={ratingBusy}
+                    onClick={() => onRate("down")}
+                    className={`inline-flex h-9 w-9 items-center justify-center rounded-md transition disabled:opacity-40 ${
+                      result.rating === "down"
+                        ? "bg-rose-100 text-rose-700 ring-1 ring-rose-400"
+                        : "text-[var(--muted)] hover:bg-rose-50 hover:text-rose-700"
+                    }`}
+                  >
+                    <ThumbDownIcon className="h-5 w-5" />
+                  </button>
+                </div>
+              ) : null}
+            </>
+          ) : photoMeta ? (
+            <dl className="space-y-1.5 text-sm text-[var(--muted)]">
+              <div className="flex justify-between gap-3">
+                <dt>Role</dt>
+                <dd className="font-semibold text-[var(--foreground)]">
+                  {photoMeta.role}
+                </dd>
+              </div>
+              <div className="flex justify-between gap-3">
+                <dt>Listing</dt>
+                <dd className="max-w-[10rem] truncate text-right font-semibold text-[var(--foreground)]">
+                  {photoMeta.listingTitle || "—"}
+                </dd>
+              </div>
+              <div className="flex justify-between gap-3">
+                <dt>Platform</dt>
+                <dd className="font-semibold text-[var(--foreground)]">
+                  {photoMeta.platform}
+                </dd>
+              </div>
+              <div className="flex justify-between gap-3">
+                <dt>Owner</dt>
+                <dd className="max-w-[10rem] truncate text-right font-semibold text-[var(--foreground)]">
+                  {photoMeta.ownerEmail || "—"}
+                </dd>
+              </div>
+            </dl>
+          ) : null}
+        </aside>
       </div>
     </div>
   );
