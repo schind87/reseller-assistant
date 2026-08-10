@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import sharp from "sharp";
 import { requireAdmin } from "@/lib/admin";
 import {
   buildFalInput,
@@ -13,6 +12,7 @@ import {
   falQueueInfer,
   resolveFalCost,
 } from "@/lib/ai/fal-lab";
+import { bakeExifOrientation } from "@/lib/image-orient";
 import { getAdminPhotoById } from "@/lib/supabase/admin-queries";
 import {
   createBgLabRun,
@@ -24,6 +24,7 @@ import {
   listRecentBgLabRuns,
   updateBgLabResultCost,
   uploadBgLabImage,
+  uploadBgLabOrientedSource,
 } from "@/lib/supabase/bg-lab";
 import { isIdentifyPhotoRole, type PhotoRole } from "@/lib/types";
 
@@ -352,9 +353,10 @@ export async function POST(request: Request) {
 
       try {
         const sourceBytes = await downloadImageBuffer(photoSignedUrl);
-        const sourceMeta = await sharp(sourceBytes).metadata();
-        const width = sourceMeta.width ?? 1024;
-        const height = sourceMeta.height ?? 1024;
+        // Bake EXIF so models like Ideogram (which ignore Orientation) stay upright.
+        const oriented = await bakeExifOrientation(sourceBytes);
+        const width = oriented.width;
+        const height = oriented.height;
 
         const run = await createBgLabRun({
           photoId,
@@ -362,6 +364,12 @@ export async function POST(request: Request) {
           runByUserId: auth.user.id,
           compositeWhite: false,
         });
+
+        const orientedSource = await uploadBgLabOrientedSource({
+          runId: run.id,
+          bytes: oriented.buffer,
+        });
+        const falImageUrl = orientedSource.signedUrl;
 
         const total = modelIds.length;
         write({
@@ -413,7 +421,7 @@ export async function POST(request: Request) {
           try {
             const { requestId, data } = await falQueueInfer(
               model.falPath,
-              buildFalInput(model, photoSignedUrl, width, height),
+              buildFalInput(model, falImageUrl, width, height),
             );
             falRequestId = requestId;
             const remoteUrl = extractFalImageUrl(data);

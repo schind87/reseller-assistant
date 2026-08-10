@@ -169,6 +169,32 @@ export async function uploadBgLabImage(params: {
   return path;
 }
 
+/** EXIF-baked source JPEG shared by every model in a lab run. */
+export async function uploadBgLabOrientedSource(params: {
+  runId: string;
+  bytes: Buffer;
+}): Promise<{ storagePath: string; signedUrl: string }> {
+  const supabase = createAdminClient();
+  const storagePath = `bg-lab/${params.runId}/_source.jpg`;
+  const { error } = await supabase.storage
+    .from("listing-photos")
+    .upload(storagePath, params.bytes, {
+      contentType: "image/jpeg",
+      upsert: true,
+    });
+  if (error) throw new Error(`uploadBgLabOrientedSource: ${error.message}`);
+
+  const { data, error: signError } = await supabase.storage
+    .from("listing-photos")
+    .createSignedUrl(storagePath, 3600);
+  if (signError || !data?.signedUrl) {
+    throw new Error(
+      `uploadBgLabOrientedSource sign: ${signError?.message ?? "no url"}`
+    );
+  }
+  return { storagePath, signedUrl: data.signedUrl };
+}
+
 export async function listBgLabRunsForPhoto(
   photoId: string,
   limit = 10
