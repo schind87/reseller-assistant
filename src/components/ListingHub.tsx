@@ -143,6 +143,24 @@ function roleCountLabel(
   return `${count} added · add another`;
 }
 
+function photoFullUrl(photo: ListingPhotoWithUrl): string | undefined {
+  if (photo.replace_background && photo.processedSignedUrl) {
+    return photo.processedSignedUrl;
+  }
+  return photo.signedUrl ?? undefined;
+}
+
+function photoThumbUrl(photo: ListingPhotoWithUrl): string | undefined {
+  if (photo.replace_background && photo.processedSignedUrl) {
+    return (
+      photo.processedSignedThumbUrl ??
+      photo.processedSignedUrl ??
+      undefined
+    );
+  }
+  return photo.signedThumbUrl ?? photo.signedUrl ?? undefined;
+}
+
 function imageFilesFromDataTransfer(dt: DataTransfer | null): File[] {
   if (!dt) return [];
   return Array.from(dt.files).filter((file) =>
@@ -1683,14 +1701,18 @@ function PhotoTile({
       ) : null}
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
-        src={
-          photo.replace_background && photo.processedSignedUrl
-            ? photo.processedSignedUrl
-            : (photo.signedUrl ?? undefined)
-        }
+        src={photoThumbUrl(photo)}
         alt={photoRoleLabel(photo.role)}
+        loading="lazy"
+        decoding="async"
         className="pointer-events-none aspect-square w-full object-cover"
         draggable={false}
+        onError={(e) => {
+          const full = photoFullUrl(photo);
+          if (full && e.currentTarget.src !== full) {
+            e.currentTarget.src = full;
+          }
+        }}
       />
       {cleaningBg ? (
         <div
@@ -1925,10 +1947,7 @@ function PhotoLightbox({
     };
   }, [onClose]);
 
-  const src =
-    photo.replace_background && photo.processedSignedUrl
-      ? photo.processedSignedUrl
-      : (photo.signedUrl ?? undefined);
+  const src = photoFullUrl(photo);
 
   return (
     <div

@@ -12,6 +12,7 @@ import {
   getSignedPhotoUrl,
   updateListing,
   updatePhoto,
+  withSignedPhotoUrls,
 } from "@/lib/supabase/queries";
 import { isPostingPhotoRole, type ListingPhotoWithUrl } from "@/lib/types";
 
@@ -174,11 +175,6 @@ export async function POST(request: Request, context: RouteContext) {
 async function withUrls(
   photo: Awaited<ReturnType<typeof updatePhoto>>
 ): Promise<ListingPhotoWithUrl> {
-  return {
-    ...photo,
-    signedUrl: await getSignedPhotoUrl(photo.storage_path),
-    processedSignedUrl: photo.processed_path
-      ? await getSignedPhotoUrl(photo.processed_path)
-      : null,
-  };
+  const [withUrl] = await withSignedPhotoUrls([photo]);
+  return withUrl;
 }

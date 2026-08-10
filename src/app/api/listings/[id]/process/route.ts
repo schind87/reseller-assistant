@@ -11,7 +11,7 @@ import { identifyFromPhotos } from "@/lib/ai/identify";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   getListingWithPhotos,
-  getSignedPhotoUrl,
+  getSignedPhotoUrls,
   getWorkspace,
   updateListing,
   updatePhoto,
@@ -51,16 +51,17 @@ export async function POST(_request: Request, context: RouteContext) {
 
     await updateListing(id, { status: "processing" });
 
-    const signedUrls = (
-      await Promise.all(
-        result.photos.map(async (photo) => ({
-          photo,
-          url: await getSignedPhotoUrl(photo.storage_path),
-        }))
-      )
-    ).filter((p): p is { photo: (typeof result.photos)[number]; url: string } =>
-      Boolean(p.url)
+    const signedByPath = await getSignedPhotoUrls(
+      result.photos.map((photo) => photo.storage_path)
     );
+    const signedUrls = result.photos
+      .map((photo) => ({
+        photo,
+        url: signedByPath.get(photo.storage_path) ?? null,
+      }))
+      .filter((p): p is { photo: (typeof result.photos)[number]; url: string } =>
+        Boolean(p.url)
+      );
 
     const identifyUrls = signedUrls
       .filter((p) => isIdentifyPhotoRole(p.photo.role))

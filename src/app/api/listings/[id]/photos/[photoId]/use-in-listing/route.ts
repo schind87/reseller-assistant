@@ -2,11 +2,10 @@ import { NextResponse } from "next/server";
 import { authorizeListingAccess } from "@/lib/listing-access";
 import {
   duplicatePhotoAsListingRole,
-  getSignedPhotoUrl,
+  withSignedPhotoUrls,
 } from "@/lib/supabase/queries";
 import {
   isPostingPhotoRole,
-  type ListingPhotoWithUrl,
   type PhotoRole,
 } from "@/lib/types";
 
@@ -37,13 +36,7 @@ export async function POST(request: Request, context: RouteContext) {
 
   try {
     const photo = await duplicatePhotoAsListingRole(id, photoId, role);
-    const withUrl: ListingPhotoWithUrl = {
-      ...photo,
-      signedUrl: await getSignedPhotoUrl(photo.storage_path),
-      processedSignedUrl: photo.processed_path
-        ? await getSignedPhotoUrl(photo.processed_path)
-        : null,
-    };
+    const [withUrl] = await withSignedPhotoUrls([photo]);
     return NextResponse.json({ photo: withUrl });
   } catch (err) {
     const message =

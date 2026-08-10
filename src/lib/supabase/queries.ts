@@ -10,6 +10,7 @@ import {
   type Listing,
   type ListingJoinToken,
   type ListingPhoto,
+  type ListingPhotoWithUrl,
   type ListingStatus,
   type PhotoRole,
   type Platform,
@@ -105,7 +106,12 @@ export async function listListings(userId: string): Promise<ListingWithThumb[]> 
     if (path) pathsToSign.push(path);
   }
 
-  const signed = await getSignedPhotoUrls(pathsToSign);
+  const signed = await getSignedPhotoUrls(pathsToSign, 3600, {
+    width: 320,
+    height: 320,
+    resize: "cover",
+    quality: 70,
+  });
   return listings.map((listing) => {
     const path = pathByListing.get(listing.id) ?? null;
     return {
@@ -636,10 +642,18 @@ export async function getSignedPhotoUrl(
   return map.get(storagePath) ?? null;
 }
 
-/** Sign many storage paths in one Storage API call. */
+export type PhotoSignTransform = {
+  width: number;
+  height?: number;
+  resize?: "cover" | "contain" | "fill";
+  quality?: number;
+};
+
+/** Sign many storage paths (one Storage call, or parallel when transforming). */
 export async function getSignedPhotoUrls(
   storagePaths: string[],
-  expiresIn = 3600
+  expiresIn = 3600,
+  transform?: PhotoSignTransform
 ): Promise<Map<string, string | null>> {
   const unique = [
     ...new Set(storagePaths.filter((p): p is string => Boolean(p))),
@@ -648,22 +662,108 @@ export async function getSignedPhotoUrls(
   if (unique.length === 0) return out;
 
   const supabase = createAdminClient();
+
+  // createSignedUrls does not accept transform — sign in parallel when needed.
+  if (transform) {
+    await Promise.all(
+      unique.map(async (path) => {
+        const { data: one, error: oneError } = await supabase.storage
+          .from("listing-photos")
+          .createSignedUrl(path, expiresIn, { transform });
+        if (oneError) {
+          console.error("getSignedPhotoUrls transform:", path, oneError.message);
+          out.set(path, null);
+          return;
+        }
+        out.set(path, one.signedUrl);
+      })
+    );
+    return out;
+  }
+
   const { data, error } = await supabase.storage
     .from("listing-photos")
     .createSignedUrls(unique, expiresIn);
 
   if (error) {
     console.error("getSignedPhotoUrls:", error.message);
-    for (const path of unique) out.set(path, null);
+    // Fall back to parallel single-path signs so images still load.
+    await Promise.all(
+      unique.map(async (path) => {
+        const { data: one, error: oneError } = await supabase.storage
+          .from("listing-photos")
+          .createSignedUrl(path, expiresIn);
+        if (oneError) {
+          console.error("getSignedPhotoUrls fallback:", path, oneError.message);
+          out.set(path, null);
+          return;
+        }
+        out.set(path, one.signedUrl);
+      })
+    );
     return out;
   }
 
   for (const path of unique) out.set(path, null);
   for (const row of data ?? []) {
-    if (!row.path) continue;
-    out.set(row.path, row.signedUrl ?? null);
+    const path = row.path;
+    if (!path) continue;
+    out.set(path, row.signedUrl ?? null);
   }
+
+  // If createSignedUrls returned rows but keys didn't match our paths, retry misses.
+  const missing = unique.filter((path) => !out.get(path));
+  if (missing.length > 0) {
+    await Promise.all(
+      missing.map(async (path) => {
+        const { data: one, error: oneError } = await supabase.storage
+          .from("listing-photos")
+          .createSignedUrl(path, expiresIn);
+        if (oneError) {
+          console.error("getSignedPhotoUrls miss:", path, oneError.message);
+          out.set(path, null);
+          return;
+        }
+        out.set(path, one.signedUrl);
+      })
+    );
+  }
+
   return out;
+}
+
+const LISTING_GRID_THUMB: PhotoSignTransform = {
+  width: 640,
+  height: 640,
+  resize: "cover",
+  quality: 72,
+};
+
+/** Attach signed original + processed URLs (full + grid thumbs) in parallel. */
+export async function withSignedPhotoUrls(
+  photos: ListingPhoto[],
+  expiresIn = 3600
+): Promise<ListingPhotoWithUrl[]> {
+  const paths = photos.flatMap((photo) =>
+    [photo.storage_path, photo.processed_path].filter(
+      (p): p is string => Boolean(p)
+    )
+  );
+  const [signed, thumbs] = await Promise.all([
+    getSignedPhotoUrls(paths, expiresIn),
+    getSignedPhotoUrls(paths, expiresIn, LISTING_GRID_THUMB),
+  ]);
+  return photos.map((photo) => ({
+    ...photo,
+    signedUrl: signed.get(photo.storage_path) ?? null,
+    processedSignedUrl: photo.processed_path
+      ? (signed.get(photo.processed_path) ?? null)
+      : null,
+    signedThumbUrl: thumbs.get(photo.storage_path) ?? null,
+    processedSignedThumbUrl: photo.processed_path
+      ? (thumbs.get(photo.processed_path) ?? null)
+      : null,
+  }));
 }
 
 export async function uploadListingPhoto(

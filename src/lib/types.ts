@@ -108,6 +108,9 @@ export type ListingPhoto = {
 export type ListingPhotoWithUrl = ListingPhoto & {
   signedUrl: string | null;
   processedSignedUrl: string | null;
+  /** Grid/list display; falls back to signedUrl when omitted. */
+  signedThumbUrl?: string | null;
+  processedSignedThumbUrl?: string | null;
 };
 
 export type Workspace = {

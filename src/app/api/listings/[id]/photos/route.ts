@@ -4,10 +4,11 @@ import { identifyFromPhotos } from "@/lib/ai/identify";
 import { getPhotoSteps } from "@/lib/platforms";
 import {
   getListingWithPhotos,
-  getSignedPhotoUrl,
+  getSignedPhotoUrls,
   reorderListingPhotos,
   updateListing,
   uploadListingPhoto,
+  withSignedPhotoUrls,
 } from "@/lib/supabase/queries";
 import {
   isIdentifyPhotoRole,
@@ -77,9 +78,12 @@ async function runEarlyIdentify(listingId: string) {
     const tagPhotos = result.photos.filter((p) => isIdentifyPhotoRole(p.role));
     if (tagPhotos.length === 0) return;
 
-    const urls = (
-      await Promise.all(tagPhotos.map((p) => getSignedPhotoUrl(p.storage_path)))
-    ).filter((u): u is string => Boolean(u));
+    const signedByPath = await getSignedPhotoUrls(
+      tagPhotos.map((p) => p.storage_path)
+    );
+    const urls = tagPhotos
+      .map((p) => signedByPath.get(p.storage_path) ?? null)
+      .filter((u): u is string => Boolean(u));
 
     if (urls.length === 0) return;
 
@@ -135,15 +139,13 @@ export async function POST(request: Request, context: RouteContext) {
       void runEarlyIdentify(id);
     }
 
-    const signedUrl = await getSignedPhotoUrl(photo.storage_path);
+    const [withUrl] = await withSignedPhotoUrls([photo]);
 
     return NextResponse.json(
       {
         photo: {
-          ...photo,
-          replace_background: photo.replace_background ?? false,
-          signedUrl,
-          processedSignedUrl: null,
+          ...withUrl,
+          replace_background: withUrl.replace_background ?? false,
         },
       },
       { status: 201 }

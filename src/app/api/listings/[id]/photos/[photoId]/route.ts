@@ -2,10 +2,10 @@ import { NextResponse } from "next/server";
 import { authorizeListingAccess } from "@/lib/listing-access";
 import {
   deleteListingPhoto,
-  getSignedPhotoUrl,
   moveListingPhoto,
+  withSignedPhotoUrls,
 } from "@/lib/supabase/queries";
-import type { ListingPhotoWithUrl, PhotoRole } from "@/lib/types";
+import type { PhotoRole } from "@/lib/types";
 
 const PHOTO_ROLES: PhotoRole[] = [
   "brand_tag",
@@ -41,13 +41,7 @@ export async function PATCH(request: Request, context: RouteContext) {
 
   try {
     const photo = await moveListingPhoto(id, photoId, role);
-    const withUrl: ListingPhotoWithUrl = {
-      ...photo,
-      signedUrl: await getSignedPhotoUrl(photo.storage_path),
-      processedSignedUrl: photo.processed_path
-        ? await getSignedPhotoUrl(photo.processed_path)
-        : null,
-    };
+    const [withUrl] = await withSignedPhotoUrls([photo]);
     return NextResponse.json({ photo: withUrl });
   } catch (err) {
     const message =

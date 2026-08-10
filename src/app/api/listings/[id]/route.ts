@@ -4,7 +4,7 @@ import { authorizeListingAccess } from "@/lib/listing-access";
 import {
   deleteListing,
   getListingWithPhotos,
-  getSignedPhotoUrl,
+  withSignedPhotoUrls,
   markPosted,
   updateListing,
 } from "@/lib/supabase/queries";
@@ -65,14 +65,8 @@ export async function GET(_request: Request, context: RouteContext) {
       return NextResponse.json({ error: "Listing not found" }, { status: 404 });
     }
 
-    const photos: ListingPhotoWithUrl[] = await Promise.all(
-      result.photos.map(async (photo) => ({
-        ...photo,
-        signedUrl: await getSignedPhotoUrl(photo.storage_path),
-        processedSignedUrl: photo.processed_path
-          ? await getSignedPhotoUrl(photo.processed_path)
-          : null,
-      }))
+    const photos: ListingPhotoWithUrl[] = await withSignedPhotoUrls(
+      result.photos
     );
 
     return NextResponse.json({ listing: result.listing, photos });

@@ -4,7 +4,7 @@ import {
   findListingByJoinCode,
   findValidJoinToken,
   getListingWithPhotos,
-  getSignedPhotoUrl,
+  withSignedPhotoUrls,
 } from "@/lib/supabase/queries";
 import { isPostingPhotoRole } from "@/lib/types";
 
@@ -49,24 +49,24 @@ export async function GET(request: Request, context: RouteContext) {
       return NextResponse.json({ error: "Listing not found" }, { status: 404 });
     }
 
-    const photos = await Promise.all(
-      result.photos
-        .filter((photo) => isPostingPhotoRole(photo.role))
-        .map(async (photo) => ({
-          id: photo.id,
-          role: photo.role,
-          sortOrder: photo.sort_order,
-          url:
-            (photo.replace_background && photo.processed_path
-              ? await getSignedPhotoUrl(photo.processed_path)
-              : null) ?? (await getSignedPhotoUrl(photo.storage_path)),
-          originalUrl: await getSignedPhotoUrl(photo.storage_path),
-          processedUrl:
-            photo.replace_background && photo.processed_path
-              ? await getSignedPhotoUrl(photo.processed_path)
-              : null,
-        }))
+    const posting = result.photos.filter((photo) =>
+      isPostingPhotoRole(photo.role)
     );
+    const withUrls = await withSignedPhotoUrls(posting);
+    const photos = withUrls.map((photo) => ({
+      id: photo.id,
+      role: photo.role,
+      sortOrder: photo.sort_order,
+      url:
+        (photo.replace_background && photo.processedSignedUrl
+          ? photo.processedSignedUrl
+          : null) ?? photo.signedUrl,
+      originalUrl: photo.signedUrl,
+      processedUrl:
+        photo.replace_background && photo.processedSignedUrl
+          ? photo.processedSignedUrl
+          : null,
+    }));
 
     const { listing } = result;
 

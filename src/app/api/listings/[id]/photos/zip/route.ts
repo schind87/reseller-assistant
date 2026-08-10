@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { authorizeListingAccess } from "@/lib/listing-access";
 import {
   getListingWithPhotos,
-  getSignedPhotoUrl,
+  getSignedPhotoUrls,
 } from "@/lib/supabase/queries";
 import { isPostingPhotoRole, type PhotoRole } from "@/lib/types";
 
@@ -60,22 +60,37 @@ export async function GET(_request: Request, context: RouteContext) {
     const zip = new JSZip();
     let added = 0;
 
+    const pathByPhotoId = new Map<string, string>();
     for (const photo of posting) {
       const path =
         photo.replace_background && photo.processed_path
           ? photo.processed_path
           : photo.storage_path;
-      const signed = await getSignedPhotoUrl(path);
-      if (!signed) continue;
+      pathByPhotoId.set(photo.id, path);
+    }
+    const signedByPath = await getSignedPhotoUrls([
+      ...pathByPhotoId.values(),
+    ]);
 
-      const res = await fetch(signed);
-      if (!res.ok) continue;
-      const bytes = Buffer.from(await res.arrayBuffer());
-      const contentType =
-        res.headers.get("content-type") || "image/jpeg";
-      const ext = extensionForContentType(contentType);
+    const downloads = await Promise.all(
+      posting.map(async (photo) => {
+        const path = pathByPhotoId.get(photo.id);
+        const signed = path ? signedByPath.get(path) : undefined;
+        if (!signed) return null;
+        const res = await fetch(signed);
+        if (!res.ok) return null;
+        const bytes = Buffer.from(await res.arrayBuffer());
+        const contentType =
+          res.headers.get("content-type") || "image/jpeg";
+        return { photo, bytes, contentType };
+      })
+    );
+
+    for (const row of downloads) {
+      if (!row) continue;
+      const ext = extensionForContentType(row.contentType);
       const index = String(added + 1).padStart(2, "0");
-      zip.file(`${index}-${photo.role}.${ext}`, bytes);
+      zip.file(`${index}-${row.photo.role}.${ext}`, row.bytes);
       added += 1;
     }
 
