@@ -96,6 +96,60 @@ type ListingPayload = {
   photos: ListingPhotoWithUrl[];
 };
 
+/** Keep prior signed URLs when storage paths are unchanged so poll refreshes don't flash images. */
+function mergePhotosWithStableUrls(
+  prev: ListingPhotoWithUrl[] | undefined,
+  next: ListingPhotoWithUrl[]
+): ListingPhotoWithUrl[] {
+  if (!prev?.length) return next;
+  const prevById = new Map(prev.map((photo) => [photo.id, photo]));
+  return next.map((photo) => {
+    const old = prevById.get(photo.id);
+    if (!old) return photo;
+    if (
+      old.storage_path !== photo.storage_path ||
+      old.processed_path !== photo.processed_path
+    ) {
+      return photo;
+    }
+    return {
+      ...photo,
+      signedUrl: old.signedUrl ?? photo.signedUrl,
+      processedSignedUrl: old.processedSignedUrl ?? photo.processedSignedUrl,
+      signedThumbUrl: old.signedThumbUrl ?? photo.signedThumbUrl,
+      processedSignedThumbUrl:
+        old.processedSignedThumbUrl ?? photo.processedSignedThumbUrl,
+    };
+  });
+}
+
+function listingSnapshot(listing: Listing): string {
+  return [
+    listing.id,
+    listing.updated_at,
+    listing.status,
+    listing.photo_step,
+    listing.title ?? "",
+    listing.price ?? "",
+    listing.cover_processed_path ?? "",
+  ].join("|");
+}
+
+function photosSnapshot(photos: ListingPhotoWithUrl[]): string {
+  return photos
+    .map((p) =>
+      [
+        p.id,
+        p.role,
+        p.sort_order,
+        p.storage_path,
+        p.processed_path ?? "",
+        p.replace_background ? "1" : "0",
+      ].join(":")
+    )
+    .join(",");
+}
+
 type PhotoSection = "identify" | "inventory" | "listing";
 
 const PHOTO_DND_TYPE = "application/x-ra-photo-id";
@@ -298,7 +352,17 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
         if (!res.ok) throw new Error(json.error ?? "Could not load listing");
         const listing = json.listing as Listing;
         const photos = json.photos as ListingPhotoWithUrl[];
-        setData({ listing, photos });
+        setData((prev) => {
+          const mergedPhotos = mergePhotosWithStableUrls(prev?.photos, photos);
+          if (
+            prev &&
+            listingSnapshot(prev.listing) === listingSnapshot(listing) &&
+            photosSnapshot(prev.photos) === photosSnapshot(mergedPhotos)
+          ) {
+            return prev;
+          }
+          return { listing, photos: mergedPhotos };
+        });
         setError(null);
 
         if (opts?.syncDraft || !draftHydrated.current) {
@@ -363,14 +427,27 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
       void ensureJoinToken();
     }, 0);
 
+    // Poll so phone-companion uploads show up, but only when the tab is visible.
+    // Signed URLs are reused when paths are unchanged so tiles don't flash.
     const timer = window.setInterval(() => {
-      if (!cancelled) void load({ syncDraft: false });
-    }, 2000);
+      if (cancelled) return;
+      if (document.visibilityState !== "visible") return;
+      void load({ syncDraft: false });
+    }, 8000);
+
+    function onVisible() {
+      if (cancelled) return;
+      if (document.visibilityState === "visible") {
+        void load({ syncDraft: false });
+      }
+    }
+    document.addEventListener("visibilitychange", onVisible);
 
     return () => {
       cancelled = true;
       window.clearTimeout(boot);
       window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisible);
     };
   }, [load, ensureJoinToken]);
 
