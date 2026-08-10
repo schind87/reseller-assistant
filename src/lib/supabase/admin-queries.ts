@@ -1,5 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
-import { getSignedPhotoUrl } from "@/lib/supabase/queries";
+import { getSignedPhotoUrl, getSignedPhotoUrls } from "@/lib/supabase/queries";
 import type { ListingPhoto, PhotoRole, Platform } from "@/lib/types";
 
 export type AdminPhotoRow = ListingPhoto & {
@@ -99,23 +99,30 @@ export async function listAdminPhotos(opts?: {
     }
   }
 
-  const photos: AdminPhotoRow[] = await Promise.all(
-    rows.map(async (row) => {
-      const { listings, ...photo } = row;
-      const ownerId = listings.user_id;
-      return {
-        ...(photo as ListingPhoto),
-        listing_title: listings.title,
-        listing_platform: listings.platform,
-        listing_user_id: ownerId,
-        owner_email: ownerId ? (emailByUser.get(ownerId) ?? null) : null,
-        signedUrl: await getSignedPhotoUrl(photo.storage_path),
-        processedSignedUrl: photo.processed_path
-          ? await getSignedPhotoUrl(photo.processed_path)
-          : null,
-      };
-    })
-  );
+  const pathsToSign: string[] = [];
+  for (const row of rows) {
+    if (row.storage_path) pathsToSign.push(row.storage_path);
+    if (row.processed_path) pathsToSign.push(row.processed_path);
+  }
+  const signedByPath = await getSignedPhotoUrls(pathsToSign);
+
+  const photos: AdminPhotoRow[] = rows.map((row) => {
+    const { listings, ...photo } = row;
+    const ownerId = listings.user_id;
+    return {
+      ...(photo as ListingPhoto),
+      listing_title: listings.title,
+      listing_platform: listings.platform,
+      listing_user_id: ownerId,
+      owner_email: ownerId ? (emailByUser.get(ownerId) ?? null) : null,
+      signedUrl: photo.storage_path
+        ? (signedByPath.get(photo.storage_path) ?? null)
+        : null,
+      processedSignedUrl: photo.processed_path
+        ? (signedByPath.get(photo.processed_path) ?? null)
+        : null,
+    };
+  });
 
   return { photos, total: count ?? photos.length };
 }

@@ -332,10 +332,8 @@ export function AiBgDebugConsole({
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "Could not load history");
       const runs = (json.runs as SavedRun[]) ?? [];
-      const recent = (json.recentRuns as RecentRunSummary[]) ?? [];
       startTransition(() => {
         applyHistory(runs, true);
-        setRecentRuns(recent);
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not load history");
@@ -371,10 +369,8 @@ export function AiBgDebugConsole({
         if (cancelled) return;
         if (!res.ok) throw new Error(json.error ?? "Could not load history");
         const runs = (json.runs as SavedRun[]) ?? [];
-        const recent = (json.recentRuns as RecentRunSummary[]) ?? [];
         startTransition(() => {
           applyHistory(runs, true);
-          setRecentRuns(recent);
         });
       } catch (err) {
         if (!cancelled) {
@@ -751,6 +747,8 @@ export function AiBgDebugConsole({
                         <img
                           src={run.thumbUrl}
                           alt=""
+                          loading="lazy"
+                          decoding="async"
                           className="h-full w-full object-contain"
                         />
                       ) : (
@@ -872,6 +870,8 @@ export function AiBgDebugConsole({
                         <img
                           src={photo.signedUrl ?? undefined}
                           alt=""
+                          loading="lazy"
+                          decoding="async"
                           className="aspect-square w-full bg-[var(--surface-muted)] object-cover"
                         />
                       </button>
@@ -1240,6 +1240,8 @@ export function AiBgDebugConsole({
                         <img
                           src={result.imageUrl}
                           alt={entry.label}
+                          loading="lazy"
+                          decoding="async"
                           className="aspect-square w-full object-contain"
                           style={resultBackdropStyle(labBackdrop)}
                         />

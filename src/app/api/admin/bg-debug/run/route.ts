@@ -116,7 +116,7 @@ export async function GET(request: Request) {
     const recentRuns = wantRecent
       ? await listRecentBgLabRuns({
           userId: auth.user.id,
-          limit: 40,
+          limit: 24,
         })
       : [];
     return NextResponse.json({
@@ -138,10 +138,9 @@ export async function GET(request: Request) {
     });
   }
 
-  const [runs, recentRuns] = await Promise.all([
-    listBgLabRunsForPhoto(photoId, 50),
-    listRecentBgLabRuns({ userId: auth.user.id, limit: 40 }),
-  ]);
+  // Photo history only — recent-run thumbs are loaded separately so switching
+  // photos does not re-sign dozens of thumbnail URLs every time.
+  const runs = await listBgLabRunsForPhoto(photoId, 20);
   return NextResponse.json({
     runs: runs.map((run) => ({
       id: run.id,
@@ -169,19 +168,6 @@ export async function GET(request: Request) {
         costLabel: formatCostUsd(r.cost_usd),
         createdAt: r.created_at,
       })),
-    })),
-    recentRuns: recentRuns.map((run) => ({
-      id: run.id,
-      createdAt: run.created_at,
-      photoId: run.listing_photo_id,
-      listingId: run.listing_id,
-      photoRole: run.photo_role,
-      listingTitle: run.listing_title,
-      listingPlatform: run.listing_platform,
-      resultCount: run.result_count,
-      okCount: run.ok_count,
-      modelLabels: run.model_labels,
-      thumbUrl: run.thumbUrl,
     })),
   });
 }

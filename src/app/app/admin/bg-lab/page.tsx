@@ -18,7 +18,7 @@ export default async function AdminAiDebugPage() {
     }),
     listRecentBgLabRuns({
       userId: admin.id,
-      limit: 40,
+      limit: 24,
     }),
   ]);
 

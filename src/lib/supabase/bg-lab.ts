@@ -1,5 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
-import { getSignedPhotoUrl } from "@/lib/supabase/queries";
+import { getSignedPhotoUrls } from "@/lib/supabase/queries";
 import { falDashboardUrl } from "@/lib/ai/fal-lab";
 
 export type BgLabResultRow = {
@@ -170,10 +170,16 @@ export async function listBgLabRunsForPhoto(
   }
 
   const byRun = new Map<string, BgLabResultRow[]>();
+  const storagePaths = (results ?? [])
+    .map((raw) => (raw.storage_path as string | null) ?? null)
+    .filter((p): p is string => Boolean(p));
+  const signedByPath = await getSignedPhotoUrls(storagePaths);
+
   for (const raw of results ?? []) {
     const runId = raw.run_id as string;
-    const imageUrl = raw.storage_path
-      ? await getSignedPhotoUrl(raw.storage_path as string)
+    const storagePath = (raw.storage_path as string | null) ?? null;
+    const imageUrl = storagePath
+      ? (signedByPath.get(storagePath) ?? null)
       : null;
     const row: BgLabResultRow = {
       id: raw.id as string,
@@ -183,7 +189,7 @@ export async function listBgLabRunsForPhoto(
       provider: raw.provider as "fal" | "photoroom",
       ok: Boolean(raw.ok),
       ms: Number(raw.ms ?? 0),
-      storage_path: (raw.storage_path as string | null) ?? null,
+      storage_path: storagePath,
       fal_request_id: (raw.fal_request_id as string | null) ?? null,
       fal_endpoint: (raw.fal_endpoint as string | null) ?? null,
       cost_usd:
@@ -304,6 +310,16 @@ export async function listRecentBgLabRuns(opts?: {
   }
 
   const summaries: BgLabRecentRunSummary[] = [];
+  const thumbPaths: string[] = [];
+  for (const run of runRows) {
+    const runId = run.id as string;
+    const runResults = resultsByRun.get(runId) ?? [];
+    const thumbPath =
+      runResults.find((r) => r.ok && r.storage_path)?.storage_path ?? null;
+    if (thumbPath) thumbPaths.push(thumbPath);
+  }
+  const signedThumbs = await getSignedPhotoUrls(thumbPaths);
+
   for (const run of runRows) {
     const runId = run.id as string;
     const runResults = resultsByRun.get(runId) ?? [];
@@ -324,7 +340,7 @@ export async function listRecentBgLabRuns(opts?: {
       result_count: runResults.length,
       ok_count: runResults.filter((r) => r.ok).length,
       model_labels: runResults.map((r) => r.model_label),
-      thumbUrl: thumbPath ? await getSignedPhotoUrl(thumbPath) : null,
+      thumbUrl: thumbPath ? (signedThumbs.get(thumbPath) ?? null) : null,
     });
   }
 

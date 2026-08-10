@@ -560,16 +560,38 @@ export async function getSignedPhotoUrl(
   expiresIn = 3600
 ): Promise<string | null> {
   if (!storagePath) return null;
+  const map = await getSignedPhotoUrls([storagePath], expiresIn);
+  return map.get(storagePath) ?? null;
+}
+
+/** Sign many storage paths in one Storage API call. */
+export async function getSignedPhotoUrls(
+  storagePaths: string[],
+  expiresIn = 3600
+): Promise<Map<string, string | null>> {
+  const unique = [
+    ...new Set(storagePaths.filter((p): p is string => Boolean(p))),
+  ];
+  const out = new Map<string, string | null>();
+  if (unique.length === 0) return out;
+
   const supabase = createAdminClient();
   const { data, error } = await supabase.storage
     .from("listing-photos")
-    .createSignedUrl(storagePath, expiresIn);
+    .createSignedUrls(unique, expiresIn);
 
   if (error) {
-    console.error("getSignedPhotoUrl:", error.message);
-    return null;
+    console.error("getSignedPhotoUrls:", error.message);
+    for (const path of unique) out.set(path, null);
+    return out;
   }
-  return data.signedUrl;
+
+  for (const path of unique) out.set(path, null);
+  for (const row of data ?? []) {
+    if (!row.path) continue;
+    out.set(row.path, row.signedUrl ?? null);
+  }
+  return out;
 }
 
 export async function uploadListingPhoto(
