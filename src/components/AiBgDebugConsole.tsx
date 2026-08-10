@@ -337,6 +337,8 @@ export function AiBgDebugConsole({
       ? initialSelectedPhotoId
       : (initialPhotos[0]?.id ?? null),
   );
+  /** When set, highlight that recent-run card and show only its results. */
+  const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const storedPrefs = useSyncExternalStore(
     subscribeLabPrefs,
     readStoredLabPrefs,
@@ -412,9 +414,19 @@ export function AiBgDebugConsole({
   const selectedPhoto =
     photos.find((p) => p.id === selectedPhotoId) ?? photos[0] ?? null;
 
-  const modelHistories = useMemo(
-    () => buildModelHistories(history),
-    [history],
+  const modelHistories = useMemo(() => {
+    if (selectedRunId == null) return buildModelHistories(history);
+    return buildModelHistories(
+      history.filter((run) => run.id === selectedRunId),
+    );
+  }, [history, selectedRunId]);
+
+  const selectedRecentRun = useMemo(
+    () =>
+      selectedRunId
+        ? (recentRuns.find((run) => run.id === selectedRunId) ?? null)
+        : null,
+    [recentRuns, selectedRunId],
   );
 
   const savedCountByModel = useMemo(() => {
@@ -584,6 +596,7 @@ export function AiBgDebugConsole({
 
   async function openRecentRun(run: RecentRunSummary) {
     setError(null);
+    setSelectedRunId(run.id);
     setSelectedPhotoId(run.photoId);
     // Ensure the photo is in the list even if the current filter hid it.
     if (!photos.some((p) => p.id === run.photoId)) {
@@ -612,6 +625,11 @@ export function AiBgDebugConsole({
       }
     }
     await loadHistory(run.photoId);
+  }
+
+  function selectPhoto(photoId: string) {
+    setSelectedRunId(null);
+    setSelectedPhotoId(photoId);
   }
 
   async function runModels() {
@@ -741,6 +759,7 @@ export function AiBgDebugConsole({
 
           switch (event.type) {
             case "start":
+              if (event.runId) setSelectedRunId(event.runId);
               if (typeof event.total === "number") {
                 setRunProgress({ completed: 0, total: event.total });
               }
@@ -891,7 +910,7 @@ export function AiBgDebugConsole({
         ) : (
           <ul className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {recentRuns.map((run) => {
-              const active = selectedPhotoId === run.photoId;
+              const active = selectedRunId === run.id;
               const when = run.createdAt;
               const roleLabel = run.photoRole
                 ? photoRoleLabel(run.photoRole as PhotoRole)
@@ -1036,7 +1055,7 @@ export function AiBgDebugConsole({
                       <button
                         type="button"
                         onClick={() => {
-                          setSelectedPhotoId(photo.id);
+                          selectPhoto(photo.id);
                         }}
                         className="block w-full"
                       >
@@ -1135,9 +1154,13 @@ export function AiBgDebugConsole({
                   <p className="text-xs">
                     {historyLoading
                       ? "Loading saved model results…"
-                      : modelHistories.length > 0
-                        ? `${modelHistories.length} model${modelHistories.length === 1 ? "" : "s"} saved for this photo`
-                        : "No saved model results yet for this photo."}
+                      : selectedRecentRun
+                        ? modelHistories.length > 0
+                          ? `Showing ${modelHistories.length} model${modelHistories.length === 1 ? "" : "s"} from the selected run`
+                          : "Selected run has no saved model results."
+                        : modelHistories.length > 0
+                          ? `${modelHistories.length} model${modelHistories.length === 1 ? "" : "s"} saved for this photo`
+                          : "No saved model results yet for this photo."}
                   </p>
                 </div>
               </div>
@@ -1255,14 +1278,26 @@ export function AiBgDebugConsole({
           <div className="flex flex-wrap items-end justify-between gap-2">
             <div>
               <h2 className="text-lg font-semibold text-[var(--foreground)]">
-                Saved results by model
+                {selectedRecentRun
+                  ? "Results from selected run"
+                  : "Saved results by model"}
               </h2>
               <p className="mt-1 text-sm text-[var(--muted)]">
-                Flip older/newer versions per model without re-running. Cost
-                badges show fal&apos;s actual billed amount when available.
+                {selectedRecentRun
+                  ? "Only this lab run's outputs. Pick the photo (or clear the run) to browse all saved versions."
+                  : "Flip older/newer versions per model without re-running. Cost badges show fal's actual billed amount when available."}
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
+              {selectedRecentRun ? (
+                <button
+                  type="button"
+                  onClick={() => setSelectedRunId(null)}
+                  className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-sm font-semibold text-[var(--foreground)] transition hover:bg-[var(--surface-muted)]"
+                >
+                  Show all for photo
+                </button>
+              ) : null}
               <div className="inline-flex rounded-lg border border-[var(--border)] p-0.5">
                 {(
                   [
