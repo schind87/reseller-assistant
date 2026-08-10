@@ -6,7 +6,10 @@ import {
   getAdminPhotoById,
   listAdminPhotos,
 } from "@/lib/supabase/admin-queries";
-import { listRecentBgLabRuns } from "@/lib/supabase/bg-lab";
+import {
+  listBgLabModelCostAverages,
+  listRecentBgLabRuns,
+} from "@/lib/supabase/bg-lab";
 
 type PageProps = {
   searchParams: Promise<{ photoId?: string; listingId?: string }>;
@@ -22,18 +25,20 @@ export default async function AdminAiDebugPage({ searchParams }: PageProps) {
   const deepPhotoId = sp.photoId?.trim() || null;
   const deepListingId = sp.listingId?.trim() || null;
 
-  const [{ photos: listed, total }, recentRuns, deepPhoto] = await Promise.all([
-    listAdminPhotos({
-      limit: 48,
-      role: "all",
-      q: deepListingId || deepPhotoId || undefined,
-    }),
-    listRecentBgLabRuns({
-      userId: admin.id,
-      limit: 24,
-    }),
-    deepPhotoId ? getAdminPhotoById(deepPhotoId) : Promise.resolve(null),
-  ]);
+  const [{ photos: listed, total }, recentRuns, costAverages, deepPhoto] =
+    await Promise.all([
+      listAdminPhotos({
+        limit: 48,
+        role: "all",
+        q: deepListingId || deepPhotoId || undefined,
+      }),
+      listRecentBgLabRuns({
+        userId: admin.id,
+        limit: 24,
+      }),
+      listBgLabModelCostAverages({ userId: admin.id }),
+      deepPhotoId ? getAdminPhotoById(deepPhotoId) : Promise.resolve(null),
+    ]);
 
   const photos = (() => {
     if (!deepPhoto) return listed;
@@ -59,6 +64,11 @@ export default async function AdminAiDebugPage({ searchParams }: PageProps) {
         okCount: run.ok_count,
         modelLabels: run.model_labels,
         thumbUrl: run.thumbUrl,
+      }))}
+      initialModelCostAverages={costAverages.map((row) => ({
+        modelId: row.modelId,
+        avgUsd: row.avgUsd,
+        sampleCount: row.sampleCount,
       }))}
       models={[...FAL_BG_MODELS]}
       hasFalKey={Boolean(process.env.FAL_KEY?.trim())}

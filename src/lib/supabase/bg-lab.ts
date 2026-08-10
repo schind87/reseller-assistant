@@ -240,6 +240,68 @@ export type BgLabRecentRunSummary = {
   thumbUrl: string | null;
 };
 
+export type BgLabModelCostAvg = {
+  modelId: string;
+  avgUsd: number;
+  sampleCount: number;
+};
+
+/**
+ * Running average cost_usd per model from successful lab results
+ * (optionally scoped to one admin's runs).
+ */
+export async function listBgLabModelCostAverages(opts?: {
+  userId?: string | null;
+}): Promise<BgLabModelCostAvg[]> {
+  const supabase = createAdminClient();
+
+  let runIds: string[] | null = null;
+  if (opts?.userId) {
+    const { data: runs, error: runsError } = await supabase
+      .from("bg_lab_runs")
+      .select("id")
+      .eq("run_by_user_id", opts.userId);
+    if (runsError) {
+      throw new Error(`listBgLabModelCostAverages runs: ${runsError.message}`);
+    }
+    runIds = (runs ?? []).map((r) => r.id as string);
+    if (runIds.length === 0) return [];
+  }
+
+  let query = supabase
+    .from("bg_lab_results")
+    .select("model_id, cost_usd")
+    .eq("ok", true)
+    .not("cost_usd", "is", null)
+    .limit(5000);
+
+  if (runIds) {
+    query = query.in("run_id", runIds);
+  }
+
+  const { data, error } = await query;
+  if (error) throw new Error(`listBgLabModelCostAverages: ${error.message}`);
+
+  const sums = new Map<string, { sum: number; count: number }>();
+  for (const raw of data ?? []) {
+    const modelId = raw.model_id as string;
+    const cost = Number(raw.cost_usd);
+    if (!modelId || !Number.isFinite(cost)) continue;
+    const cur = sums.get(modelId) ?? { sum: 0, count: 0 };
+    cur.sum += cost;
+    cur.count += 1;
+    sums.set(modelId, cur);
+  }
+
+  return [...sums.entries()]
+    .map(([modelId, { sum, count }]) => ({
+      modelId,
+      avgUsd: sum / count,
+      sampleCount: count,
+    }))
+    .sort((a, b) => a.modelId.localeCompare(b.modelId));
+}
+
 /** Recent lab runs (optionally for one admin user), newest first. */
 export async function listRecentBgLabRuns(opts?: {
   userId?: string | null;

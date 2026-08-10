@@ -77,6 +77,12 @@ type RecentRunSummary = {
   thumbUrl: string | null;
 };
 
+type ModelCostAverage = {
+  modelId: string;
+  avgUsd: number;
+  sampleCount: number;
+};
+
 type PreviewImage = {
   src: string;
   label: string;
@@ -168,6 +174,7 @@ type Props = {
   initialPhotos: AdminPhoto[];
   initialTotal: number;
   initialRecentRuns?: RecentRunSummary[];
+  initialModelCostAverages?: ModelCostAverage[];
   initialSelectedPhotoId?: string | null;
   initialListingFilter?: string | null;
   models: FalBgModelDef[];
@@ -319,6 +326,7 @@ export function AiBgDebugConsole({
   initialPhotos,
   initialTotal,
   initialRecentRuns = [],
+  initialModelCostAverages = [],
   initialSelectedPhotoId = null,
   initialListingFilter = null,
   models,
@@ -395,6 +403,9 @@ export function AiBgDebugConsole({
   const [history, setHistory] = useState<SavedRun[]>([]);
   const [recentRuns, setRecentRuns] =
     useState<RecentRunSummary[]>(initialRecentRuns);
+  const [modelCostAverages, setModelCostAverages] = useState<
+    ModelCostAverage[]
+  >(initialModelCostAverages);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [refreshingCosts, setRefreshingCosts] = useState(false);
   const [runProgress, setRunProgress] = useState<{
@@ -428,6 +439,12 @@ export function AiBgDebugConsole({
         : null,
     [recentRuns, selectedRunId],
   );
+
+  const avgCostByModel = useMemo(() => {
+    const map = new Map<string, ModelCostAverage>();
+    for (const row of modelCostAverages) map.set(row.modelId, row);
+    return map;
+  }, [modelCostAverages]);
 
   const savedCountByModel = useMemo(() => {
     const counts = new Map<string, number>();
@@ -478,6 +495,9 @@ export function AiBgDebugConsole({
       if (!res.ok) throw new Error(json.error ?? "Could not load recent runs");
       startTransition(() => {
         setRecentRuns((json.recentRuns as RecentRunSummary[]) ?? []);
+        if (Array.isArray(json.modelCostAverages)) {
+          setModelCostAverages(json.modelCostAverages as ModelCostAverage[]);
+        }
       });
     } catch (err) {
       setError(
@@ -1181,6 +1201,11 @@ export function AiBgDebugConsole({
               ) : null}
               {selectableModels.map((model) => {
                 const savedCount = savedCountByModel.get(model.id) ?? 0;
+                const avg = avgCostByModel.get(model.id);
+                const avgLabel =
+                  avg && avg.sampleCount > 0
+                    ? `avg ${formatCostUsd(avg.avgUsd)} · n=${avg.sampleCount}`
+                    : null;
                 return (
                   <li key={model.id}>
                     <label
@@ -1201,7 +1226,8 @@ export function AiBgDebugConsole({
                         <span className="block text-sm font-semibold text-[var(--foreground)]">
                           {model.label}{" "}
                           <span className="font-normal text-[var(--muted)]">
-                            ({model.approxCost})
+                            ({model.approxCost}
+                            {avgLabel ? ` · ${avgLabel}` : ""})
                           </span>
                           {savedCount > 0 ? (
                             <span className="ml-2 font-normal text-[var(--accent)]">

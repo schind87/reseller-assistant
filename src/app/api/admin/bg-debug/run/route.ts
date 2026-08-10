@@ -17,6 +17,7 @@ import { getAdminPhotoById } from "@/lib/supabase/admin-queries";
 import {
   createBgLabRun,
   insertBgLabResult,
+  listBgLabModelCostAverages,
   listBgLabRunsForPhoto,
   listRecentBgLabRuns,
   updateBgLabResultCost,
@@ -113,12 +114,15 @@ export async function GET(request: Request) {
   const wantRecent = url.searchParams.get("recent") === "1";
 
   if (!photoId) {
-    const recentRuns = wantRecent
-      ? await listRecentBgLabRuns({
-          userId: auth.user.id,
-          limit: 24,
-        })
-      : [];
+    const [recentRuns, modelCostAverages] = wantRecent
+      ? await Promise.all([
+          listRecentBgLabRuns({
+            userId: auth.user.id,
+            limit: 24,
+          }),
+          listBgLabModelCostAverages({ userId: auth.user.id }),
+        ])
+      : [[], []];
     return NextResponse.json({
       models: FAL_BG_MODELS,
       hasFalKey: Boolean(falKey()),
@@ -134,6 +138,11 @@ export async function GET(request: Request) {
         okCount: run.ok_count,
         modelLabels: run.model_labels,
         thumbUrl: run.thumbUrl,
+      })),
+      modelCostAverages: modelCostAverages.map((row) => ({
+        modelId: row.modelId,
+        avgUsd: row.avgUsd,
+        sampleCount: row.sampleCount,
       })),
     });
   }
