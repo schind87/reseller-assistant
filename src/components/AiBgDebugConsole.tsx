@@ -1,6 +1,6 @@
 "use client";
 
-import { startTransition, useEffect, useMemo, useState, type CSSProperties } from "react";
+import { startTransition, useEffect, useMemo, useState, useSyncExternalStore, type CSSProperties } from "react";
 import Link from "next/link";
 import { BigButton } from "@/components/BigButton";
 import type { FalBgModelDef, FalBgModelId } from "@/lib/ai/fal-bg-models";
@@ -74,6 +74,43 @@ type PreviewImage = {
 };
 
 type LabBackdrop = "white" | "dark";
+
+const LAB_PREFS_KEY = "ra-bg-lab-prefs-v1";
+
+type StoredLabPrefs = {
+  selectedModels?: string[];
+  labBackdrop?: LabBackdrop;
+};
+
+function readStoredLabPrefs(): StoredLabPrefs {
+  try {
+    const raw = window.localStorage.getItem(LAB_PREFS_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as StoredLabPrefs;
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeStoredLabPrefs(patch: StoredLabPrefs) {
+  try {
+    const next = { ...readStoredLabPrefs(), ...patch };
+    window.localStorage.setItem(LAB_PREFS_KEY, JSON.stringify(next));
+    window.dispatchEvent(new Event("ra-bg-lab-prefs"));
+  } catch {
+    /* ignore quota / private mode */
+  }
+}
+
+function subscribeLabPrefs(onStoreChange: () => void) {
+  window.addEventListener("storage", onStoreChange);
+  window.addEventListener("ra-bg-lab-prefs", onStoreChange);
+  return () => {
+    window.removeEventListener("storage", onStoreChange);
+    window.removeEventListener("ra-bg-lab-prefs", onStoreChange);
+  };
+}
 
 const LAB_BACKDROP_CSS: Record<LabBackdrop, string> = {
   white: "#ffffff",
@@ -269,10 +306,32 @@ export function AiBgDebugConsole({
   const [selectedPhotoId, setSelectedPhotoId] = useState<string | null>(
     initialPhotos[0]?.id ?? null,
   );
-  const [selectedModels, setSelectedModels] = useState<Set<FalBgModelId>>(
-    () => new Set(models.filter((m) => m.defaultSelected).map((m) => m.id)),
+  const storedPrefs = useSyncExternalStore(
+    subscribeLabPrefs,
+    readStoredLabPrefs,
+    () => ({} as StoredLabPrefs),
   );
-  const [labBackdrop, setLabBackdrop] = useState<LabBackdrop>("white");
+  const defaultSelectedModels = useMemo(
+    () =>
+      new Set(models.filter((m) => m.defaultSelected).map((m) => m.id)),
+    [models],
+  );
+  const rememberedModels = useMemo(() => {
+    const known = new Set(models.map((m) => m.id));
+    const ids = (storedPrefs.selectedModels ?? []).filter((id): id is FalBgModelId =>
+      known.has(id as FalBgModelId),
+    );
+    return ids.length > 0 ? new Set(ids) : null;
+  }, [models, storedPrefs.selectedModels]);
+  const [sessionModels, setSessionModels] = useState<Set<FalBgModelId> | null>(
+    null,
+  );
+  const selectedModels =
+    sessionModels ?? rememberedModels ?? defaultSelectedModels;
+  const labBackdrop: LabBackdrop =
+    storedPrefs.labBackdrop === "dark" || storedPrefs.labBackdrop === "white"
+      ? storedPrefs.labBackdrop
+      : "white";
   const [history, setHistory] = useState<SavedRun[]>([]);
   const [recentRuns, setRecentRuns] =
     useState<RecentRunSummary[]>(initialRecentRuns);
@@ -414,12 +473,16 @@ export function AiBgDebugConsole({
   }
 
   function toggleModel(id: FalBgModelId) {
-    setSelectedModels((prev) => {
-      const next = new Set(prev);
+    setSessionModels(() => {
+      const next = new Set(selectedModels);
       if (next.has(id)) next.delete(id);
       else next.add(id);
       return next;
     });
+  }
+
+  function chooseLabBackdrop(next: LabBackdrop) {
+    writeStoredLabPrefs({ labBackdrop: next });
   }
 
   function stepVersion(modelId: string, delta: number, totalVersions: number) {
@@ -469,6 +532,11 @@ export function AiBgDebugConsole({
     if (!selectedPhoto || selectedModels.size === 0) return;
     const modelIds = [...selectedModels] as FalBgModelId[];
     const total = modelIds.length;
+    writeStoredLabPrefs({
+      selectedModels: modelIds,
+      labBackdrop,
+    });
+    setSessionModels(new Set(modelIds));
     setRunning(true);
     setError(null);
     setRunProgress({ completed: 0, total });
@@ -1035,7 +1103,7 @@ export function AiBgDebugConsole({
                   <button
                     key={option.id}
                     type="button"
-                    onClick={() => setLabBackdrop(option.id)}
+                    onClick={() => chooseLabBackdrop(option.id)}
                     className={`rounded-md px-3 py-1.5 text-sm font-semibold transition ${
                       labBackdrop === option.id
                         ? "bg-[var(--accent)] text-white"
@@ -1064,7 +1132,8 @@ export function AiBgDebugConsole({
             </div>
             <p className="mt-2 text-xs text-[var(--muted)]">
               Run calls fal and appends a new saved version. Switching photos or
-              flipping versions below only loads stored results.
+              flipping versions below only loads stored results. Model picks and
+              backdrop are remembered for your next visit.
             </p>
           </div>
         </div>
@@ -1093,7 +1162,7 @@ export function AiBgDebugConsole({
                   <button
                     key={option.id}
                     type="button"
-                    onClick={() => setLabBackdrop(option.id)}
+                    onClick={() => chooseLabBackdrop(option.id)}
                     className={`rounded-md px-2.5 py-1 text-xs font-semibold transition ${
                       labBackdrop === option.id
                         ? "bg-[var(--accent)] text-white"
