@@ -272,7 +272,13 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
   const [deletingListing, setDeletingListing] = useState(false);
   const [openingSell, setOpeningSell] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
-  const [uploading, setUploading] = useState(false);
+  const [uploadingSection, setUploadingSection] =
+    useState<PhotoSection | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<{
+    done: number;
+    total: number;
+  } | null>(null);
+  const uploading = uploadingSection !== null;
   const [deletingPhotoId, setDeletingPhotoId] = useState<string | null>(null);
   const [bgPhotoId, setBgPhotoId] = useState<string | null>(null);
   const [pickListingRole, setPickListingRole] = useState(false);
@@ -440,10 +446,13 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
     pendingUploadRoleRef.current = null;
     if (!role || files.length === 0) return;
 
-    setUploading(true);
+    const section = sectionForRole(role);
+    setUploadingSection(section);
+    setUploadProgress({ done: 0, total: files.length });
     setError(null);
     try {
-      for (const file of files) {
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i]!;
         const body = new FormData();
         body.append("photo", file);
         body.append("role", role);
@@ -457,6 +466,7 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
             typeof json.error === "string" ? json.error : "Upload failed"
           );
         }
+        setUploadProgress({ done: i + 1, total: files.length });
       }
       setStatusMessage(
         files.length === 1
@@ -467,7 +477,8 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Upload failed");
     } finally {
-      setUploading(false);
+      setUploadingSection(null);
+      setUploadProgress(null);
     }
   }
 
@@ -478,12 +489,14 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
       return;
     }
 
-    setUploading(true);
+    setUploadingSection(section);
+    setUploadProgress({ done: 0, total: images.length });
     setError(null);
     endPhotoDrag();
     try {
       let working = data?.photos ?? [];
-      for (const file of images) {
+      for (let i = 0; i < images.length; i++) {
+        const file = images[i]!;
         const role = roleForSection(section, working);
         const body = new FormData();
         body.append("photo", file);
@@ -501,6 +514,7 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
         if (json.photo) {
           working = [...working, json.photo as ListingPhotoWithUrl];
         }
+        setUploadProgress({ done: i + 1, total: images.length });
       }
       setStatusMessage(
         images.length === 1
@@ -511,7 +525,8 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Upload failed");
     } finally {
-      setUploading(false);
+      setUploadingSection(null);
+      setUploadProgress(null);
     }
   }
 
@@ -1105,72 +1120,6 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
               </div>
             ) : null}
 
-            <details className="group rounded-xl border border-dashed border-[var(--border)] bg-[var(--surface-muted)]/50 open:border-solid">
-              <summary className="cursor-pointer list-none px-4 py-3 marker:content-none [&::-webkit-details-marker]:hidden">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold text-[var(--muted)]">
-                      Optional · brand & care tags for AI
-                    </p>
-                    <p className="mt-0.5 text-sm leading-relaxed text-[var(--muted)]">
-                      Want AI to try to identify the clothing? Add close-ups of
-                      brand and care tags here. These won&apos;t be posted.
-                    </p>
-                  </div>
-                  <span className="shrink-0 rounded-md bg-white/80 px-2 py-1 text-xs font-semibold text-[var(--muted)] ring-1 ring-[var(--border)]">
-                    {identifyPhotos.length > 0
-                      ? `${identifyPhotos.length} photo${identifyPhotos.length === 1 ? "" : "s"}`
-                      : "Closed"}
-                    <span className="ml-1 text-[var(--accent)] group-open:hidden">
-                      · open
-                    </span>
-                    <span className="ml-1 hidden text-[var(--accent)] group-open:inline">
-                      · close
-                    </span>
-                  </span>
-                </div>
-              </summary>
-              <div className="border-t border-[var(--border)] px-3 pb-3 pt-2">
-                <PhotoGroup
-                  title="Tag photos"
-                  description="Private identification only — never posted with the listing."
-                  photos={identifyPhotos}
-                  empty="No tag photos yet — drop images here or add brand and care labels."
-                  section="identify"
-                  onAdd={() => pickFilesForRole("id_tag")}
-                  onDelete={(photoId) => void deletePhoto(photoId)}
-                  onPreview={setPreviewPhoto}
-                  onDropFiles={(files) =>
-                    void uploadFilesToSection(files, "identify")
-                  }
-                  onDropPhoto={(photoId) =>
-                    void movePhotoToSection(photoId, "identify")
-                  }
-                  onReorderPhoto={(draggedId, targetId, place) =>
-                    void reorderPhotoInSection(
-                      "identify",
-                      draggedId,
-                      targetId,
-                      place,
-                    )
-                  }
-                  onBeginMove={(photoId) => beginPhotoDrag(photoId)}
-                  onCancelMove={endPhotoDrag}
-                  movingPhotoId={movingPhotoId}
-                  dragOver={dragOverSection === "identify"}
-                  onDragOverChange={(over) =>
-                    setDragOverSection(over ? "identify" : null)
-                  }
-                  deletingPhotoId={deletingPhotoId}
-                  disabled={
-                    uploading || Boolean(deletingPhotoId) || movingPhoto
-                  }
-                  tone="private"
-                  compact
-                />
-              </div>
-            </details>
-
             <div className="space-y-3">
               {isAdmin ? (
                 <div className="flex flex-col gap-3 rounded-xl border border-dashed border-[var(--border)] bg-[var(--surface-muted)] px-3 py-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
@@ -1234,6 +1183,10 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
                 onDragOverChange={(over) =>
                   setDragOverSection(over ? "listing" : null)
                 }
+                uploading={uploadingSection === "listing"}
+                uploadProgress={
+                  uploadingSection === "listing" ? uploadProgress : null
+                }
                 deletingPhotoId={deletingPhotoId}
                 bgPhotoId={bgPhotoId}
                 labPhotoHref={
@@ -1274,6 +1227,76 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
             >
               <BigButton variant="secondary">Download listing photos ZIP</BigButton>
             </a>
+
+            <details className="group rounded-xl border border-dashed border-[var(--border)] bg-[var(--surface-muted)]/50 open:border-solid">
+              <summary className="cursor-pointer list-none px-4 py-3 marker:content-none [&::-webkit-details-marker]:hidden">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-[var(--muted)]">
+                      Optional · brand & care tags for AI
+                    </p>
+                    <p className="mt-0.5 text-sm leading-relaxed text-[var(--muted)]">
+                      Want AI to try to identify the clothing? Add close-ups of
+                      brand and care tags here. These won&apos;t be posted.
+                    </p>
+                  </div>
+                  <span className="shrink-0 rounded-md bg-white/80 px-2 py-1 text-xs font-semibold text-[var(--muted)] ring-1 ring-[var(--border)]">
+                    {identifyPhotos.length > 0
+                      ? `${identifyPhotos.length} photo${identifyPhotos.length === 1 ? "" : "s"}`
+                      : "Closed"}
+                    <span className="ml-1 text-[var(--accent)] group-open:hidden">
+                      · open
+                    </span>
+                    <span className="ml-1 hidden text-[var(--accent)] group-open:inline">
+                      · close
+                    </span>
+                  </span>
+                </div>
+              </summary>
+              <div className="border-t border-[var(--border)] px-3 pb-3 pt-2">
+                <PhotoGroup
+                  title="Tag photos"
+                  description="Private identification only — never posted with the listing."
+                  photos={identifyPhotos}
+                  empty="No tag photos yet — drop images here or add brand and care labels."
+                  section="identify"
+                  onAdd={() => pickFilesForRole("id_tag")}
+                  onDelete={(photoId) => void deletePhoto(photoId)}
+                  onPreview={setPreviewPhoto}
+                  onDropFiles={(files) =>
+                    void uploadFilesToSection(files, "identify")
+                  }
+                  onDropPhoto={(photoId) =>
+                    void movePhotoToSection(photoId, "identify")
+                  }
+                  onReorderPhoto={(draggedId, targetId, place) =>
+                    void reorderPhotoInSection(
+                      "identify",
+                      draggedId,
+                      targetId,
+                      place,
+                    )
+                  }
+                  onBeginMove={(photoId) => beginPhotoDrag(photoId)}
+                  onCancelMove={endPhotoDrag}
+                  movingPhotoId={movingPhotoId}
+                  dragOver={dragOverSection === "identify"}
+                  onDragOverChange={(over) =>
+                    setDragOverSection(over ? "identify" : null)
+                  }
+                  uploading={uploadingSection === "identify"}
+                  uploadProgress={
+                    uploadingSection === "identify" ? uploadProgress : null
+                  }
+                  deletingPhotoId={deletingPhotoId}
+                  disabled={
+                    uploading || Boolean(deletingPhotoId) || movingPhoto
+                  }
+                  tone="private"
+                  compact
+                />
+              </div>
+            </details>
           </section>
 
           <section className="flex flex-col gap-3 rounded-2xl border border-[var(--border)] bg-white p-6">
@@ -1469,6 +1492,8 @@ function PhotoGroup({
   movingPhotoId,
   dragOver,
   onDragOverChange,
+  uploading = false,
+  uploadProgress = null,
   deletingPhotoId,
   bgPhotoId,
   labPhotoHref,
@@ -1500,6 +1525,8 @@ function PhotoGroup({
   movingPhotoId?: string | null;
   dragOver?: boolean;
   onDragOverChange: (over: boolean) => void;
+  uploading?: boolean;
+  uploadProgress?: { done: number; total: number } | null;
   deletingPhotoId?: string | null;
   bgPhotoId?: string | null;
   labPhotoHref?: (photoId: string) => string;
@@ -1513,6 +1540,14 @@ function PhotoGroup({
       : "bg-[var(--accent-soft)] text-[var(--accent)]";
   const moveArmed = Boolean(movingPhotoId);
   const isDropTarget = dragOver || (moveArmed && !disabled);
+  const pendingSlots =
+    uploading && uploadProgress
+      ? Math.max(0, uploadProgress.total - uploadProgress.done)
+      : 0;
+  const uploadLabel =
+    uploadProgress && uploadProgress.total > 1
+      ? `Uploading ${Math.min(uploadProgress.done + 1, uploadProgress.total)} of ${uploadProgress.total}…`
+      : "Uploading…";
 
   function handleDragOver(e: DragEvent<HTMLDivElement>) {
     if (disabled) return;
@@ -1561,20 +1596,35 @@ function PhotoGroup({
     <div
       role="region"
       aria-label={title}
+      aria-busy={uploading || undefined}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
       onClick={moveArmed ? handleSectionActivate : undefined}
-      className={`rounded-2xl border p-4 transition ${
-        isDropTarget
-          ? "border-[var(--accent)] bg-[var(--accent-soft)] ring-2 ring-[var(--accent)]"
-          : compact
-            ? "border-transparent bg-transparent p-0"
-            : tone === "private"
-              ? "border-amber-200/80 bg-amber-50/40"
-              : "border-[var(--border)] bg-white"
+      className={`relative rounded-2xl border p-4 transition ${
+        uploading
+          ? "border-[var(--accent)] bg-[var(--accent-soft)]/50 ring-2 ring-[var(--accent)]/50"
+          : isDropTarget
+            ? "border-[var(--accent)] bg-[var(--accent-soft)] ring-2 ring-[var(--accent)]"
+            : compact
+              ? "border-transparent bg-transparent p-0"
+              : tone === "private"
+                ? "border-amber-200/80 bg-amber-50/40"
+                : "border-[var(--border)] bg-white"
       } ${moveArmed ? "cursor-pointer" : ""}`}
     >
+      {uploading ? (
+        <div
+          className="mb-3 flex items-center gap-2 rounded-xl bg-white/90 px-3 py-2 text-sm font-semibold text-[var(--foreground)] shadow-sm ring-1 ring-[var(--accent)]/30"
+          aria-live="polite"
+        >
+          <span
+            className="h-5 w-5 shrink-0 animate-spin rounded-full border-2 border-[var(--accent-soft)] border-t-[var(--accent)]"
+            aria-hidden
+          />
+          {uploadLabel}
+        </div>
+      ) : null}
       {!compact ? (
         <div className="mb-2 space-y-1">
           <h3 className="text-lg font-semibold text-[var(--foreground)]">
@@ -1592,18 +1642,20 @@ function PhotoGroup({
               {description}
             </p>
           ) : null}
-          <p className="text-xs text-[var(--muted)]">
-            {moveArmed
-              ? "Tap or drop here to move the photo"
-              : "Drop images here to upload · drag to reorder · tap a photo to enlarge"}
-          </p>
+          {!uploading ? (
+            <p className="text-xs text-[var(--muted)]">
+              {moveArmed
+                ? "Tap or drop here to move the photo"
+                : "Drop images here to upload · drag to reorder · tap a photo to enlarge"}
+            </p>
+          ) : null}
         </div>
-      ) : description ? (
+      ) : description && !uploading ? (
         <p className="mb-2 text-xs text-[var(--muted)]">{description}</p>
       ) : null}
-      {photos.length === 0 ? (
+      {photos.length === 0 && !uploading ? (
         <p className="text-sm text-[var(--muted)]">{empty}</p>
-      ) : (
+      ) : photos.length > 0 || uploading ? (
         <ul className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
           {photos.map((photo) => (
             <PhotoTile
@@ -1640,6 +1692,14 @@ function PhotoGroup({
               }
             />
           ))}
+          {Array.from({ length: Math.max(pendingSlots, uploading ? 1 : 0) }, (_, i) => (
+            <li key={`upload-slot-${i}`} aria-hidden>
+              <div className="relative flex aspect-square w-full items-center justify-center overflow-hidden rounded-xl border border-dashed border-[var(--accent)]/60 bg-[var(--accent-soft)]/70">
+                <div className="absolute inset-0 animate-pulse bg-[var(--accent)]/10" />
+                <span className="relative h-7 w-7 animate-spin rounded-full border-[3px] border-white border-t-[var(--accent)]" />
+              </div>
+            </li>
+          ))}
           <li onClick={(e) => e.stopPropagation()}>
             <button
               type="button"
@@ -1651,8 +1711,8 @@ function PhotoGroup({
             </button>
           </li>
         </ul>
-      )}
-      {photos.length === 0 ? (
+      ) : null}
+      {photos.length === 0 && !uploading ? (
         <button
           type="button"
           disabled={disabled}
