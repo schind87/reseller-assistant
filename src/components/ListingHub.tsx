@@ -35,6 +35,15 @@ import {
   FAL_BG_MODELS,
   type FalBgModelId,
 } from "@/lib/ai/fal-bg-models";
+import {
+  isFalBgModelId,
+  readBgModelCatalogPrefs,
+  resolveDefaultListingModelId,
+  scopedBgModels,
+  subscribeBgModelCatalogPrefs,
+  writeBgModelCatalogPrefs,
+  type BgModelCatalogPrefs,
+} from "@/lib/ai/bg-model-prefs";
 import type {
   Listing,
   ListingPhotoWithUrl,
@@ -52,44 +61,6 @@ type ListingHubProps = {
   listingId: string;
   isAdmin?: boolean;
 };
-
-const LISTING_CLEAN_BG_MODEL_KEY = "ra-listing-clean-bg-model-v1";
-
-function getFalBgModelId(value: string): FalBgModelId | null {
-  return FAL_BG_MODELS.some((m) => m.id === value)
-    ? (value as FalBgModelId)
-    : null;
-}
-
-function readStoredCleanBgModel(): FalBgModelId | "" {
-  if (typeof window === "undefined") return "";
-  try {
-    const raw = window.localStorage.getItem(LISTING_CLEAN_BG_MODEL_KEY);
-    if (!raw) return "";
-    return getFalBgModelId(raw) ?? "";
-  } catch {
-    return "";
-  }
-}
-
-function writeStoredCleanBgModel(modelId: FalBgModelId | "") {
-  try {
-    if (!modelId) window.localStorage.removeItem(LISTING_CLEAN_BG_MODEL_KEY);
-    else window.localStorage.setItem(LISTING_CLEAN_BG_MODEL_KEY, modelId);
-    window.dispatchEvent(new Event("ra-listing-clean-bg-model"));
-  } catch {
-    /* ignore quota / private mode */
-  }
-}
-
-function subscribeCleanBgModel(onStoreChange: () => void) {
-  window.addEventListener("storage", onStoreChange);
-  window.addEventListener("ra-listing-clean-bg-model", onStoreChange);
-  return () => {
-    window.removeEventListener("storage", onStoreChange);
-    window.removeEventListener("ra-listing-clean-bg-model", onStoreChange);
-  };
-}
 
 type ListingPayload = {
   listing: Listing;
@@ -283,11 +254,16 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
   const searchParams = useSearchParams();
   const tweakOpen = searchParams.get("tweak") === "1";
   const [data, setData] = useState<ListingPayload | null>(null);
-  const cleanBgModelId = useSyncExternalStore(
-    subscribeCleanBgModel,
-    readStoredCleanBgModel,
-    () => "" as FalBgModelId | ""
+  const catalogPrefs = useSyncExternalStore(
+    subscribeBgModelCatalogPrefs,
+    readBgModelCatalogPrefs,
+    () => ({} as BgModelCatalogPrefs)
   );
+  const cleanBgModelId = resolveDefaultListingModelId(
+    catalogPrefs,
+    FAL_BG_MODELS
+  );
+  const selectableCleanBgModels = scopedBgModels(FAL_BG_MODELS, catalogPrefs);
   const [joinUrl, setJoinUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [processing, setProcessing] = useState(false);
@@ -342,7 +318,7 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
     setFields(draft.fields);
     setDraftDirty(false);
     draftHydrated.current = true;
-  }, []);
+  }, [setTitle, setDescription, setPrice, setFields, setDraftDirty]);
 
   const load = useCallback(
     async (opts?: { syncDraft?: boolean }) => {
@@ -408,7 +384,7 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
   }, [listingId]);
 
   function chooseCleanBgModel(next: FalBgModelId | "") {
-    writeStoredCleanBgModel(next);
+    writeBgModelCatalogPrefs({ defaultListingModelId: next });
   }
 
   const closeTweak = useCallback(() => {
@@ -1250,13 +1226,13 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
                   onChange={(e) => {
                     const next = e.target.value;
                     chooseCleanBgModel(
-                      next ? (getFalBgModelId(next) ?? "") : ""
+                      next && isFalBgModelId(next) ? next : ""
                     );
                   }}
                   className="rounded-lg border border-[var(--border)] bg-white px-3 py-2 text-base text-[var(--foreground)]"
                 >
                   <option value="">Production default (hanger-safe)</option>
-                  {FAL_BG_MODELS.map((model) => (
+                  {selectableCleanBgModels.map((model) => (
                     <option key={model.id} value={model.id}>
                       {model.label} · {model.approxCost}
                     </option>

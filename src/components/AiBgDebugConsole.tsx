@@ -4,6 +4,15 @@ import { startTransition, useEffect, useMemo, useState, useSyncExternalStore, ty
 import Link from "next/link";
 import { BigButton } from "@/components/BigButton";
 import type { FalBgModelDef, FalBgModelId } from "@/lib/ai/fal-bg-models";
+import {
+  descopedModelIdSet,
+  readBgModelCatalogPrefs,
+  resolveDefaultListingModelId,
+  scopedBgModels,
+  subscribeBgModelCatalogPrefs,
+  writeBgModelCatalogPrefs,
+  type BgModelCatalogPrefs,
+} from "@/lib/ai/bg-model-prefs";
 import { photoRoleLabel, PLATFORM_LABELS } from "@/lib/platforms";
 import type { PhotoRole, Platform } from "@/lib/types";
 
@@ -318,23 +327,50 @@ export function AiBgDebugConsole({
     readStoredLabPrefs,
     () => ({} as StoredLabPrefs),
   );
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const catalogPrefs = useSyncExternalStore(
+    subscribeBgModelCatalogPrefs,
+    readBgModelCatalogPrefs,
+    () => ({} as BgModelCatalogPrefs),
+  );
+  const descopedIds = useMemo(
+    () => descopedModelIdSet(catalogPrefs),
+    [catalogPrefs],
+  );
+  const selectableModels = useMemo(
+    () => scopedBgModels(models, catalogPrefs),
+    [models, catalogPrefs],
+  );
+  const defaultListingModelId = useMemo(
+    () => resolveDefaultListingModelId(catalogPrefs, models),
+    [catalogPrefs, models],
+  );
   const defaultSelectedModels = useMemo(
     () =>
-      new Set(models.filter((m) => m.defaultSelected).map((m) => m.id)),
-    [models],
+      new Set(
+        selectableModels.filter((m) => m.defaultSelected).map((m) => m.id),
+      ),
+    [selectableModels],
   );
   const rememberedModels = useMemo(() => {
-    const known = new Set(models.map((m) => m.id));
+    const known = new Set(selectableModels.map((m) => m.id));
     const ids = (storedPrefs.selectedModels ?? []).filter((id): id is FalBgModelId =>
       known.has(id as FalBgModelId),
     );
     return ids.length > 0 ? new Set(ids) : null;
-  }, [models, storedPrefs.selectedModels]);
+  }, [selectableModels, storedPrefs.selectedModels]);
   const [sessionModels, setSessionModels] = useState<Set<FalBgModelId> | null>(
     null,
   );
-  const selectedModels =
+  const selectedModelsRaw =
     sessionModels ?? rememberedModels ?? defaultSelectedModels;
+  const selectedModels = useMemo(() => {
+    const next = new Set<FalBgModelId>();
+    for (const id of selectedModelsRaw) {
+      if (!descopedIds.has(id)) next.add(id);
+    }
+    return next;
+  }, [selectedModelsRaw, descopedIds]);
   const labBackdrop: LabBackdrop =
     storedPrefs.labBackdrop === "dark" || storedPrefs.labBackdrop === "white"
       ? storedPrefs.labBackdrop
@@ -485,6 +521,34 @@ export function AiBgDebugConsole({
       if (next.has(id)) next.delete(id);
       else next.add(id);
       return next;
+    });
+  }
+
+  function setModelScoped(id: FalBgModelId, scoped: boolean) {
+    const nextDescoped = new Set(descopedIds);
+    if (scoped) nextDescoped.delete(id);
+    else nextDescoped.add(id);
+
+    const nextDefault =
+      !scoped && defaultListingModelId === id
+        ? ""
+        : defaultListingModelId;
+
+    writeBgModelCatalogPrefs({
+      descopedModelIds: [...nextDescoped],
+      defaultListingModelId: nextDefault,
+    });
+
+    setSessionModels((prev) => {
+      const base = new Set(prev ?? selectedModels);
+      if (!scoped) base.delete(id);
+      return base;
+    });
+  }
+
+  function setDefaultListingModel(next: FalBgModelId | "") {
+    writeBgModelCatalogPrefs({
+      defaultListingModelId: next,
     });
   }
 
@@ -758,13 +822,33 @@ export function AiBgDebugConsole({
             fal again.
           </p>
         </div>
-        <Link
-          href="/app"
-          className="text-base font-semibold text-[var(--accent)] hover:underline"
-        >
-          ← Back to listings
-        </Link>
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            onClick={() => setSettingsOpen(true)}
+            className="rounded-lg border border-[var(--border)] bg-white px-3 py-1.5 text-sm font-semibold text-[var(--foreground)] transition hover:bg-[var(--surface-muted)]"
+          >
+            Settings
+          </button>
+          <Link
+            href="/app"
+            className="text-base font-semibold text-[var(--accent)] hover:underline"
+          >
+            ← Back to listings
+          </Link>
+        </div>
       </header>
+
+      {settingsOpen ? (
+        <BgModelSettingsDialog
+          models={models}
+          descopedIds={descopedIds}
+          defaultListingModelId={defaultListingModelId}
+          onSetScoped={setModelScoped}
+          onSetDefault={setDefaultListingModel}
+          onClose={() => setSettingsOpen(false)}
+        />
+      ) : null}
 
       <section className="rounded-2xl border border-[var(--border)] bg-white p-5">
         <div className="flex flex-wrap items-end justify-between gap-2">
@@ -1052,7 +1136,12 @@ export function AiBgDebugConsole({
               Models
             </h2>
             <ul className="mt-3 space-y-2">
-              {models.map((model) => {
+              {selectableModels.length === 0 ? (
+                <li className="rounded-xl border border-dashed border-[var(--border)] px-3 py-3 text-sm text-[var(--muted)]">
+                  All models are descoped. Open Settings to include some again.
+                </li>
+              ) : null}
+              {selectableModels.map((model) => {
                 const savedCount = savedCountByModel.get(model.id) ?? 0;
                 return (
                   <li key={model.id}>
@@ -1462,6 +1551,145 @@ function ImageLightbox({
         <p className="rounded-lg bg-black/50 px-3 py-1 text-sm font-medium text-white">
           {label}
         </p>
+      </div>
+    </div>
+  );
+}
+
+function BgModelSettingsDialog({
+  models,
+  descopedIds,
+  defaultListingModelId,
+  onSetScoped,
+  onSetDefault,
+  onClose,
+}: {
+  models: FalBgModelDef[];
+  descopedIds: Set<FalBgModelId>;
+  defaultListingModelId: FalBgModelId | "";
+  onSetScoped: (id: FalBgModelId, scoped: boolean) => void;
+  onSetDefault: (id: FalBgModelId | "") => void;
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+    }
+    window.addEventListener("keydown", onKeyDown);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      document.body.style.overflow = prev;
+    };
+  }, [onClose]);
+
+  const scoped = models.filter((m) => !descopedIds.has(m.id));
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Background model settings"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-4 sm:items-center"
+      onClick={onClose}
+    >
+      <div
+        className="max-h-[min(90vh,720px)] w-full max-w-lg overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h2 className="text-xl font-semibold text-[var(--foreground)]">
+              Model settings
+            </h2>
+            <p className="mt-1 text-sm text-[var(--muted)]">
+              Choose the listing-page default and which models appear in
+              selectors. Descoped models stay out of the lab run list and the
+              listing clean-bg dropdown.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-sm font-semibold text-[var(--foreground)] hover:bg-[var(--surface-muted)]"
+          >
+            Close
+          </button>
+        </div>
+
+        <label className="mt-5 flex flex-col gap-1.5 text-sm">
+          <span className="font-semibold text-[var(--foreground)]">
+            Default listing clean-bg model
+          </span>
+          <select
+            value={defaultListingModelId}
+            onChange={(e) => {
+              const next = e.target.value;
+              onSetDefault(
+                next && scoped.some((m) => m.id === next)
+                  ? (next as FalBgModelId)
+                  : "",
+              );
+            }}
+            className="rounded-lg border border-[var(--border)] bg-white px-3 py-2 text-base text-[var(--foreground)]"
+          >
+            <option value="">Production default (hanger-safe)</option>
+            {scoped.map((model) => (
+              <option key={model.id} value={model.id}>
+                {model.label} · {model.approxCost}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <div className="mt-5">
+          <p className="text-sm font-semibold text-[var(--foreground)]">
+            Models in selectors
+          </p>
+          <p className="mt-1 text-xs text-[var(--muted)]">
+            Uncheck to descope — hidden from the lab model list and listing
+            dropdown.
+          </p>
+          <ul className="mt-3 space-y-2">
+            {models.map((model) => {
+              const scopedOn = !descopedIds.has(model.id);
+              return (
+                <li key={model.id}>
+                  <label
+                    className={`flex cursor-pointer gap-3 rounded-xl border px-3 py-2 ${
+                      scopedOn
+                        ? "border-[var(--border)] bg-white"
+                        : "border-dashed border-[var(--border)] bg-[var(--surface-muted)] opacity-80"
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={scopedOn}
+                      onChange={(e) =>
+                        onSetScoped(model.id, e.target.checked)
+                      }
+                      className="mt-1"
+                    />
+                    <span className="min-w-0">
+                      <span className="block text-sm font-semibold text-[var(--foreground)]">
+                        {model.label}
+                        {!scopedOn ? (
+                          <span className="ml-2 font-normal text-[var(--muted)]">
+                            · descoped
+                          </span>
+                        ) : null}
+                      </span>
+                      <span className="block text-xs text-[var(--muted)]">
+                        {model.approxCost} · {model.description}
+                      </span>
+                    </span>
+                  </label>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
       </div>
     </div>
   );
