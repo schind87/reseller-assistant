@@ -4,6 +4,7 @@ import { startTransition, useEffect, useMemo, useState, useSyncExternalStore, ty
 import Link from "next/link";
 import { BigButton } from "@/components/BigButton";
 import type { FalBgModelDef, FalBgModelId } from "@/lib/ai/fal-bg-models";
+import { parseApproxCostUsd } from "@/lib/ai/fal-lab";
 import {
   EMPTY_BG_MODEL_CATALOG_PREFS,
   descopedModelIdSet,
@@ -445,6 +446,31 @@ export function AiBgDebugConsole({
     for (const row of modelCostAverages) map.set(row.modelId, row);
     return map;
   }, [modelCostAverages]);
+
+  const selectedRunCostEstimate = useMemo(() => {
+    let totalUsd = 0;
+    let pricedCount = 0;
+    let unknownCount = 0;
+    let usedAvg = false;
+    for (const model of selectableModels) {
+      if (!selectedModels.has(model.id)) continue;
+      const avg = avgCostByModel.get(model.id);
+      if (avg && avg.sampleCount > 0 && Number.isFinite(avg.avgUsd)) {
+        totalUsd += avg.avgUsd;
+        pricedCount += 1;
+        usedAvg = true;
+        continue;
+      }
+      const catalog = parseApproxCostUsd(model.approxCost);
+      if (catalog != null) {
+        totalUsd += catalog;
+        pricedCount += 1;
+        continue;
+      }
+      unknownCount += 1;
+    }
+    return { totalUsd, pricedCount, unknownCount, usedAvg };
+  }, [selectableModels, selectedModels, avgCostByModel]);
 
   const savedCountByModel = useMemo(() => {
     const counts = new Map<string, number>();
@@ -1273,19 +1299,43 @@ export function AiBgDebugConsole({
               </div>
             </div>
 
-            <div className="mt-4 max-w-sm">
-              <BigButton
-                disabled={
-                  running || !selectedPhoto || selectedModels.size === 0
-                }
-                onClick={() => void runModels()}
-              >
-                {running && runProgress
-                  ? `Running ${runProgress.completed}/${runProgress.total}…`
-                  : running
-                    ? "Running…"
-                    : `Run ${selectedModels.size} model${selectedModels.size === 1 ? "" : "s"}`}
-              </BigButton>
+            <div className="mt-4 flex max-w-md flex-wrap items-center gap-3">
+              <div className="min-w-0 flex-1">
+                <BigButton
+                  disabled={
+                    running || !selectedPhoto || selectedModels.size === 0
+                  }
+                  onClick={() => void runModels()}
+                >
+                  {running && runProgress
+                    ? `Running ${runProgress.completed}/${runProgress.total}…`
+                    : running
+                      ? "Running…"
+                      : `Run ${selectedModels.size} model${selectedModels.size === 1 ? "" : "s"}`}
+                </BigButton>
+              </div>
+              {selectedModels.size > 0 &&
+              selectedRunCostEstimate.pricedCount > 0 ? (
+                <p
+                  className="shrink-0 text-sm font-semibold tabular-nums text-[var(--foreground)]"
+                  title={
+                    selectedRunCostEstimate.usedAvg
+                      ? "Sum of running averages where available, otherwise catalog estimates"
+                      : "Sum of catalog unit-price estimates for the selected models"
+                  }
+                >
+                  ~{formatCostUsd(selectedRunCostEstimate.totalUsd)}
+                  {selectedRunCostEstimate.unknownCount > 0 ? (
+                    <span className="ml-1 font-normal text-[var(--muted)]">
+                      +{selectedRunCostEstimate.unknownCount} unpriced
+                    </span>
+                  ) : null}
+                </p>
+              ) : selectedModels.size > 0 ? (
+                <p className="shrink-0 text-sm text-[var(--muted)]">
+                  Cost unknown
+                </p>
+              ) : null}
             </div>
             <p className="mt-2 text-xs text-[var(--muted)]">
               Run calls fal and appends a new saved version. Switching photos or
