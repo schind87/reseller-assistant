@@ -904,97 +904,94 @@ export function AiBgDebugConsole({
         />
       ) : null}
 
-      <section className="rounded-2xl border border-[var(--border)] bg-white p-5">
-        <div className="flex flex-wrap items-end justify-between gap-2">
-          <div>
-            <h2 className="text-lg font-semibold text-[var(--foreground)]">
-              Your recent runs
+      <div className="grid items-start gap-5 lg:grid-cols-[13.5rem_minmax(0,1fr)]">
+        <aside className="order-first rounded-xl border border-[var(--border)] bg-white lg:sticky lg:top-4">
+          <div className="flex items-center justify-between gap-2 border-b border-[var(--border)] px-3 py-2">
+            <h2 className="text-sm font-semibold text-[var(--foreground)]">
+              Recent runs
             </h2>
-            <p className="mt-1 text-sm text-[var(--muted)]">
-              Every comparison you&apos;ve run in the lab. Tap one to reopen that
-              photo and its saved results.
-            </p>
+            <button
+              type="button"
+              onClick={() => void loadRecentRuns()}
+              className="rounded-md px-2 py-1 text-xs font-semibold text-[var(--muted)] transition hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)]"
+              title="Refresh recent runs"
+            >
+              Refresh
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={() => void loadRecentRuns()}
-            className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-sm font-semibold text-[var(--foreground)] transition hover:bg-[var(--surface-muted)]"
-          >
-            Refresh list
-          </button>
-        </div>
-        {recentRuns.length === 0 ? (
-          <p className="mt-4 text-sm text-[var(--muted)]">
-            No lab runs yet. Pick a photo below and run one or more models.
-          </p>
-        ) : (
-          <ul className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {recentRuns.map((run) => {
-              const active = selectedRunId === run.id;
-              const when = run.createdAt;
-              const roleLabel = run.photoRole
-                ? photoRoleLabel(run.photoRole as PhotoRole)
-                : "Photo";
-              const platform =
-                run.listingPlatform &&
-                run.listingPlatform in PLATFORM_LABELS
-                  ? PLATFORM_LABELS[run.listingPlatform as Platform]
-                  : run.listingPlatform;
-              return (
-                <li key={run.id}>
-                  <button
-                    type="button"
-                    onClick={() => void openRecentRun(run)}
-                    className={`flex w-full gap-3 rounded-xl border p-2.5 text-left transition ${
-                      active
-                        ? "border-[var(--accent)] bg-[var(--accent-soft)]"
-                        : "border-[var(--border)] hover:bg-[var(--surface-muted)]"
-                    }`}
-                  >
-                    <div
-                      className="h-16 w-16 shrink-0 overflow-hidden rounded-lg ring-1 ring-[var(--border)]"
-                      style={resultBackdropStyle(labBackdrop)}
+          {recentRuns.length === 0 ? (
+            <p className="px-3 py-3 text-xs text-[var(--muted)]">
+              No runs yet — pick a photo and run models.
+            </p>
+          ) : (
+            <ul className="max-h-[min(70vh,40rem)] overflow-y-auto p-1.5">
+              {recentRuns.map((run) => {
+                const active = selectedRunId === run.id;
+                const roleLabel = run.photoRole
+                  ? photoRoleLabel(run.photoRole as PhotoRole)
+                  : "Photo";
+                const platform =
+                  run.listingPlatform &&
+                  run.listingPlatform in PLATFORM_LABELS
+                    ? PLATFORM_LABELS[run.listingPlatform as Platform]
+                    : run.listingPlatform;
+                return (
+                  <li key={run.id}>
+                    <button
+                      type="button"
+                      onClick={() => void openRecentRun(run)}
+                      title={`${run.listingTitle || platform || "Listing"} · ${roleLabel}`}
+                      className={`flex w-full items-center gap-2 rounded-lg px-1.5 py-1.5 text-left transition ${
+                        active
+                          ? "bg-[var(--accent-soft)] ring-1 ring-[var(--accent)]"
+                          : "hover:bg-[var(--surface-muted)]"
+                      }`}
                     >
-                      {run.thumbUrl ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={run.thumbUrl}
-                          alt=""
-                          loading="lazy"
-                          decoding="async"
-                          className="h-full w-full object-contain"
-                        />
-                      ) : (
-                        <div className="flex h-full items-center justify-center text-[10px] text-[var(--muted)]">
-                          No thumb
-                        </div>
-                      )}
-                    </div>
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm font-semibold text-[var(--foreground)]">
-                        {run.listingTitle || platform || "Listing"}
+                      <div
+                        className="h-10 w-10 shrink-0 overflow-hidden rounded-md ring-1 ring-[var(--border)]"
+                        style={resultBackdropStyle(labBackdrop)}
+                      >
+                        {run.thumbUrl ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={run.thumbUrl}
+                            alt=""
+                            loading="lazy"
+                            decoding="async"
+                            className="h-full w-full object-contain"
+                          />
+                        ) : (
+                          <div className="flex h-full items-center justify-center text-[9px] text-[var(--muted)]">
+                            —
+                          </div>
+                        )}
+                      </div>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-xs font-semibold leading-tight text-[var(--foreground)]">
+                          {run.listingTitle || platform || "Listing"}
+                        </span>
+                        <span className="mt-0.5 block truncate text-[10px] leading-tight text-[var(--muted)]">
+                          {roleLabel} · {run.okCount}/{run.resultCount}
+                          {run.createdAt ? (
+                            <>
+                              {" · "}
+                              <LocalDateTime
+                                iso={run.createdAt}
+                                className="inline"
+                              />
+                            </>
+                          ) : null}
+                        </span>
                       </span>
-                      <span className="block text-xs text-[var(--muted)]">
-                        {roleLabel} · {run.okCount}/{run.resultCount} ok
-                        {when ? (
-                          <>
-                            {" · "}
-                            <LocalDateTime iso={when} />
-                          </>
-                        ) : null}
-                      </span>
-                      <span className="mt-0.5 block truncate text-xs text-[var(--muted)]">
-                        {run.modelLabels.join(", ") || "No models"}
-                      </span>
-                    </span>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </section>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </aside>
 
+        <div className="flex min-w-0 flex-col gap-5">
       <div className="flex flex-wrap items-center gap-2">
         <span
           className={`rounded-lg px-2.5 py-1 text-sm font-semibold ${
@@ -1504,6 +1501,8 @@ export function AiBgDebugConsole({
           )}
         </section>
       ) : null}
+        </div>
+      </div>
 
       {preview ? (
         <ImageLightbox
