@@ -1063,7 +1063,7 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
   const listingPhotos = photos.filter((p) => isPostingPhotoRole(p.role));
 
   return (
-    <div className="mx-auto flex w-full max-w-5xl flex-col gap-8 px-4 py-8">
+    <div className="mx-auto flex w-full max-w-6xl flex-col gap-8 px-4 py-8">
       <input
         ref={fileInputRef}
         type="file"
@@ -1105,296 +1105,301 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
         </p>
       ) : null}
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
-        {joinUrl ? (
-          <QrPanel
-            value={joinUrl}
-            title="Phone Companion"
-            hint="Scan anytime with your phone to open the Phone Companion — this QR stays valid. Keep this computer on the listing hub."
-            code={listing.join_code}
-          />
-        ) : (
-          <div className="rounded-2xl border border-[var(--border)] bg-white p-6 text-[var(--muted)]">
-            Preparing QR code…
-          </div>
-        )}
-
-        <section className="flex flex-col gap-3 rounded-2xl border border-[var(--border)] bg-white p-6">
-          <h2 className="font-[family-name:var(--font-brand)] text-2xl">
-            Finish with AI
-          </h2>
-          <p className="text-base text-[var(--muted)]">
-            Fills the editable fields below from your photos. Listing photos
-            marked Clean bg also get a white studio backdrop (hangers kept).
-            You can change anything afterward.
-          </p>
-          <BigButton
-            disabled={processing || photos.length === 0}
-            onClick={() => void runProcess()}
-          >
-            {processing ? "Working…" : "Finish with AI"}
-          </BigButton>
-          {photos.length === 0 ? (
-            <p className="text-sm text-[var(--muted)]">
-              Needs at least one photo first.
+      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_13.5rem]">
+        <div className="flex min-w-0 flex-col gap-8">
+          <section className="flex flex-col gap-6">
+            <h2 className="font-[family-name:var(--font-brand)] text-2xl">
+              Photos ({photos.length})
+            </h2>
+            <p className="text-base text-[var(--muted)]">
+              Drop image files onto a section to upload, or use Add to choose from
+              this computer. Drag photos to reorder within a group, or long-press
+              and drop onto another section to move. Use the QR code for guided
+              shooting on your phone.
             </p>
-          ) : null}
-        </section>
-      </div>
 
-      <section className="flex flex-col gap-6">
-        <h2 className="font-[family-name:var(--font-brand)] text-2xl">
-          Photos ({photos.length})
-        </h2>
-        <p className="text-base text-[var(--muted)]">
-          Drop image files onto a section to upload, or use Add to choose from
-          this computer. Drag photos to reorder within a group, or long-press
-          and drop onto another section to move. Use the QR code for guided
-          shooting on your phone.
-        </p>
-
-        {movingPhotoId ? (
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--accent)] bg-[var(--accent-soft)] px-4 py-3">
-            <p className="text-base font-semibold text-[var(--accent)]">
-              Moving photo — drop on another photo to reorder, or onto a
-              different section to move it
-            </p>
-            <button
-              type="button"
-              className="text-base font-semibold text-[var(--accent)] underline"
-              onClick={() => endPhotoDrag()}
-            >
-              Cancel
-            </button>
-          </div>
-        ) : null}
-
-        <PhotoGroup
-          title="Brand & care tags"
-          badge="For Product Identification, not shown in listing."
-          description="Close-ups of brand, size, care, and style/SKU tags. Private by default — tap Use in listing on any shot you also want shoppers to see."
-          photos={identifyPhotos}
-          empty="No tag photos yet — drop images here or add every label you can read."
-          section="identify"
-          onAdd={() => pickFilesForRole("id_tag")}
-          onDelete={(photoId) => void deletePhoto(photoId)}
-          onUseInListing={(photoId) => setPromotePhotoId(photoId)}
-          onPreview={setPreviewPhoto}
-          onDropFiles={(files) => void uploadFilesToSection(files, "identify")}
-          onDropPhoto={(photoId) => void movePhotoToSection(photoId, "identify")}
-          onReorderPhoto={(draggedId, targetId, place) =>
-            void reorderPhotoInSection("identify", draggedId, targetId, place)
-          }
-          onBeginMove={(photoId) => beginPhotoDrag(photoId)}
-          onCancelMove={endPhotoDrag}
-          movingPhotoId={movingPhotoId}
-          promotePhotoId={promotePhotoId}
-          dragOver={dragOverSection === "identify"}
-          onDragOverChange={(over) =>
-            setDragOverSection(over ? "identify" : null)
-          }
-          deletingPhotoId={deletingPhotoId}
-          disabled={
-            uploading ||
-            Boolean(deletingPhotoId) ||
-            promotingPhoto ||
-            movingPhoto
-          }
-          tone="private"
-        />
-
-        {promotePhotoId ? (
-          <PhotoRolePickerDialog
-            title="Use this photo in the listing as…"
-            description="Keeps the original private photo and adds a copy for shoppers. Pick a type below."
-            roles={LISTING_ROLES}
-            roleHint={(role) => roleCountLabel(photos, role)}
-            disabled={promotingPhoto}
-            onPick={(role) => void addPhotoToListing(promotePhotoId, role)}
-            onClose={() => setPromotePhotoId(null)}
-          />
-        ) : null}
-
-        <div className="space-y-3">
-          {isAdmin ? (
-            <div className="flex flex-col gap-3 rounded-xl border border-dashed border-[var(--border)] bg-[var(--surface-muted)] px-3 py-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
-              <label className="flex min-w-0 flex-1 flex-col gap-1 text-sm">
-                <span className="font-semibold text-[var(--foreground)]">
-                  Clean bg model (admin)
-                </span>
-                <select
-                  value={cleanBgModelId}
-                  onChange={(e) => {
-                    const next = e.target.value;
-                    chooseCleanBgModel(
-                      next && isFalBgModelId(next) ? next : ""
-                    );
-                  }}
-                  className="rounded-lg border border-[var(--border)] bg-white px-3 py-2 text-base text-[var(--foreground)]"
-                >
-                  <option value="">Production default (hanger-safe)</option>
-                  {selectableCleanBgModels.map((model) => (
-                    <option key={model.id} value={model.id}>
-                      {model.label} · {model.approxCost}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <a
-                href={`/app/admin/bg-lab?listingId=${encodeURIComponent(listingId)}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="shrink-0 text-base font-semibold text-[var(--accent)] hover:underline"
-              >
-                Open bg lab →
-              </a>
-            </div>
-          ) : null}
-          <PhotoGroup
-            title="Photos shoppers will see"
-            badge="Listing photos · posted"
-            description="Cover, front, back, details, and flaws for the marketplace listing. You can add multiple photos of each type. Use Clean bg on a shot to swap the backdrop for white while keeping hangers intact."
-            photos={listingPhotos}
-            empty="No listing photos yet — drop images here or start with a clean cover shot."
-            section="listing"
-            onAdd={() => setPickListingRole(true)}
-            onDelete={(photoId) => void deletePhoto(photoId)}
-            onToggleCleanBackground={(photo) =>
-              void toggleCleanBackground(photo)
-            }
-            onRedoCleanBackground={(photo) => void redoCleanBackground(photo)}
-            onPreview={setPreviewPhoto}
-            onDropFiles={(files) => void uploadFilesToSection(files, "listing")}
-            onDropPhoto={(photoId) =>
-              void movePhotoToSection(photoId, "listing")
-            }
-            onReorderPhoto={(draggedId, targetId, place) =>
-              void reorderPhotoInSection("listing", draggedId, targetId, place)
-            }
-            onBeginMove={(photoId) => beginPhotoDrag(photoId)}
-            onCancelMove={endPhotoDrag}
-            movingPhotoId={movingPhotoId}
-            dragOver={dragOverSection === "listing"}
-            onDragOverChange={(over) =>
-              setDragOverSection(over ? "listing" : null)
-            }
-            deletingPhotoId={deletingPhotoId}
-            bgPhotoId={bgPhotoId}
-            labPhotoHref={
-              isAdmin
-                ? (photoId) =>
-                    `/app/admin/bg-lab?photoId=${encodeURIComponent(photoId)}`
-                : undefined
-            }
-            disabled={
-              uploading ||
-              Boolean(deletingPhotoId) ||
-              movingPhoto
-            }
-            tone="listing"
-          />
-        </div>
-
-        {pickListingRole ? (
-          <PhotoRolePickerDialog
-            title="Which listing photo?"
-            description="Pick a type for the photo you’re adding — you can add as many of each as you want."
-            roles={LISTING_ROLES}
-            roleHint={(role) => roleCountLabel(photos, role)}
-            disabled={uploading}
-            onPick={(role) => pickFilesForRole(role)}
-            onClose={() => setPickListingRole(false)}
-          />
-        ) : null}
-
-        <p className="text-base text-[var(--muted)]">
-          For the Phone Companion, scan the QR above. On this
-          computer, drop files onto sections, choose files with Add, or
-          long-press to move photos — the camera stays on your phone.
-        </p>
-        <a
-          href={`/api/listings/${listingId}/photos/zip`}
-          className="block max-w-sm"
-        >
-          <BigButton variant="secondary">Download listing photos ZIP</BigButton>
-        </a>
-      </section>
-
-      <section className="flex flex-col gap-4 rounded-2xl border border-[var(--border)] bg-white p-6">
-        <div>
-          <h2 className="font-[family-name:var(--font-brand)] text-2xl">
-            {PLATFORM_LABELS[platform]} listing fields
-          </h2>
-          <p className="mt-2 text-base text-[var(--muted)]">
-            Edit these directly — same fields you will enter on{" "}
-            {PLATFORM_LABELS[platform]}. While posting, use{" "}
-            <span className="font-semibold text-[var(--foreground)]">
-              Tweak listing fields
-            </span>{" "}
-            in the Chrome extension for a larger editor popup.
-          </p>
-        </div>
-
-        {schema ? (
-          <ListingSchemaForm
-            schema={schema}
-            title={title}
-            description={description}
-            price={price}
-            fields={fields}
-            onTitleChange={(value) => {
-              setTitle(value);
-              setDraftDirty(true);
-            }}
-            onDescriptionChange={(value) => {
-              setDescription(value);
-              setDraftDirty(true);
-            }}
-            onPriceChange={(value) => {
-              setPrice(value);
-              setDraftDirty(true);
-            }}
-            onFieldsChange={(next) => {
-              setFields(next);
-              setDraftDirty(true);
-            }}
-            onRewriteDescription={() => void rewriteDescription()}
-            rewritingDescription={rewritingDescription}
-            onSubmit={(e) => void saveDraft(e)}
-            footer={
-              <div className="flex flex-col gap-3 pt-2 sm:flex-row">
-                <BigButton
-                  type="submit"
-                  disabled={saving || processing || rewritingDescription}
-                >
-                  {saving ? "Saving…" : draftDirty ? "Save changes" : "Saved"}
-                </BigButton>
-                <BigButton
+            {movingPhotoId ? (
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--accent)] bg-[var(--accent-soft)] px-4 py-3">
+                <p className="text-base font-semibold text-[var(--accent)]">
+                  Moving photo — drop on another photo to reorder, or onto a
+                  different section to move it
+                </p>
+                <button
                   type="button"
-                  variant="secondary"
-                  disabled={saving || rewritingDescription || openingSell}
-                  onClick={() => void openMarketplaceSell()}
+                  className="text-base font-semibold text-[var(--accent)] underline"
+                  onClick={() => endPhotoDrag()}
                 >
-                  {openingSell
-                    ? "Opening…"
-                    : `Open ${PLATFORM_LABELS[platform]}`}
-                </BigButton>
+                  Cancel
+                </button>
               </div>
-            }
-          />
-        ) : (
-          <p className="text-base text-[var(--muted)]">Loading fields…</p>
-        )}
-      </section>
+            ) : null}
 
-      <div className="border-t border-[var(--border)] pt-6">
-        <BigButton
-          variant="danger"
-          disabled={deletingListing || saving || processing}
-          onClick={() => void deleteThisListing()}
-        >
-          {deletingListing ? "Deleting…" : "Delete this listing"}
-        </BigButton>
+            <PhotoGroup
+              title="Brand & care tags"
+              badge="For Product Identification, not shown in listing."
+              description="Close-ups of brand, size, care, and style/SKU tags. Private by default — tap Use in listing on any shot you also want shoppers to see."
+              photos={identifyPhotos}
+              empty="No tag photos yet — drop images here or add every label you can read."
+              section="identify"
+              onAdd={() => pickFilesForRole("id_tag")}
+              onDelete={(photoId) => void deletePhoto(photoId)}
+              onUseInListing={(photoId) => setPromotePhotoId(photoId)}
+              onPreview={setPreviewPhoto}
+              onDropFiles={(files) => void uploadFilesToSection(files, "identify")}
+              onDropPhoto={(photoId) => void movePhotoToSection(photoId, "identify")}
+              onReorderPhoto={(draggedId, targetId, place) =>
+                void reorderPhotoInSection("identify", draggedId, targetId, place)
+              }
+              onBeginMove={(photoId) => beginPhotoDrag(photoId)}
+              onCancelMove={endPhotoDrag}
+              movingPhotoId={movingPhotoId}
+              promotePhotoId={promotePhotoId}
+              dragOver={dragOverSection === "identify"}
+              onDragOverChange={(over) =>
+                setDragOverSection(over ? "identify" : null)
+              }
+              deletingPhotoId={deletingPhotoId}
+              disabled={
+                uploading ||
+                Boolean(deletingPhotoId) ||
+                promotingPhoto ||
+                movingPhoto
+              }
+              tone="private"
+            />
+
+            {promotePhotoId ? (
+              <PhotoRolePickerDialog
+                title="Use this photo in the listing as…"
+                description="Keeps the original private photo and adds a copy for shoppers. Pick a type below."
+                roles={LISTING_ROLES}
+                roleHint={(role) => roleCountLabel(photos, role)}
+                disabled={promotingPhoto}
+                onPick={(role) => void addPhotoToListing(promotePhotoId, role)}
+                onClose={() => setPromotePhotoId(null)}
+              />
+            ) : null}
+
+            <div className="space-y-3">
+              {isAdmin ? (
+                <div className="flex flex-col gap-3 rounded-xl border border-dashed border-[var(--border)] bg-[var(--surface-muted)] px-3 py-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
+                  <label className="flex min-w-0 flex-1 flex-col gap-1 text-sm">
+                    <span className="font-semibold text-[var(--foreground)]">
+                      Clean bg model (admin)
+                    </span>
+                    <select
+                      value={cleanBgModelId}
+                      onChange={(e) => {
+                        const next = e.target.value;
+                        chooseCleanBgModel(
+                          next && isFalBgModelId(next) ? next : ""
+                        );
+                      }}
+                      className="rounded-lg border border-[var(--border)] bg-white px-3 py-2 text-base text-[var(--foreground)]"
+                    >
+                      <option value="">Production default (hanger-safe)</option>
+                      {selectableCleanBgModels.map((model) => (
+                        <option key={model.id} value={model.id}>
+                          {model.label} · {model.approxCost}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <a
+                    href={`/app/admin/bg-lab?listingId=${encodeURIComponent(listingId)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="shrink-0 text-base font-semibold text-[var(--accent)] hover:underline"
+                  >
+                    Open bg lab →
+                  </a>
+                </div>
+              ) : null}
+              <PhotoGroup
+                title="Photos shoppers will see"
+                badge="Listing photos · posted"
+                description="Cover, front, back, details, and flaws for the marketplace listing. You can add multiple photos of each type. Use Clean bg on a shot to swap the backdrop for white while keeping hangers intact."
+                photos={listingPhotos}
+                empty="No listing photos yet — drop images here or start with a clean cover shot."
+                section="listing"
+                onAdd={() => setPickListingRole(true)}
+                onDelete={(photoId) => void deletePhoto(photoId)}
+                onToggleCleanBackground={(photo) =>
+                  void toggleCleanBackground(photo)
+                }
+                onRedoCleanBackground={(photo) => void redoCleanBackground(photo)}
+                onPreview={setPreviewPhoto}
+                onDropFiles={(files) => void uploadFilesToSection(files, "listing")}
+                onDropPhoto={(photoId) =>
+                  void movePhotoToSection(photoId, "listing")
+                }
+                onReorderPhoto={(draggedId, targetId, place) =>
+                  void reorderPhotoInSection("listing", draggedId, targetId, place)
+                }
+                onBeginMove={(photoId) => beginPhotoDrag(photoId)}
+                onCancelMove={endPhotoDrag}
+                movingPhotoId={movingPhotoId}
+                dragOver={dragOverSection === "listing"}
+                onDragOverChange={(over) =>
+                  setDragOverSection(over ? "listing" : null)
+                }
+                deletingPhotoId={deletingPhotoId}
+                bgPhotoId={bgPhotoId}
+                labPhotoHref={
+                  isAdmin
+                    ? (photoId) =>
+                        `/app/admin/bg-lab?photoId=${encodeURIComponent(photoId)}`
+                    : undefined
+                }
+                disabled={
+                  uploading ||
+                  Boolean(deletingPhotoId) ||
+                  movingPhoto
+                }
+                tone="listing"
+              />
+            </div>
+
+            {pickListingRole ? (
+              <PhotoRolePickerDialog
+                title="Which listing photo?"
+                description="Pick a type for the photo you’re adding — you can add as many of each as you want."
+                roles={LISTING_ROLES}
+                roleHint={(role) => roleCountLabel(photos, role)}
+                disabled={uploading}
+                onPick={(role) => pickFilesForRole(role)}
+                onClose={() => setPickListingRole(false)}
+              />
+            ) : null}
+
+            <p className="text-base text-[var(--muted)]">
+              On this computer, drop files onto sections, choose files with Add,
+              or long-press to move photos — the camera stays on your phone via
+              the companion QR.
+            </p>
+            <a
+              href={`/api/listings/${listingId}/photos/zip`}
+              className="block max-w-sm"
+            >
+              <BigButton variant="secondary">Download listing photos ZIP</BigButton>
+            </a>
+          </section>
+
+          <section className="flex flex-col gap-3 rounded-2xl border border-[var(--border)] bg-white p-6">
+            <h2 className="font-[family-name:var(--font-brand)] text-2xl">
+              Finish with AI
+            </h2>
+            <p className="text-base text-[var(--muted)]">
+              Fills the editable fields below from your photos. Listing photos
+              marked Clean bg also get a white studio backdrop (hangers kept).
+              You can change anything afterward.
+            </p>
+            <BigButton
+              disabled={processing || photos.length === 0}
+              onClick={() => void runProcess()}
+            >
+              {processing ? "Working…" : "Finish with AI"}
+            </BigButton>
+            {photos.length === 0 ? (
+              <p className="text-sm text-[var(--muted)]">
+                Needs at least one photo first.
+              </p>
+            ) : null}
+          </section>
+
+          <section className="flex flex-col gap-4 rounded-2xl border border-[var(--border)] bg-white p-6">
+            <div>
+              <h2 className="font-[family-name:var(--font-brand)] text-2xl">
+                {PLATFORM_LABELS[platform]} listing fields
+              </h2>
+              <p className="mt-2 text-base text-[var(--muted)]">
+                Edit these directly — same fields you will enter on{" "}
+                {PLATFORM_LABELS[platform]}. While posting, use{" "}
+                <span className="font-semibold text-[var(--foreground)]">
+                  Tweak listing fields
+                </span>{" "}
+                in the Chrome extension for a larger editor popup.
+              </p>
+            </div>
+
+            {schema ? (
+              <ListingSchemaForm
+                schema={schema}
+                title={title}
+                description={description}
+                price={price}
+                fields={fields}
+                onTitleChange={(value) => {
+                  setTitle(value);
+                  setDraftDirty(true);
+                }}
+                onDescriptionChange={(value) => {
+                  setDescription(value);
+                  setDraftDirty(true);
+                }}
+                onPriceChange={(value) => {
+                  setPrice(value);
+                  setDraftDirty(true);
+                }}
+                onFieldsChange={(next) => {
+                  setFields(next);
+                  setDraftDirty(true);
+                }}
+                onRewriteDescription={() => void rewriteDescription()}
+                rewritingDescription={rewritingDescription}
+                onSubmit={(e) => void saveDraft(e)}
+                footer={
+                  <div className="flex flex-col gap-3 pt-2 sm:flex-row">
+                    <BigButton
+                      type="submit"
+                      disabled={saving || processing || rewritingDescription}
+                    >
+                      {saving ? "Saving…" : draftDirty ? "Save changes" : "Saved"}
+                    </BigButton>
+                    <BigButton
+                      type="button"
+                      variant="secondary"
+                      disabled={saving || rewritingDescription || openingSell}
+                      onClick={() => void openMarketplaceSell()}
+                    >
+                      {openingSell
+                        ? "Opening…"
+                        : `Open ${PLATFORM_LABELS[platform]}`}
+                    </BigButton>
+                  </div>
+                }
+              />
+            ) : (
+              <p className="text-base text-[var(--muted)]">Loading fields…</p>
+            )}
+          </section>
+
+          <div className="border-t border-[var(--border)] pt-6">
+            <BigButton
+              variant="danger"
+              disabled={deletingListing || saving || processing}
+              onClick={() => void deleteThisListing()}
+            >
+              {deletingListing ? "Deleting…" : "Delete this listing"}
+            </BigButton>
+          </div>
+        </div>
+
+        <aside className="order-first lg:sticky lg:top-4 lg:order-none">
+          {joinUrl ? (
+            <QrPanel
+              compact
+              value={joinUrl}
+              title="Phone Companion"
+              hint="Scan to open the companion on your phone. This QR stays valid."
+              code={listing.join_code}
+            />
+          ) : (
+            <div className="rounded-xl border border-[var(--border)] bg-white p-3 text-center text-sm text-[var(--muted)]">
+              Preparing QR…
+            </div>
+          )}
+        </aside>
       </div>
 
       {previewPhoto ? (
