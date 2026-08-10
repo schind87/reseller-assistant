@@ -1201,10 +1201,6 @@ export function AiBgDebugConsole({
                       <p className="mt-1 text-xs text-[var(--muted)]">
                         {result.provider} · {formatDurationSeconds(result.ms)}
                         {result.ok ? "" : " · failed"}
-                        {result.costUnits != null &&
-                        result.costUnitPrice != null
-                          ? ` · ${result.costUnits} × ${formatCostUsd(Number(result.costUnitPrice)) ?? ""}`
-                          : ""}
                       </p>
                       {result.createdAt ? (
                         <p className="text-xs text-[var(--muted)]">
@@ -1247,9 +1243,6 @@ export function AiBgDebugConsole({
                           className="aspect-square w-full object-contain"
                           style={resultBackdropStyle(labBackdrop)}
                         />
-                        <div className="pointer-events-none absolute left-2 top-2 z-10">
-                          <CostBadge result={result} size="sm" />
-                        </div>
                         <MagnifyButton
                           onClick={() =>
                             openPreview(result.imageUrl, entry.label)
@@ -1282,38 +1275,20 @@ export function AiBgDebugConsole({
 }
 
 function FalRequestMeta({ result }: { result: RunResult }) {
-  const requestId = result.falRequestId?.trim() || null;
-  const realId =
-    Boolean(requestId) && !requestId!.startsWith("sync-") ? requestId : null;
   const href = result.falDashboardUrl;
-
-  if (!href && !realId) return null;
+  if (!href) return null;
 
   return (
-    <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
-      {href ? (
-        <a
-          href={href}
-          target="_blank"
-          rel="noreferrer"
-          className="font-semibold text-[var(--accent)] hover:underline"
-          title="Opens this request in fal Recent History (includes billed cost when available)"
-        >
-          fal request →
-        </a>
-      ) : null}
-      {realId ? (
-        <button
-          type="button"
-          className="font-semibold text-[var(--muted)] hover:text-[var(--foreground)] hover:underline"
-          title={realId}
-          onClick={() => {
-            void navigator.clipboard.writeText(realId);
-          }}
-        >
-          Copy request id
-        </button>
-      ) : null}
+    <div className="mt-1 text-xs">
+      <a
+        href={href}
+        target="_blank"
+        rel="noreferrer"
+        className="font-semibold text-[var(--accent)] hover:underline"
+        title="Opens this request in fal Recent History (includes billed cost when available)"
+      >
+        fal request →
+      </a>
     </div>
   );
 }
