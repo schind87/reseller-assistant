@@ -1058,6 +1058,7 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
 
   const { listing, photos } = data;
   const platform = listing.platform as Platform;
+  const pageTitle = title.trim() || "Listing Draft";
   const identifyPhotos = photos.filter((p) => isIdentifyPhotoRole(p.role));
   const listingPhotos = photos.filter((p) => isPostingPhotoRole(p.role));
 
@@ -1077,7 +1078,7 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
             {PLATFORM_LABELS[platform]} · {listing.status.replaceAll("_", " ")}
           </p>
           <h1 className="font-[family-name:var(--font-brand)] text-4xl text-[var(--foreground)]">
-            Listing hub
+            {pageTitle}
           </h1>
           <p className="mt-2 text-lg text-[var(--muted)]">
             Add photos, run AI if you want, then edit the {PLATFORM_LABELS[platform]}{" "}
