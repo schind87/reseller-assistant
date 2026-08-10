@@ -12,6 +12,7 @@ import {
   type ListingPreferences,
 } from "@/lib/seller-preferences";
 import type { Listing, Platform } from "@/lib/types";
+import type { ListingWithThumb } from "@/lib/supabase/queries";
 
 function preferredSellingWebsite(
   preferences: ListingPreferences | null
@@ -20,7 +21,7 @@ function preferredSellingWebsite(
 }
 
 type AppHomeProps = {
-  initialListings: Listing[];
+  initialListings: ListingWithThumb[];
   preferencesCompleted: boolean;
   initialPreferences: ListingPreferences | null;
   userEmail?: string | null;
@@ -35,7 +36,7 @@ export function AppHome({
   isAdmin = false,
 }: AppHomeProps) {
   const router = useRouter();
-  const [listings, setListings] = useState(initialListings);
+  const [listings, setListings] = useState<ListingWithThumb[]>(initialListings);
   const [prefsDone, setPrefsDone] = useState(preferencesCompleted);
   const [preferences, setPreferences] = useState(initialPreferences);
   const [editingPrefs, setEditingPrefs] = useState(!preferencesCompleted);
@@ -56,7 +57,8 @@ export function AppHome({
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "Could not create listing");
-      setListings((prev) => [json.listing, ...prev]);
+      const created = json.listing as Listing;
+      setListings((prev) => [{ ...created, thumbUrl: null }, ...prev]);
       router.push(`/app/listings/${json.listing.id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not create listing");
@@ -287,15 +289,33 @@ export function AppHome({
                 >
                   <Link
                     href={`/app/listings/${listing.id}`}
-                    className="min-w-0 flex-1 px-5 py-4 transition-colors hover:bg-[var(--surface-muted)]"
+                    className="flex min-w-0 flex-1 items-stretch gap-3 transition-colors hover:bg-[var(--surface-muted)]"
                   >
-                    <p className="text-lg font-semibold text-[var(--foreground)]">
-                      {label}
-                    </p>
-                    <p className="mt-1 text-base capitalize text-[var(--muted)]">
-                      {PLATFORM_LABELS[listing.platform]} ·{" "}
-                      {listing.status.replaceAll("_", " ")}
-                    </p>
+                    <div className="h-[4.75rem] w-[4.75rem] shrink-0 self-center overflow-hidden bg-[var(--surface-muted)] sm:ml-3 sm:rounded-xl">
+                      {listing.thumbUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={listing.thumbUrl}
+                          alt=""
+                          loading="lazy"
+                          decoding="async"
+                          className="h-full w-full object-cover"
+                        />
+                      ) : (
+                        <div className="flex h-full items-center justify-center text-[10px] font-semibold uppercase tracking-wide text-[var(--muted)]">
+                          No photo
+                        </div>
+                      )}
+                    </div>
+                    <span className="min-w-0 flex-1 py-4 pr-2 pl-3 sm:pl-0 sm:pr-4">
+                      <p className="text-lg font-semibold text-[var(--foreground)]">
+                        {label}
+                      </p>
+                      <p className="mt-1 text-base capitalize text-[var(--muted)]">
+                        {PLATFORM_LABELS[listing.platform]} ·{" "}
+                        {listing.status.replaceAll("_", " ")}
+                      </p>
+                    </span>
                   </Link>
                   <button
                     type="button"

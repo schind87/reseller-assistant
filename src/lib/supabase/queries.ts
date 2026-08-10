@@ -18,6 +18,10 @@ import {
   isPostingPhotoRole,
 } from "@/lib/types";
 
+export type ListingWithThumb = Listing & {
+  thumbUrl: string | null;
+};
+
 const JOIN_CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
 function generateJoinCode(length = 6): string {
@@ -59,7 +63,7 @@ export async function getWorkspace(): Promise<Workspace> {
   return created as Workspace;
 }
 
-export async function listListings(userId: string): Promise<Listing[]> {
+export async function listListings(userId: string): Promise<ListingWithThumb[]> {
   const supabase = createAdminClient();
   const { data, error } = await supabase
     .from("listings")
@@ -68,7 +72,75 @@ export async function listListings(userId: string): Promise<Listing[]> {
     .order("updated_at", { ascending: false });
 
   if (error) throw new Error(`listListings: ${error.message}`);
-  return (data ?? []) as Listing[];
+  const listings = (data ?? []) as Listing[];
+  if (listings.length === 0) return [];
+
+  const listingIds = listings.map((l) => l.id);
+  const { data: photos, error: photosError } = await supabase
+    .from("listing_photos")
+    .select(
+      "id, listing_id, role, storage_path, processed_path, replace_background, sort_order, created_at"
+    )
+    .in("listing_id", listingIds)
+    .order("sort_order", { ascending: true })
+    .order("created_at", { ascending: true });
+  if (photosError) throw new Error(`listListings photos: ${photosError.message}`);
+
+  const photosByListing = new Map<string, ListingPhoto[]>();
+  for (const raw of photos ?? []) {
+    const photo = raw as ListingPhoto;
+    const list = photosByListing.get(photo.listing_id) ?? [];
+    list.push(photo);
+    photosByListing.set(photo.listing_id, list);
+  }
+
+  const pathByListing = new Map<string, string | null>();
+  const pathsToSign: string[] = [];
+  for (const listing of listings) {
+    const path = pickListingThumbPath(
+      listing,
+      photosByListing.get(listing.id) ?? []
+    );
+    pathByListing.set(listing.id, path);
+    if (path) pathsToSign.push(path);
+  }
+
+  const signed = await getSignedPhotoUrls(pathsToSign);
+  return listings.map((listing) => {
+    const path = pathByListing.get(listing.id) ?? null;
+    return {
+      ...listing,
+      thumbUrl: path ? (signed.get(path) ?? null) : null,
+    };
+  });
+}
+
+/** Cover first, else first listing photo by page order, else any photo. */
+function pickListingThumbPath(
+  listing: Listing,
+  photos: ListingPhoto[]
+): string | null {
+  const ordered = [...photos].sort((a, b) => {
+    if (a.sort_order !== b.sort_order) return a.sort_order - b.sort_order;
+    return a.created_at.localeCompare(b.created_at);
+  });
+  const listingPhotos = ordered.filter((p) => isPostingPhotoRole(p.role));
+  const cover =
+    listingPhotos.find((p) => p.role === "cover") ??
+    ordered.find((p) => p.role === "cover");
+  const pick = cover ?? listingPhotos[0] ?? ordered[0] ?? null;
+  if (!pick) return null;
+
+  if (
+    pick.role === "cover" &&
+    listing.cover_processed_path
+  ) {
+    return listing.cover_processed_path;
+  }
+  if (pick.replace_background && pick.processed_path) {
+    return pick.processed_path;
+  }
+  return pick.storage_path;
 }
 
 export async function getListing(id: string): Promise<Listing | null> {

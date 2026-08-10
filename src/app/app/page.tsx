@@ -3,8 +3,7 @@ import { AppHome } from "@/components/AppHome";
 import { isAdminEmail } from "@/lib/admin";
 import { getAuthUser } from "@/lib/api-auth";
 import { getProfileById } from "@/lib/auth/otp";
-import { listListings } from "@/lib/supabase/queries";
-import type { Listing } from "@/lib/types";
+import { listListings, type ListingWithThumb } from "@/lib/supabase/queries";
 
 export default async function AppHomePage() {
   const user = await getAuthUser();
@@ -12,7 +11,7 @@ export default async function AppHomePage() {
     redirect("/unlock");
   }
 
-  let listings: Listing[] = [];
+  let listings: ListingWithThumb[] = [];
   try {
     listings = await listListings(user.id);
   } catch (err) {
