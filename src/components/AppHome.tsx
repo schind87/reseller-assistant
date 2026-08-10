@@ -283,7 +283,7 @@ export function AppHome({
               return (
                 <li
                   key={listing.id}
-                  className="flex items-stretch gap-2 rounded-2xl border border-[var(--border)] bg-white"
+                  className="flex items-stretch gap-2 overflow-hidden rounded-2xl border border-[var(--border)] bg-white"
                 >
                   <Link
                     href={`/app/listings/${listing.id}`}
@@ -301,7 +301,7 @@ export function AppHome({
                     type="button"
                     disabled={deletingId === listing.id}
                     onClick={() => void deleteListing(listing.id, label)}
-                    className="shrink-0 px-4 text-base font-semibold text-[var(--danger)] hover:bg-red-50 disabled:opacity-50"
+                    className="shrink-0 rounded-r-2xl px-4 text-base font-semibold text-[var(--danger)] hover:bg-red-50 disabled:opacity-50"
                     aria-label={`Delete ${label}`}
                   >
                     {deletingId === listing.id ? "…" : "Delete"}
