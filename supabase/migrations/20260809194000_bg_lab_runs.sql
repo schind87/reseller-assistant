@@ -35,3 +35,7 @@ create index if not exists bg_lab_results_run_id_idx
 create index if not exists bg_lab_results_fal_request_idx
   on bg_lab_results (fal_request_id)
   where fal_request_id is not null;
+
+-- Service-role admin client only. No anon/authenticated policies on purpose.
+alter table bg_lab_runs enable row level security;
+alter table bg_lab_results enable row level security;
