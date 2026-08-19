@@ -451,42 +451,57 @@ export function PhotoAspectCrop({
               <div className="pointer-events-none absolute inset-x-0 top-2 text-center text-xs font-semibold tracking-wide text-white drop-shadow">
                 Drag corners to resize · drag to move
               </div>
-              {(
-                [
-                  {
-                    corner: "nw" as const,
-                    className: "left-0 top-0 -translate-x-1/2 -translate-y-1/2 cursor-nwse-resize",
-                    label: "Resize from top-left",
-                  },
-                  {
-                    corner: "ne" as const,
-                    className: "right-0 top-0 translate-x-1/2 -translate-y-1/2 cursor-nesw-resize",
-                    label: "Resize from top-right",
-                  },
-                  {
-                    corner: "sw" as const,
-                    className: "bottom-0 left-0 -translate-x-1/2 translate-y-1/2 cursor-nesw-resize",
-                    label: "Resize from bottom-left",
-                  },
-                  {
-                    corner: "se" as const,
-                    className: "bottom-0 right-0 translate-x-1/2 translate-y-1/2 cursor-nwse-resize",
-                    label: "Resize from bottom-right",
-                  },
-                ] as const
-              ).map(({ corner, className, label }) => (
-                <button
-                  key={corner}
-                  type="button"
-                  aria-label={label}
-                  className={`absolute z-10 h-5 w-5 touch-none rounded-sm border-2 border-white bg-white/95 shadow-sm ${className}`}
-                  onPointerDown={(e) => onCornerPointerDown(corner, e)}
-                  onPointerMove={onCornerPointerMove}
-                  onPointerUp={onDragPointerUp}
-                  onPointerCancel={onDragPointerUp}
-                />
-              ))}
             </div>
+
+            {(
+              [
+                {
+                  corner: "nw" as const,
+                  left: layout.cropLeft,
+                  top: layout.cropTop,
+                  cursor: "nwse-resize" as const,
+                  label: "Resize from top-left",
+                },
+                {
+                  corner: "ne" as const,
+                  left: layout.cropLeft + layout.cropW,
+                  top: layout.cropTop,
+                  cursor: "nesw-resize" as const,
+                  label: "Resize from top-right",
+                },
+                {
+                  corner: "sw" as const,
+                  left: layout.cropLeft,
+                  top: layout.cropTop + layout.cropH,
+                  cursor: "nesw-resize" as const,
+                  label: "Resize from bottom-left",
+                },
+                {
+                  corner: "se" as const,
+                  left: layout.cropLeft + layout.cropW,
+                  top: layout.cropTop + layout.cropH,
+                  cursor: "nwse-resize" as const,
+                  label: "Resize from bottom-right",
+                },
+              ] as const
+            ).map(({ corner, left, top, cursor, label }) => (
+              <button
+                key={corner}
+                type="button"
+                aria-label={label}
+                className="absolute z-20 flex h-11 w-11 -translate-x-1/2 -translate-y-1/2 touch-none items-center justify-center"
+                style={{ left, top, cursor }}
+                onPointerDown={(e) => onCornerPointerDown(corner, e)}
+                onPointerMove={onCornerPointerMove}
+                onPointerUp={onDragPointerUp}
+                onPointerCancel={onDragPointerUp}
+              >
+                <span
+                  aria-hidden
+                  className="pointer-events-none h-4 w-4 rounded-[3px] border-2 border-white bg-[var(--accent)] shadow-[0_1px_4px_rgba(0,0,0,0.55)]"
+                />
+              </button>
+            ))}
           </>
         ) : (
           <div className="flex h-full items-center justify-center text-sm text-white/70">
