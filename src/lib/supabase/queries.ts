@@ -905,6 +905,7 @@ export async function replaceListingPhotoOriginal(
   const updated = await updatePhoto(photoId, {
     storage_path: storagePath,
     processed_path: null,
+    replace_background: false,
   });
 
   const listing = await getListing(listingId);
