@@ -286,16 +286,20 @@ export function PhotoCoach({ listing, initialPhotos }: PhotoCoachProps) {
           ))}
         </ul>
       ) : preview ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={preview}
-          alt={`${step.title} preview`}
-          className="w-full rounded-2xl bg-[var(--surface-muted)] object-contain ring-1 ring-[var(--border)]"
+        <div
+          className="overflow-hidden rounded-2xl bg-[var(--surface-muted)] ring-1 ring-[var(--border)]"
           style={{
             aspectRatio: `${aspect.width} / ${aspect.height}`,
             maxHeight: "18rem",
           }}
-        />
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={preview}
+            alt={`${step.title} preview`}
+            className="h-full w-full object-contain"
+          />
+        </div>
       ) : null}
 
       {error ? (
