@@ -105,9 +105,20 @@ export function ExtensionInstallCard({
               </>
             ) : (
               <>
-                <li>Unzip the download.</li>
                 <li>
-                  chrome://extensions → Developer mode → Load unpacked.
+                  Unzip the download (on Mac, double-click the zip in Finder).
+                </li>
+                <li>
+                  chrome://extensions → Developer mode → Load unpacked → select
+                  the{" "}
+                  <span className="font-semibold text-[var(--foreground)]">
+                    reseller-assistant-extension
+                  </span>{" "}
+                  folder (the one that contains{" "}
+                  <span className="font-semibold text-[var(--foreground)]">
+                    manifest.json
+                  </span>
+                  ).
                 </li>
               </>
             )}

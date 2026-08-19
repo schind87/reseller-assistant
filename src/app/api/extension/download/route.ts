@@ -5,34 +5,28 @@ import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";
 
-const EXTENSION_FILES = [
-  "manifest.json",
-  "background.js",
-  "bridge.js",
-  "content.js",
-  "sidepanel.html",
-  "sidepanel.css",
-  "sidepanel.js",
-  "README.md",
-] as const;
+const SKIP_NAMES = new Set([".DS_Store", "Thumbs.db"]);
 
 async function addDir(
   zip: JSZip,
   dirPath: string,
   zipPrefix: string
-): Promise<void> {
+): Promise<number> {
+  let added = 0;
   const entries = await readdir(dirPath, { withFileTypes: true });
   for (const entry of entries) {
-    if (entry.name.startsWith(".")) continue;
+    if (entry.name.startsWith(".") || SKIP_NAMES.has(entry.name)) continue;
     const full = path.join(dirPath, entry.name);
     const zipPath = `${zipPrefix}/${entry.name}`;
     if (entry.isDirectory()) {
-      await addDir(zip, full, zipPath);
+      added += await addDir(zip, full, zipPath);
       continue;
     }
     const data = await readFile(full);
     zip.file(zipPath, data);
+    added += 1;
   }
+  return added;
 }
 
 export async function GET() {
@@ -47,21 +41,15 @@ export async function GET() {
     }
 
     const zip = new JSZip();
-    // Prefer known files so we don't ship junk; fall back to full folder.
-    let added = 0;
-    for (const name of EXTENSION_FILES) {
-      const full = path.join(extensionRoot, name);
-      try {
-        const data = await readFile(full);
-        zip.file(`reseller-assistant-extension/${name}`, data);
-        added += 1;
-      } catch {
-        /* optional file */
-      }
-    }
+    // Ship the whole extension folder so new scripts (e.g. coach-shared.js)
+    // are never left out of a hand-maintained whitelist.
+    const added = await addDir(zip, extensionRoot, "reseller-assistant-extension");
 
     if (added === 0) {
-      await addDir(zip, extensionRoot, "reseller-assistant-extension");
+      return NextResponse.json(
+        { error: "Extension package is empty." },
+        { status: 404 }
+      );
     }
 
     const bytes = await zip.generateAsync({

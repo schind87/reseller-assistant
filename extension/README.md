@@ -4,11 +4,21 @@ Manifest V3 helper that autofills **Mercari** and **Poshmark** listing pages fro
 
 ## Install (unpacked)
 
+### From this repo (local dev)
+
 1. From the repo root: `npm run extension:live`
 2. Chrome → `chrome://extensions` → Developer mode → **Load unpacked**
 3. Select **`extension-live/`**
 
 After code changes: run `npm run extension:live`, then **Reload extension** in the side panel.
+
+### From the app download (Mac / Chrome)
+
+1. Download the zip from the web app, then unzip it (double-click in Finder).
+2. Chrome → `chrome://extensions` → Developer mode → **Load unpacked**
+3. Select the **`reseller-assistant-extension`** folder that contains `manifest.json` (not a parent Downloads folder).
+
+If Chrome says it could not load `coach-shared.js` (or the manifest), the folder is incomplete — re-download and load the folder that includes every file listed under **Files** below.
 
 ## Easy posting flow
 
