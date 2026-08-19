@@ -84,6 +84,19 @@ function downloadBlob(blob: Blob, filename: string): void {
   window.setTimeout(() => URL.revokeObjectURL(url), 4_000);
 }
 
+/** iPhone/iPad Safari (and other WebKit browsers) — downloads open a share/Files sheet. */
+export function isIosPhotoSavePromptingBrowser(): boolean {
+  if (typeof navigator === "undefined") return false;
+  const ua = navigator.userAgent;
+  if (/iPad|iPhone|iPod/.test(ua)) return true;
+  // iPadOS 13+ can report as MacIntel while still using touch + WebKit downloads.
+  return (
+    navigator.platform === "MacIntel" &&
+    typeof navigator.maxTouchPoints === "number" &&
+    navigator.maxTouchPoints > 1
+  );
+}
+
 export function canPickDevicePhotoFolder(): boolean {
   return typeof window !== "undefined" && "showDirectoryPicker" in window;
 }
@@ -144,14 +157,15 @@ export function buildDevicePhotoFilename(params: {
 }
 
 /**
- * Saves a camera capture onto the phone.
- * Prefers the chosen ResellerAssistant folder; otherwise downloads a copy
- * (usually into Downloads / Files).
+ * Saves a camera capture onto the phone when it can be done without a prompt.
+ * Prefers the chosen ResellerAssistant folder. On Android/desktop Chrome, falls
+ * back to a quiet Downloads write. On iOS, skips the download fallback — Safari
+ * would open a share/Files sheet after every shot.
  */
 export async function saveCapturedPhotoToDevice(
   blob: Blob,
   params: { listingId: string; role: string; sequence?: number }
-): Promise<"folder" | "download"> {
+): Promise<"folder" | "download" | "skipped"> {
   const filename = buildDevicePhotoFilename(params);
   const handle = await loadHandle();
 
@@ -179,6 +193,10 @@ export async function saveCapturedPhotoToDevice(
     } catch (err) {
       console.warn("device folder save failed, downloading instead:", err);
     }
+  }
+
+  if (isIosPhotoSavePromptingBrowser()) {
+    return "skipped";
   }
 
   downloadBlob(blob, filename);

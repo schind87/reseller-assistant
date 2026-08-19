@@ -9,6 +9,7 @@ import {
   canPickDevicePhotoFolder,
   DEVICE_PHOTO_FOLDER_NAME,
   getDevicePhotoFolderStatus,
+  isIosPhotoSavePromptingBrowser,
   pickDevicePhotoFolder,
   saveCapturedPhotoToDevice,
 } from "@/lib/device-photo-folder";
@@ -61,6 +62,9 @@ export function PhotoCoach({ listing, initialPhotos }: PhotoCoachProps) {
   const [pickingFolder, setPickingFolder] = useState(false);
   const phoneMode = searchParams.get("phone") === "1" || joinOnly;
   const folderPickerAvailable = canPickDevicePhotoFolder();
+  // iOS opens a share/Files sheet for every download — skip that local-copy UI.
+  const showDeviceSaveUi =
+    phoneMode && !isIosPhotoSavePromptingBrowser();
 
   useEffect(() => {
     let cancelled = false;
@@ -139,26 +143,6 @@ export function PhotoCoach({ listing, initialPhotos }: PhotoCoachProps) {
     setBusy(true);
     setError(null);
     try {
-      if (opts?.saveToDevice) {
-        try {
-          const mode = await saveCapturedPhotoToDevice(blob, {
-            listingId: listing.id,
-            role,
-            sequence: photos.filter((p) => p.role === role).length + 1,
-          });
-          setDeviceSaveNote(
-            mode === "folder"
-              ? `Saved a copy to ${deviceFolderName || DEVICE_PHOTO_FOLDER_NAME} on this phone.`
-              : `Saved a copy to Downloads (look for ${DEVICE_PHOTO_FOLDER_NAME}-…).`
-          );
-        } catch (saveErr) {
-          console.warn("local photo save failed:", saveErr);
-          setDeviceSaveNote(
-            "Uploaded to the listing, but could not save a local copy on this phone."
-          );
-        }
-      }
-
       const body = new FormData();
       body.append(
         "photo",
@@ -178,6 +162,27 @@ export function PhotoCoach({ listing, initialPhotos }: PhotoCoachProps) {
       setPhotos((prev) => [...prev, data.photo]);
       setPreview(data.photo.signedUrl ?? URL.createObjectURL(blob));
       setCameraOpen(false);
+
+      if (opts?.saveToDevice) {
+        try {
+          const mode = await saveCapturedPhotoToDevice(blob, {
+            listingId: listing.id,
+            role,
+            sequence: photos.filter((p) => p.role === role).length + 1,
+          });
+          if (mode === "folder") {
+            setDeviceSaveNote(
+              `Saved a copy to ${deviceFolderName || DEVICE_PHOTO_FOLDER_NAME} on this phone.`
+            );
+          } else if (mode === "download") {
+            setDeviceSaveNote(
+              `Saved a copy to Downloads (look for ${DEVICE_PHOTO_FOLDER_NAME}-…).`
+            );
+          }
+        } catch (saveErr) {
+          console.warn("local photo save failed:", saveErr);
+        }
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Upload failed");
     } finally {
@@ -214,7 +219,7 @@ export function PhotoCoach({ listing, initialPhotos }: PhotoCoachProps) {
   }
 
   const deviceSaveBanner =
-    phoneMode ? (
+    showDeviceSaveUi ? (
       <div className="rounded-xl border border-[var(--border)] bg-white px-4 py-3 text-sm leading-relaxed text-[var(--muted)]">
         <p className="font-semibold text-[var(--foreground)]">
           Save copies on this phone
