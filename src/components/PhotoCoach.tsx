@@ -6,14 +6,6 @@ import { BigButton } from "@/components/BigButton";
 import { CameraCapture } from "@/components/CameraCapture";
 import { StepProgress } from "@/components/StepProgress";
 import {
-  canPickDevicePhotoFolder,
-  DEVICE_PHOTO_FOLDER_NAME,
-  getDevicePhotoFolderStatus,
-  isIosPhotoSavePromptingBrowser,
-  pickDevicePhotoFolder,
-  saveCapturedPhotoToDevice,
-} from "@/lib/device-photo-folder";
-import {
   getPhotoSteps,
   PLATFORM_LABELS,
   PLATFORM_PHOTO_ASPECT,
@@ -56,15 +48,7 @@ export function PhotoCoach({ listing, initialPhotos }: PhotoCoachProps) {
   const [preview, setPreview] = useState<string | null>(null);
   const [cameraOpen, setCameraOpen] = useState(false);
   const [joinOnly, setJoinOnly] = useState(false);
-  const [deviceFolderReady, setDeviceFolderReady] = useState(false);
-  const [deviceFolderName, setDeviceFolderName] = useState<string | null>(null);
-  const [deviceSaveNote, setDeviceSaveNote] = useState<string | null>(null);
-  const [pickingFolder, setPickingFolder] = useState(false);
   const phoneMode = searchParams.get("phone") === "1" || joinOnly;
-  const folderPickerAvailable = canPickDevicePhotoFolder();
-  // iOS opens a share/Files sheet for every download — skip that local-copy UI.
-  const showDeviceSaveUi =
-    phoneMode && !isIosPhotoSavePromptingBrowser();
 
   useEffect(() => {
     let cancelled = false;
@@ -81,23 +65,6 @@ export function PhotoCoach({ listing, initialPhotos }: PhotoCoachProps) {
     };
   }, []);
 
-  useEffect(() => {
-    if (!phoneMode) return;
-    let cancelled = false;
-    void getDevicePhotoFolderStatus()
-      .then((status) => {
-        if (cancelled) return;
-        setDeviceFolderReady(status.ready);
-        setDeviceFolderName(status.name);
-      })
-      .catch(() => {
-        /* ignore */
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [phoneMode]);
-
   const done = stepIndex >= steps.length;
   const step = done ? null : steps[stepIndex]!;
   const currentRolePhotos = step
@@ -113,33 +80,7 @@ export function PhotoCoach({ listing, initialPhotos }: PhotoCoachProps) {
       })
     : [];
 
-  async function chooseDeviceFolder() {
-    setPickingFolder(true);
-    setError(null);
-    try {
-      const name = await pickDevicePhotoFolder();
-      setDeviceFolderReady(true);
-      setDeviceFolderName(name);
-      setDeviceSaveNote(`Photo copies will go in ${name} on this phone.`);
-    } catch (err) {
-      if (err instanceof DOMException && err.name === "AbortError") {
-        return;
-      }
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Could not set a save folder on this phone"
-      );
-    } finally {
-      setPickingFolder(false);
-    }
-  }
-
-  async function uploadBlob(
-    blob: Blob,
-    role: PhotoRole,
-    opts?: { saveToDevice?: boolean }
-  ) {
+  async function uploadBlob(blob: Blob, role: PhotoRole) {
     setBusy(true);
     setError(null);
     try {
@@ -162,27 +103,6 @@ export function PhotoCoach({ listing, initialPhotos }: PhotoCoachProps) {
       setPhotos((prev) => [...prev, data.photo]);
       setPreview(data.photo.signedUrl ?? URL.createObjectURL(blob));
       setCameraOpen(false);
-
-      if (opts?.saveToDevice) {
-        try {
-          const mode = await saveCapturedPhotoToDevice(blob, {
-            listingId: listing.id,
-            role,
-            sequence: photos.filter((p) => p.role === role).length + 1,
-          });
-          if (mode === "folder") {
-            setDeviceSaveNote(
-              `Saved a copy to ${deviceFolderName || DEVICE_PHOTO_FOLDER_NAME} on this phone.`
-            );
-          } else if (mode === "download") {
-            setDeviceSaveNote(
-              `Saved a copy to Downloads (look for ${DEVICE_PHOTO_FOLDER_NAME}-…).`
-            );
-          }
-        } catch (saveErr) {
-          console.warn("local photo save failed:", saveErr);
-        }
-      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Upload failed");
     } finally {
@@ -190,10 +110,21 @@ export function PhotoCoach({ listing, initialPhotos }: PhotoCoachProps) {
     }
   }
 
+  function persistStep(next: number) {
+    void fetch(`/api/listings/${listing.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ photo_step: next }),
+    }).catch(() => {
+      /* phone join sessions may not own the listing */
+    });
+  }
+
   function finishCoach() {
     setPreview(null);
     setCameraOpen(false);
     setStepIndex(steps.length);
+    persistStep(steps.length);
   }
 
   function goNext() {
@@ -204,64 +135,23 @@ export function PhotoCoach({ listing, initialPhotos }: PhotoCoachProps) {
       return;
     }
     setStepIndex(next);
-    void fetch(`/api/listings/${listing.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ photo_step: next }),
-    }).catch(() => {
-      /* phone join sessions may not own the listing */
-    });
+    persistStep(next);
+  }
+
+  function goBack() {
+    if (stepIndex <= 0) return;
+    setPreview(null);
+    setCameraOpen(false);
+    const prev = stepIndex - 1;
+    setStepIndex(prev);
+    persistStep(prev);
   }
 
   function takeMorePhotos() {
     setPreview(null);
     setStepIndex(0);
+    persistStep(0);
   }
-
-  const deviceSaveBanner =
-    showDeviceSaveUi ? (
-      <div className="rounded-xl border border-[var(--border)] bg-white px-4 py-3 text-sm leading-relaxed text-[var(--muted)]">
-        <p className="font-semibold text-[var(--foreground)]">
-          Save copies on this phone
-        </p>
-        {deviceFolderReady ? (
-          <p className="mt-1">
-            Camera shots also go into{" "}
-            <span className="font-semibold text-[var(--foreground)]">
-              {deviceFolderName || DEVICE_PHOTO_FOLDER_NAME}
-            </span>
-            .
-          </p>
-        ) : folderPickerAvailable ? (
-          <p className="mt-1">
-            Choose a folder once (we create {DEVICE_PHOTO_FOLDER_NAME} inside
-            it). Until then, copies download to Files/Downloads.
-          </p>
-        ) : (
-          <p className="mt-1">
-            Each camera shot is also downloaded to this phone — look for files
-            named {DEVICE_PHOTO_FOLDER_NAME}-… in Files or Downloads.
-          </p>
-        )}
-        {folderPickerAvailable ? (
-          <button
-            type="button"
-            disabled={pickingFolder}
-            onClick={() => void chooseDeviceFolder()}
-            className="mt-3 text-base font-semibold text-[var(--accent)] disabled:opacity-50"
-          >
-            {pickingFolder
-              ? "Opening folder picker…"
-              : deviceFolderReady
-                ? "Change save folder"
-                : "Choose save folder"}
-          </button>
-        ) : null}
-        {deviceSaveNote ? (
-          <p className="mt-2 text-[var(--foreground)]">{deviceSaveNote}</p>
-        ) : null}
-      </div>
-    ) : null;
 
   if (cameraOpen && step) {
     return (
@@ -276,12 +166,8 @@ export function PhotoCoach({ listing, initialPhotos }: PhotoCoachProps) {
               : undefined
         }
         onCancel={() => setCameraOpen(false)}
-        onCapture={(blob) =>
-          void uploadBlob(blob, step.role, { saveToDevice: phoneMode })
-        }
-        onFallbackFile={(file) =>
-          void uploadBlob(file, step.role, { saveToDevice: false })
-        }
+        onCapture={(blob) => void uploadBlob(blob, step.role)}
+        onFallbackFile={(file) => void uploadBlob(file, step.role)}
       />
     );
   }
@@ -300,8 +186,10 @@ export function PhotoCoach({ listing, initialPhotos }: PhotoCoachProps) {
           <p className="text-base text-[var(--muted)]">
             {photos.length} photo{photos.length === 1 ? "" : "s"} uploaded.
           </p>
-          {deviceSaveBanner}
           <BigButton onClick={takeMorePhotos}>Take more photos</BigButton>
+          <BigButton variant="secondary" onClick={goBack}>
+            Back to last step
+          </BigButton>
         </div>
       );
     }
@@ -331,6 +219,16 @@ export function PhotoCoach({ listing, initialPhotos }: PhotoCoachProps) {
         ? "Stocking photo — private by default"
         : `Listing photo for ${PLATFORM_LABELS[platform]} · ${aspect.label}`;
 
+  const canGoBack = stepIndex > 0;
+  const nextLabel =
+    stepIndex >= steps.length - 1
+      ? phoneMode
+        ? "Done — send to computer"
+        : "Done"
+      : currentRolePhotos.length > 0
+        ? "Next"
+        : "Skip";
+
   return (
     <div className="mx-auto flex w-full max-w-lg flex-col gap-6 px-4 py-6">
       <StepProgress
@@ -349,11 +247,9 @@ export function PhotoCoach({ listing, initialPhotos }: PhotoCoachProps) {
         {purposeBanner}
       </div>
 
-      {deviceSaveBanner}
-
       <div>
         <p className="mb-1 text-sm font-semibold uppercase tracking-wide text-[var(--accent)]">
-          {step.optional ? "Optional" : "Required"}
+          Optional
           {step.allowMultiple ? " · add as many as you need" : ""}
         </p>
         <h1 className="font-[family-name:var(--font-brand)] text-3xl text-[var(--foreground)]">
@@ -365,7 +261,7 @@ export function PhotoCoach({ listing, initialPhotos }: PhotoCoachProps) {
         {step.purpose === "listing" ? (
           <p className="mt-2 text-base text-[var(--muted)]">
             Aim for {PLATFORM_LABELS[platform]}&apos;s {aspect.label} frame when
-            you open the camera.
+            you open the camera — the saved photo matches those borders.
           </p>
         ) : null}
       </div>
@@ -405,53 +301,36 @@ export function PhotoCoach({ listing, initialPhotos }: PhotoCoachProps) {
         <BigButton disabled={busy} onClick={() => setCameraOpen(true)}>
           {busy
             ? "Uploading…"
-            : step.allowMultiple
-              ? currentRolePhotos.length > 0
-                ? "Add another photo"
-                : "Take photo"
-              : currentRolePhotos.length > 0
-                ? "Retake photo"
-                : "Take photo"}
+            : currentRolePhotos.length > 0
+              ? "Add another photo"
+              : "Take photo"}
         </BigButton>
 
-        {step.allowMultiple && currentRolePhotos.length > 0 ? (
-          <BigButton onClick={goNext}>
-            Done with{" "}
-            {step.purpose === "identify"
-              ? "tags"
-              : step.purpose === "inventory"
-                ? "stocking photos"
-                : photoRoleLabel(step.role).toLowerCase()}{" "}
-            — next
+        <div className="grid grid-cols-2 gap-3">
+          <BigButton
+            variant="secondary"
+            disabled={busy || !canGoBack}
+            onClick={goBack}
+          >
+            Back
+          </BigButton>
+          <BigButton disabled={busy} onClick={goNext}>
+            {nextLabel}
+          </BigButton>
+        </div>
+
+        {phoneMode && stepIndex < steps.length - 1 ? (
+          <BigButton variant="ghost" disabled={busy} onClick={finishCoach}>
+            Done — send to computer
+          </BigButton>
+        ) : !phoneMode ? (
+          <BigButton
+            variant="ghost"
+            onClick={() => router.push(`/app/listings/${listing.id}`)}
+          >
+            Done for now
           </BigButton>
         ) : null}
-
-        {!step.allowMultiple && currentRolePhotos.length > 0 ? (
-          <BigButton onClick={goNext}>Looks good — next</BigButton>
-        ) : null}
-
-        {step.optional ? (
-          <BigButton variant="secondary" disabled={busy} onClick={goNext}>
-            {currentRolePhotos.length > 0
-              ? "Continue"
-              : step.purpose === "identify"
-                ? "Skip tags for now"
-                : "Skip for now"}
-          </BigButton>
-        ) : null}
-
-        <BigButton
-          variant="ghost"
-          onClick={() => {
-            if (phoneMode) {
-              finishCoach();
-              return;
-            }
-            router.push(`/app/listings/${listing.id}`);
-          }}
-        >
-          {phoneMode ? "Done — send to computer" : "Done for now"}
-        </BigButton>
       </div>
     </div>
   );

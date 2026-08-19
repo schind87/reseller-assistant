@@ -39,7 +39,7 @@ const SHARED_PHOTO_STEPS: PhotoStepDef[] = [
     title: "Cover photo",
     instruction:
       "Full garment, front-facing, well lit. This is the main photo shoppers see first. You can add more than one cover-style shot if you want options.",
-    optional: false,
+    optional: true,
     purpose: "listing",
     allowMultiple: true,
   },
@@ -48,7 +48,7 @@ const SHARED_PHOTO_STEPS: PhotoStepDef[] = [
     title: "Front",
     instruction:
       "Clear front view of the whole garment on a simple background. Add as many front angles as you need.",
-    optional: false,
+    optional: true,
     purpose: "listing",
     allowMultiple: true,
   },
@@ -57,7 +57,7 @@ const SHARED_PHOTO_STEPS: PhotoStepDef[] = [
     title: "Back",
     instruction:
       "Show the back of the garment so shoppers see the full piece. Add more back shots if helpful.",
-    optional: false,
+    optional: true,
     purpose: "listing",
     allowMultiple: true,
   },
@@ -66,7 +66,7 @@ const SHARED_PHOTO_STEPS: PhotoStepDef[] = [
     title: "Details",
     instruction:
       "Close-ups of fabric texture, buttons, zippers, embroidery, or style features. Take as many detail shots as you need.",
-    optional: false,
+    optional: true,
     purpose: "listing",
     allowMultiple: true,
   },

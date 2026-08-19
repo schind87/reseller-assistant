@@ -13,6 +13,59 @@ type CameraCaptureProps = {
   onFallbackFile: (file: File) => void;
 };
 
+/** Map a DOM rect over an object-cover <video> into source pixel coords. */
+function mapDisplayRectToVideoPixels(
+  video: HTMLVideoElement,
+  displayRect: DOMRect
+): { sx: number; sy: number; sw: number; sh: number } | null {
+  const vw = video.videoWidth;
+  const vh = video.videoHeight;
+  if (!vw || !vh) return null;
+
+  const elem = video.getBoundingClientRect();
+  if (elem.width <= 0 || elem.height <= 0) return null;
+
+  const videoRatio = vw / vh;
+  const elemRatio = elem.width / elem.height;
+
+  let renderedW: number;
+  let renderedH: number;
+  let offsetX: number;
+  let offsetY: number;
+  if (videoRatio > elemRatio) {
+    // Wider than the element — height fills, sides crop.
+    renderedH = elem.height;
+    renderedW = elem.height * videoRatio;
+    offsetX = (renderedW - elem.width) / 2;
+    offsetY = 0;
+  } else {
+    // Taller than the element — width fills, top/bottom crop.
+    renderedW = elem.width;
+    renderedH = elem.width / videoRatio;
+    offsetX = 0;
+    offsetY = (renderedH - elem.height) / 2;
+  }
+
+  const scaleX = vw / renderedW;
+  const scaleY = vh / renderedH;
+
+  const left = displayRect.left - elem.left + offsetX;
+  const top = displayRect.top - elem.top + offsetY;
+
+  let sx = left * scaleX;
+  let sy = top * scaleY;
+  let sw = displayRect.width * scaleX;
+  let sh = displayRect.height * scaleY;
+
+  // Clamp to the video frame.
+  sx = Math.max(0, Math.min(sx, vw - 1));
+  sy = Math.max(0, Math.min(sy, vh - 1));
+  sw = Math.max(1, Math.min(sw, vw - sx));
+  sh = Math.max(1, Math.min(sh, vh - sy));
+
+  return { sx, sy, sw, sh };
+}
+
 export function CameraCapture({
   aspect,
   showAspectGuide,
@@ -22,6 +75,8 @@ export function CameraCapture({
   onFallbackFile,
 }: CameraCaptureProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const stageRef = useRef<HTMLDivElement>(null);
+  const guideRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -77,37 +132,38 @@ export function CameraCapture({
     const video = videoRef.current;
     if (!video || video.videoWidth === 0) return;
 
-    const vw = video.videoWidth;
-    const vh = video.videoHeight;
-    const targetRatio = aspect.width / aspect.height;
+    const cropEl = showAspectGuide ? guideRef.current : stageRef.current;
+    if (!cropEl) return;
 
-    let cropW = vw;
-    let cropH = vw / targetRatio;
-    if (cropH > vh) {
-      cropH = vh;
-      cropW = vh * targetRatio;
+    const mapped = mapDisplayRectToVideoPixels(
+      video,
+      cropEl.getBoundingClientRect()
+    );
+    if (!mapped) return;
+
+    const { sx, sy, sw, sh } = mapped;
+    const targetRatio = showAspectGuide
+      ? aspect.width / aspect.height
+      : sw / sh;
+
+    const longEdge = Math.min(1600, Math.max(sw, sh));
+    let outW: number;
+    let outH: number;
+    if (targetRatio >= 1) {
+      outW = Math.round(longEdge);
+      outH = Math.round(longEdge / targetRatio);
+    } else {
+      outH = Math.round(longEdge);
+      outW = Math.round(longEdge * targetRatio);
     }
-    const sx = (vw - cropW) / 2;
-    const sy = (vh - cropH) / 2;
 
     const canvas = document.createElement("canvas");
-    const outSize = Math.min(1600, Math.max(cropW, cropH));
-    canvas.width = Math.round(outSize);
-    canvas.height = Math.round(outSize / targetRatio);
+    canvas.width = Math.max(1, outW);
+    canvas.height = Math.max(1, outH);
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    ctx.drawImage(
-      video,
-      sx,
-      sy,
-      cropW,
-      cropH,
-      0,
-      0,
-      canvas.width,
-      canvas.height
-    );
+    ctx.drawImage(video, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
 
     canvas.toBlob(
       (blob) => {
@@ -136,7 +192,7 @@ export function CameraCapture({
         <span className="w-14" aria-hidden />
       </div>
 
-      <div className="relative min-h-0 flex-1 overflow-hidden">
+      <div ref={stageRef} className="relative min-h-0 flex-1 overflow-hidden">
         <video
           ref={videoRef}
           playsInline
@@ -147,6 +203,7 @@ export function CameraCapture({
         {showAspectGuide ? (
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center p-6">
             <div
+              ref={guideRef}
               className={
                 aspect.height > aspect.width
                   ? "relative h-full max-h-[min(78vh,92vw)] w-auto border-2 border-white/90 shadow-[0_0_0_9999px_rgba(0,0,0,0.45)]"
