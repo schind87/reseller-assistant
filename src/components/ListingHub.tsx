@@ -298,6 +298,9 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
   const [aiPickerPhoto, setAiPickerPhoto] =
     useState<ListingPhotoWithUrl | null>(null);
   const [pickListingRole, setPickListingRole] = useState(false);
+  const [changeRolePhoto, setChangeRolePhoto] =
+    useState<ListingPhotoWithUrl | null>(null);
+  const [changingRole, setChangingRole] = useState(false);
   const [movingPhotoId, setMovingPhotoId] = useState<string | null>(null);
   const [dragOverSection, setDragOverSection] = useState<PhotoSection | null>(
     null
@@ -890,6 +893,47 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
     }
   }
 
+  async function changePhotoRole(photoId: string, role: PhotoRole) {
+    const photo = data?.photos.find((p) => p.id === photoId);
+    if (!photo) return;
+    if (photo.role === role) {
+      setChangeRolePhoto(null);
+      return;
+    }
+
+    setChangingRole(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/listings/${listingId}/photos/${photoId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ role }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(
+          typeof json.error === "string"
+            ? json.error
+            : "Could not change photo type"
+        );
+      }
+      setChangeRolePhoto(null);
+      setPreviewPhoto((prev) =>
+        prev && prev.id === photoId
+          ? { ...prev, role, ...(json.photo ?? {}) }
+          : prev
+      );
+      setStatusMessage(`Changed to ${photoRoleLabel(role)}.`);
+      await load({ syncDraft: false });
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Could not change photo type"
+      );
+    } finally {
+      setChangingRole(false);
+    }
+  }
+
   async function deletePhoto(photoId: string) {
     const confirmed = window.confirm("Delete this photo?");
     if (!confirmed) return;
@@ -1455,6 +1499,7 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
                   void setAiBackgroundEnabled(photo, enabled)
                 }
                 onPreview={setPreviewPhoto}
+                onChangeRole={setChangeRolePhoto}
                 onDropFiles={(files) => void uploadFilesToSection(files, "listing")}
                 onDropPhoto={(photoId) =>
                   void movePhotoToSection(photoId, "listing")
@@ -1484,7 +1529,8 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
                 disabled={
                   uploading ||
                   Boolean(deletingPhotoId) ||
-                  movingPhoto
+                  movingPhoto ||
+                  changingRole
                 }
                 tone="listing"
               />
@@ -1499,6 +1545,24 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
                 disabled={uploading}
                 onPick={(role) => pickFilesForRole(role)}
                 onClose={() => setPickListingRole(false)}
+              />
+            ) : null}
+
+            {changeRolePhoto ? (
+              <PhotoRolePickerDialog
+                title="Change photo type"
+                description="Pick Cover, Front, Back, or another type for this shot. You can have more than one of each."
+                roles={LISTING_ROLES}
+                selectedRole={changeRolePhoto.role}
+                roleHint={(role) => {
+                  if (role === changeRolePhoto.role) return "Current";
+                  return roleCountLabel(photos, role);
+                }}
+                disabled={changingRole}
+                onPick={(role) => void changePhotoRole(changeRolePhoto.id, role)}
+                onClose={() => {
+                  if (!changingRole) setChangeRolePhoto(null);
+                }}
               />
             ) : null}
 
@@ -1734,9 +1798,14 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
         <PhotoLightbox
           photo={previewPhoto}
           canAdjustAspect={isPostingPhotoRole(previewPhoto.role)}
+          canChangeRole={isPostingPhotoRole(previewPhoto.role)}
           onClose={() => setPreviewPhoto(null)}
           onAdjustAspect={() => {
             setAdjustPhoto(previewPhoto);
+            setPreviewPhoto(null);
+          }}
+          onChangeRole={() => {
+            setChangeRolePhoto(previewPhoto);
             setPreviewPhoto(null);
           }}
         />
@@ -1895,6 +1964,7 @@ function PhotoGroup({
   onToggleCleanBackground,
   onSetAiBackground,
   onPreview,
+  onChangeRole,
   onDropFiles,
   onDropPhoto,
   onReorderPhoto,
@@ -1928,6 +1998,7 @@ function PhotoGroup({
     enabled: boolean
   ) => void;
   onPreview: (photo: ListingPhotoWithUrl) => void;
+  onChangeRole?: (photo: ListingPhotoWithUrl) => void;
   onDropFiles: (files: File[]) => void;
   onDropPhoto: (photoId: string) => void;
   onReorderPhoto: (
@@ -2084,6 +2155,9 @@ function PhotoGroup({
               moveArmed={moveArmed}
               disabled={disabled || bgPhotoId === photo.id}
               onPreview={() => onPreview(photo)}
+              onChangeRole={
+                onChangeRole ? () => onChangeRole(photo) : undefined
+              }
               onUseInListing={
                 onUseInListing
                   ? () => onUseInListing(photo.id)
@@ -2165,6 +2239,7 @@ function PhotoTile({
   moveArmed,
   disabled,
   onPreview,
+  onChangeRole,
   onUseInListing,
   onToggleCleanBackground,
   onSetAiBackground,
@@ -2183,6 +2258,7 @@ function PhotoTile({
   moveArmed: boolean;
   disabled?: boolean;
   onPreview: () => void;
+  onChangeRole?: () => void;
   onUseInListing?: () => void;
   onToggleCleanBackground?: () => void;
   onSetAiBackground?: (enabled: boolean) => void;
@@ -2388,10 +2464,32 @@ function PhotoTile({
         onPointerDown={(e) => e.stopPropagation()}
         onClick={(e) => e.stopPropagation()}
       >
-        <p className="min-w-0 truncate text-sm text-[var(--muted)]">
-          {photoRoleLabel(photo.role)}
-          {moving ? " · moving" : ""}
-        </p>
+        {onChangeRole ? (
+          <button
+            type="button"
+            disabled={disabled}
+            onClick={(e) => {
+              e.stopPropagation();
+              onChangeRole();
+            }}
+            className="inline-flex max-w-full items-center gap-1 truncate text-left text-sm font-semibold text-[var(--foreground)] underline decoration-[var(--border)] underline-offset-2 transition hover:text-[var(--accent)] hover:decoration-[var(--accent)] disabled:opacity-50"
+            title="Change photo type"
+            aria-label={`Change type for ${photoRoleLabel(photo.role)} photo`}
+          >
+            <span className="truncate">
+              {photoRoleLabel(photo.role)}
+              {moving ? " · moving" : ""}
+            </span>
+            <span className="shrink-0 text-xs font-medium text-[var(--muted)]" aria-hidden>
+              ▾
+            </span>
+          </button>
+        ) : (
+          <p className="min-w-0 truncate text-sm text-[var(--muted)]">
+            {photoRoleLabel(photo.role)}
+            {moving ? " · moving" : ""}
+          </p>
+        )}
         <div className="flex flex-wrap items-center gap-2">
           {onUseInListing ? (
             <button
@@ -2504,6 +2602,7 @@ function PhotoRolePickerDialog({
   description,
   roles,
   roleHint,
+  selectedRole,
   disabled,
   onPick,
   onClose,
@@ -2512,6 +2611,7 @@ function PhotoRolePickerDialog({
   description: string;
   roles: PhotoRole[];
   roleHint: (role: PhotoRole) => string | null;
+  selectedRole?: PhotoRole;
   disabled?: boolean;
   onPick: (role: PhotoRole) => void;
   onClose: () => void;
@@ -2557,13 +2657,19 @@ function PhotoRolePickerDialog({
         <div className="mt-5 grid gap-2 sm:grid-cols-2">
           {roles.map((role) => {
             const hint = roleHint(role);
+            const selected = selectedRole === role;
             return (
               <button
                 key={role}
                 type="button"
                 disabled={disabled}
+                aria-pressed={selectedRole ? selected : undefined}
                 onClick={() => onPick(role)}
-                className="touch-target rounded-xl border-2 border-[var(--border)] bg-white px-4 py-3 text-left text-base font-semibold text-[var(--foreground)] transition hover:border-[var(--accent)] hover:bg-[var(--accent-soft)] disabled:opacity-50"
+                className={`touch-target rounded-xl border-2 px-4 py-3 text-left text-base font-semibold transition disabled:opacity-50 ${
+                  selected
+                    ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--foreground)]"
+                    : "border-[var(--border)] bg-white text-[var(--foreground)] hover:border-[var(--accent)] hover:bg-[var(--accent-soft)]"
+                }`}
               >
                 {photoRoleLabel(role)}
                 {hint ? (
@@ -2615,11 +2721,15 @@ function PhotoLightbox({
   onClose,
   canAdjustAspect = false,
   onAdjustAspect,
+  canChangeRole = false,
+  onChangeRole,
 }: {
   photo: ListingPhotoWithUrl;
   onClose: () => void;
   canAdjustAspect?: boolean;
   onAdjustAspect?: () => void;
+  canChangeRole?: boolean;
+  onChangeRole?: () => void;
 }) {
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
@@ -2662,9 +2772,20 @@ function PhotoLightbox({
           className="max-h-[min(85vh,900px)] max-w-[min(96vw,900px)] rounded-lg object-contain shadow-2xl"
         />
         <div className="flex flex-wrap items-center justify-center gap-2">
-          <p className="rounded-lg bg-black/50 px-3 py-1 text-sm font-medium text-white">
-            {photoRoleLabel(photo.role)}
-          </p>
+          {canChangeRole && onChangeRole ? (
+            <button
+              type="button"
+              onClick={onChangeRole}
+              className="rounded-lg bg-white/95 px-3 py-1 text-sm font-semibold text-[var(--foreground)]"
+              title="Change photo type"
+            >
+              {photoRoleLabel(photo.role)} ▾
+            </button>
+          ) : (
+            <p className="rounded-lg bg-black/50 px-3 py-1 text-sm font-medium text-white">
+              {photoRoleLabel(photo.role)}
+            </p>
+          )}
           {canAdjustAspect && onAdjustAspect ? (
             <button
               type="button"
