@@ -27,7 +27,7 @@ type PhotoAspectCropProps = {
   platformLabel: string;
   /** Local file being cropped before upload. */
   file?: File | null;
-  /** Existing photo URL (Adjust aspect ratio on a saved shot). */
+  /** Existing photo URL (Crop on a saved shot). */
   imageUrl?: string | null;
   fileName?: string;
   /** Primary cancel / dismiss label. */
@@ -299,7 +299,7 @@ export function PhotoAspectCrop({
       className="fixed inset-0 z-[60] flex select-none flex-col bg-black text-white"
       role="dialog"
       aria-modal="true"
-      aria-label="Adjust aspect ratio"
+      aria-label="Crop"
       onCopy={(e) => e.preventDefault()}
     >
       <div className="flex items-center justify-between gap-3 px-4 py-3">
@@ -312,7 +312,7 @@ export function PhotoAspectCrop({
           Cancel
         </button>
         <div className="min-w-0 text-center">
-          <p className="text-sm font-semibold">Adjust aspect ratio</p>
+          <p className="text-sm font-semibold">Crop</p>
           <p className="truncate text-xs text-white/75">
             {platformLabel} · {aspect.label}
           </p>
