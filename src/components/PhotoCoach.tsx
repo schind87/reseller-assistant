@@ -38,13 +38,12 @@ export function PhotoCoach({ listing, initialPhotos }: PhotoCoachProps) {
   const aspect = PLATFORM_PHOTO_ASPECT[platform];
   const sectionParam = searchParams.get("section");
   const startStep = (() => {
-    if (sectionParam === "identify") return 0;
-    if (sectionParam === "inventory") {
-      const idx = steps.findIndex((s) => s.purpose === "inventory");
-      return idx >= 0 ? idx : 0;
-    }
-    if (sectionParam === "listing") {
-      const idx = steps.findIndex((s) => s.purpose === "listing");
+    if (
+      sectionParam === "identify" ||
+      sectionParam === "inventory" ||
+      sectionParam === "listing"
+    ) {
+      const idx = steps.findIndex((s) => s.purpose === sectionParam);
       return idx >= 0 ? idx : 0;
     }
     return Math.min(Math.max(listing.photo_step, 0), steps.length);
