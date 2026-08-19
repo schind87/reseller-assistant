@@ -31,25 +31,9 @@ export const PLATFORM_PHOTO_ASPECT: Record<Platform, PhotoAspectGuide> = {
   poshmark: { width: 3, height: 4, label: "4×3 portrait" },
 };
 
+// Order matches the listing hub: shopper-facing shots first, then optional
+// private identification / stocking prompts.
 const SHARED_PHOTO_STEPS: PhotoStepDef[] = [
-  {
-    role: "id_tag",
-    title: "Identification tags",
-    instruction:
-      "Optional: photo every tag on the garment — brand, size, care, style or SKU numbers. These help AI identify the item and will not be posted with the listing.",
-    optional: true,
-    purpose: "identify",
-    allowMultiple: true,
-  },
-  {
-    role: "inventory",
-    title: "Stocking photo",
-    instruction:
-      "Optional: photo how this piece looks where you stock it (closet, bin, rack) so you can find it later. Add as many angles as help you find it. Private by default — you can also use any shot in the listing if you want.",
-    optional: true,
-    purpose: "inventory",
-    allowMultiple: true,
-  },
   {
     role: "cover",
     title: "Cover photo",
@@ -102,6 +86,24 @@ const SHARED_PHOTO_STEPS: PhotoStepDef[] = [
       "Photo any stains, holes, pilling, or wear. Take one shot per issue, or skip if the piece is clean.",
     optional: true,
     purpose: "listing",
+    allowMultiple: true,
+  },
+  {
+    role: "id_tag",
+    title: "Identification tags",
+    instruction:
+      "Optional: photo every tag on the garment — brand, size, care, style or SKU numbers. These help AI identify the item and will not be posted with the listing.",
+    optional: true,
+    purpose: "identify",
+    allowMultiple: true,
+  },
+  {
+    role: "inventory",
+    title: "Stocking photo",
+    instruction:
+      "Optional: photo how this piece looks where you stock it (closet, bin, rack) so you can find it later. Add as many angles as help you find it. Private by default — you can also use any shot in the listing if you want.",
+    optional: true,
+    purpose: "inventory",
     allowMultiple: true,
   },
 ];
