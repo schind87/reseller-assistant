@@ -73,7 +73,7 @@ export async function PUT(request: Request, context: RouteContext) {
     return NextResponse.json(
       {
         error:
-          "Aspect ratio adjust is only available for listing photos (not tags or stocking).",
+          "Crop is only available for listing photos (not tags or stocking).",
       },
       { status: 400 }
     );

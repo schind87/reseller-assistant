@@ -19,6 +19,9 @@ import {
   cropRectFromOutline,
   loadImageFromFile,
   loadImageFromUrl,
+  resizeCropRectFromCorner,
+  transformFromCropRect,
+  type CropCorner,
   type PhotoCropTransform,
 } from "@/lib/photo-aspect";
 
@@ -27,7 +30,7 @@ type PhotoAspectCropProps = {
   platformLabel: string;
   /** Local file being cropped before upload. */
   file?: File | null;
-  /** Existing photo URL (Adjust aspect ratio on a saved shot). */
+  /** Existing photo URL (Crop on a saved shot). */
   imageUrl?: string | null;
   fileName?: string;
   /** Primary cancel / dismiss label. */
@@ -106,15 +109,33 @@ export function PhotoAspectCrop({
   );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const dragRef = useRef<{
-    pointerId: number;
-    startX: number;
-    startY: number;
-    originNx: number;
-    originNy: number;
-    travelX: number;
-    travelY: number;
-  } | null>(null);
+  const dragRef = useRef<
+    | {
+        mode: "move";
+        pointerId: number;
+        startX: number;
+        startY: number;
+        originNx: number;
+        originNy: number;
+        travelX: number;
+        travelY: number;
+      }
+    | {
+        mode: "resize";
+        pointerId: number;
+        corner: CropCorner;
+        fit: number;
+        imgLeft: number;
+        imgTop: number;
+        originRect: {
+          sx: number;
+          sy: number;
+          sw: number;
+          sh: number;
+        };
+      }
+    | null
+  >(null);
   const transformRef = useRef(transform);
 
   useEffect(() => {
@@ -226,6 +247,7 @@ export function PhotoAspectCrop({
     const travelY = Math.max(0, (natural.h - rect.sh) * fit);
 
     dragRef.current = {
+      mode: "move",
       pointerId: e.pointerId,
       startX: e.clientX,
       startY: e.clientY,
@@ -236,9 +258,61 @@ export function PhotoAspectCrop({
     };
   }
 
+  function onCornerPointerDown(
+    corner: CropCorner,
+    e: ReactPointerEvent<HTMLButtonElement>
+  ) {
+    if (!layout || !natural) return;
+    e.preventDefault();
+    e.stopPropagation();
+    e.currentTarget.setPointerCapture(e.pointerId);
+
+    const fit = Math.min(
+      layout.stageW / natural.w,
+      layout.stageH / natural.h
+    );
+    const rect = cropRectFromOutline(
+      natural.w,
+      natural.h,
+      aspect,
+      transformRef.current
+    );
+
+    dragRef.current = {
+      mode: "resize",
+      pointerId: e.pointerId,
+      corner,
+      fit,
+      imgLeft: layout.imgLeft,
+      imgTop: layout.imgTop,
+      originRect: rect,
+    };
+  }
+
+  function clientToImagePoint(
+    clientX: number,
+    clientY: number,
+    drag: {
+      fit: number;
+      imgLeft: number;
+      imgTop: number;
+    }
+  ) {
+    const stage = stageRef.current;
+    if (!stage) return null;
+    const bounds = stage.getBoundingClientRect();
+    const stageX = clientX - bounds.left;
+    const stageY = clientY - bounds.top;
+    return {
+      x: (stageX - drag.imgLeft) / drag.fit,
+      y: (stageY - drag.imgTop) / drag.fit,
+    };
+  }
+
   function onOutlinePointerMove(e: ReactPointerEvent<HTMLDivElement>) {
     const drag = dragRef.current;
     if (!drag || drag.pointerId !== e.pointerId) return;
+    if (drag.mode !== "move") return;
     const dx = e.clientX - drag.startX;
     const dy = e.clientY - drag.startY;
     const nx =
@@ -254,7 +328,27 @@ export function PhotoAspectCrop({
     );
   }
 
-  function onOutlinePointerUp(e: ReactPointerEvent<HTMLDivElement>) {
+  function onCornerPointerMove(e: ReactPointerEvent<HTMLButtonElement>) {
+    const drag = dragRef.current;
+    if (!drag || drag.pointerId !== e.pointerId || !natural) return;
+    if (drag.mode !== "resize") return;
+    const point = clientToImagePoint(e.clientX, e.clientY, drag);
+    if (!point) return;
+    const nextRect = resizeCropRectFromCorner(
+      natural.w,
+      natural.h,
+      aspect,
+      drag.originRect,
+      drag.corner,
+      point.x,
+      point.y
+    );
+    setTransform(
+      transformFromCropRect(natural.w, natural.h, aspect, nextRect)
+    );
+  }
+
+  function onDragPointerUp(e: ReactPointerEvent<HTMLElement>) {
     if (dragRef.current?.pointerId === e.pointerId) {
       dragRef.current = null;
     }
@@ -299,7 +393,7 @@ export function PhotoAspectCrop({
       className="fixed inset-0 z-[60] flex select-none flex-col bg-black text-white"
       role="dialog"
       aria-modal="true"
-      aria-label="Adjust aspect ratio"
+      aria-label="Crop"
       onCopy={(e) => e.preventDefault()}
     >
       <div className="flex items-center justify-between gap-3 px-4 py-3">
@@ -312,7 +406,7 @@ export function PhotoAspectCrop({
           Cancel
         </button>
         <div className="min-w-0 text-center">
-          <p className="text-sm font-semibold">Adjust aspect ratio</p>
+          <p className="text-sm font-semibold">Crop</p>
           <p className="truncate text-xs text-white/75">
             {platformLabel} · {aspect.label}
           </p>
@@ -351,17 +445,76 @@ export function PhotoAspectCrop({
               }}
               onPointerDown={onOutlinePointerDown}
               onPointerMove={onOutlinePointerMove}
-              onPointerUp={onOutlinePointerUp}
-              onPointerCancel={onOutlinePointerUp}
+              onPointerUp={onDragPointerUp}
+              onPointerCancel={onDragPointerUp}
             >
               <div className="pointer-events-none absolute inset-x-0 top-2 text-center text-xs font-semibold tracking-wide text-white drop-shadow">
-                Drag outline · scroll or slider to zoom
+                Drag corners to resize · drag to move
               </div>
-              <span className="pointer-events-none absolute left-0 top-0 h-3 w-3 border-l-2 border-t-2 border-white" />
-              <span className="pointer-events-none absolute right-0 top-0 h-3 w-3 border-r-2 border-t-2 border-white" />
-              <span className="pointer-events-none absolute bottom-0 left-0 h-3 w-3 border-b-2 border-l-2 border-white" />
-              <span className="pointer-events-none absolute bottom-0 right-0 h-3 w-3 border-b-2 border-r-2 border-white" />
             </div>
+
+            {(
+              [
+                {
+                  corner: "nw" as const,
+                  left: layout.cropLeft,
+                  top: layout.cropTop,
+                  cursor: "nwse-resize" as const,
+                  label: "Resize from top-left",
+                },
+                {
+                  corner: "ne" as const,
+                  left: layout.cropLeft + layout.cropW,
+                  top: layout.cropTop,
+                  cursor: "nesw-resize" as const,
+                  label: "Resize from top-right",
+                },
+                {
+                  corner: "sw" as const,
+                  left: layout.cropLeft,
+                  top: layout.cropTop + layout.cropH,
+                  cursor: "nesw-resize" as const,
+                  label: "Resize from bottom-left",
+                },
+                {
+                  corner: "se" as const,
+                  left: layout.cropLeft + layout.cropW,
+                  top: layout.cropTop + layout.cropH,
+                  cursor: "nwse-resize" as const,
+                  label: "Resize from bottom-right",
+                },
+              ] as const
+            ).map(({ corner, left, top, cursor, label }) => {
+              // Keep the full hit box inside the stage so overflow:hidden
+              // doesn't eat corner clicks at the edges.
+              const pad = 22;
+              const clampedLeft = Math.min(
+                layout.stageW - pad,
+                Math.max(pad, left)
+              );
+              const clampedTop = Math.min(
+                layout.stageH - pad,
+                Math.max(pad, top)
+              );
+              return (
+                <button
+                  key={corner}
+                  type="button"
+                  aria-label={label}
+                  className="absolute z-20 flex h-11 w-11 -translate-x-1/2 -translate-y-1/2 touch-none items-center justify-center"
+                  style={{ left: clampedLeft, top: clampedTop, cursor }}
+                  onPointerDown={(e) => onCornerPointerDown(corner, e)}
+                  onPointerMove={onCornerPointerMove}
+                  onPointerUp={onDragPointerUp}
+                  onPointerCancel={onDragPointerUp}
+                >
+                  <span
+                    aria-hidden
+                    className="pointer-events-none h-4 w-4 rounded-[3px] border-2 border-white bg-[var(--accent)] shadow-[0_1px_4px_rgba(0,0,0,0.55)]"
+                  />
+                </button>
+              );
+            })}
           </>
         ) : (
           <div className="flex h-full items-center justify-center text-sm text-white/70">

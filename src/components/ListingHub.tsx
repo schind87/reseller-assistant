@@ -1455,6 +1455,7 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
                   void setAiBackgroundEnabled(photo, enabled)
                 }
                 onPreview={setPreviewPhoto}
+                onCrop={(photo) => setAdjustPhoto(photo)}
                 onDropFiles={(files) => void uploadFilesToSection(files, "listing")}
                 onDropPhoto={(photoId) =>
                   void movePhotoToSection(photoId, "listing")
@@ -1484,7 +1485,8 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
                 disabled={
                   uploading ||
                   Boolean(deletingPhotoId) ||
-                  movingPhoto
+                  movingPhoto ||
+                  adjustingAspect
                 }
                 tone="listing"
               />
@@ -1785,7 +1787,7 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
                 );
               }
               setAdjustPhoto(null);
-              setStatusMessage("Updated photo aspect ratio.");
+              setStatusMessage("Photo cropped.");
               await load({ syncDraft: false });
             } finally {
               setAdjustingAspect(false);
@@ -1895,6 +1897,7 @@ function PhotoGroup({
   onToggleCleanBackground,
   onSetAiBackground,
   onPreview,
+  onCrop,
   onDropFiles,
   onDropPhoto,
   onReorderPhoto,
@@ -1928,6 +1931,7 @@ function PhotoGroup({
     enabled: boolean
   ) => void;
   onPreview: (photo: ListingPhotoWithUrl) => void;
+  onCrop?: (photo: ListingPhotoWithUrl) => void;
   onDropFiles: (files: File[]) => void;
   onDropPhoto: (photoId: string) => void;
   onReorderPhoto: (
@@ -2099,6 +2103,7 @@ function PhotoGroup({
                   ? (enabled) => onSetAiBackground(photo, enabled)
                   : undefined
               }
+              onCrop={onCrop ? () => onCrop(photo) : undefined}
               labHref={labPhotoHref?.(photo.id)}
               onDelete={() => onDelete(photo.id)}
               onBeginMove={() => onBeginMove(photo.id)}
@@ -2168,6 +2173,7 @@ function PhotoTile({
   onUseInListing,
   onToggleCleanBackground,
   onSetAiBackground,
+  onCrop,
   labHref,
   onDelete,
   onBeginMove,
@@ -2186,6 +2192,7 @@ function PhotoTile({
   onUseInListing?: () => void;
   onToggleCleanBackground?: () => void;
   onSetAiBackground?: (enabled: boolean) => void;
+  onCrop?: () => void;
   labHref?: string;
   onDelete: () => void;
   onBeginMove: () => void;
@@ -2476,6 +2483,21 @@ function PhotoTile({
               Lab
             </a>
           ) : null}
+          {onCrop ? (
+            <button
+              type="button"
+              disabled={disabled}
+              onClick={(e) => {
+                e.stopPropagation();
+                onCrop();
+              }}
+              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-[var(--foreground)] hover:bg-[var(--surface-muted)] disabled:opacity-50"
+              aria-label={`Crop ${photoRoleLabel(photo.role)} photo`}
+              title="Crop"
+            >
+              <CropIcon className="h-4 w-4" />
+            </button>
+          ) : null}
           <button
             type="button"
             disabled={disabled}
@@ -2589,6 +2611,24 @@ function PhotoRolePickerDialog({
   );
 }
 
+function CropIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden="true"
+    >
+      <path d="M6 2v14a2 2 0 0 0 2 2h14" />
+      <path d="M18 22V8a2 2 0 0 0-2-2H2" />
+    </svg>
+  );
+}
+
 function TrashIcon({ className }: { className?: string }) {
   return (
     <svg
@@ -2669,9 +2709,10 @@ function PhotoLightbox({
             <button
               type="button"
               onClick={onAdjustAspect}
-              className="rounded-lg bg-white/95 px-3 py-1 text-sm font-semibold text-[var(--foreground)]"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-white/95 px-3 py-1 text-sm font-semibold text-[var(--foreground)]"
             >
-              Adjust aspect ratio
+              <CropIcon className="h-3.5 w-3.5" />
+              Crop
             </button>
           ) : null}
         </div>
