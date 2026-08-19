@@ -125,13 +125,7 @@ const POSHMARK_PHOTO_STEPS: PhotoStepDef[] = SHARED_PHOTO_STEPS.map((step) => {
       ...step,
       title: "Cover shot",
       instruction:
-        "Poshmark shoppers judge the cover first. Flat lay or on a hanger, fill the 4×3 portrait frame, bright and uncluttered. Add more cover-style shots if you want options.",
-    };
-  }
-  if (step.purpose === "listing") {
-    return {
-      ...step,
-      instruction: `${step.instruction} Use a 4×3 portrait frame for Poshmark.`,
+        "Poshmark shoppers judge the cover first. Flat lay or on a hanger, bright and uncluttered. Add more cover-style shots if you want options.",
     };
   }
   return step;
