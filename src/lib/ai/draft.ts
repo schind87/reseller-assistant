@@ -232,19 +232,134 @@ const rewriteDescriptionSchema = z.object({
   description: z.string(),
 });
 
+function formatFieldValue(value: unknown): string {
+  if (value == null) return "(empty)";
+  if (Array.isArray(value)) {
+    return value.length === 0 ? "(empty)" : value.join(", ");
+  }
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed.length === 0 ? "(empty)" : trimmed;
+  }
+  return String(value);
+}
+
+/** Human-readable deltas between two structured-field snapshots. */
+export function summarizeStructuredFieldChanges(
+  previous: StructuredFields | null | undefined,
+  next: StructuredFields
+): string[] {
+  if (!previous) return [];
+  const keys = Object.keys(next) as (keyof StructuredFields)[];
+  const changes: string[] = [];
+  for (const key of keys) {
+    const before = previous[key];
+    const after = next[key];
+    const beforeText = formatFieldValue(before);
+    const afterText = formatFieldValue(after);
+    if (beforeText === afterText) continue;
+    changes.push(`${String(key)}: ${beforeText} → ${afterText}`);
+  }
+  return changes;
+}
+
+export function buildRewriteDescriptionPrompt(params: {
+  platform: Platform;
+  title: string;
+  price: number | null;
+  fields: StructuredFields;
+  currentDescription: string;
+  previousFields?: StructuredFields | null;
+  sellerContext?: string | null;
+  descriptionMax: number;
+}): string {
+  const {
+    platform,
+    title,
+    price,
+    fields,
+    currentDescription,
+    previousFields,
+    sellerContext,
+    descriptionMax,
+  } = params;
+  const platformLabel = PLATFORM_LABELS[platform];
+  const sharedFacts = `Seller preferences:
+${sellerContext ?? "None provided."}
+
+Title: ${title || "(none)"}
+Price: ${price == null ? "(none)" : price}
+Structured fields (authoritative facts — do not invent missing brand, size, measurements, or flaws):
+${JSON.stringify(fields, null, 2)}`;
+
+  if (!currentDescription) {
+    return `Write a new ${platformLabel} listing description from the listing fields below.
+Use ONLY the provided facts. Keep it buyer-friendly, clothing-focused, and within ${descriptionMax} characters.
+Honor seller preferences in tone and required disclosures (including smoke/pet notes from the fields).
+
+${sharedFacts}
+
+Return only the description text.`;
+  }
+
+  const fieldChanges = summarizeStructuredFieldChanges(previousFields, fields);
+  const changeSection =
+    fieldChanges.length > 0
+      ? `Known field changes since the description was last written with AI (prefer updating only these):
+${fieldChanges.map((line) => `- ${line}`).join("\n")}`
+      : `No structured-field snapshot of the last AI write is available. Still only patch facts in the description that conflict with the authoritative fields above, or add clearly missing required disclosures from those fields.`;
+
+  return `Revise the EXISTING ${platformLabel} listing description in place. Do NOT rewrite it from scratch.
+The description below is the seller's current draft — it may include their own edits. Preserve their wording, structure, paragraph breaks, tone, and custom phrasing wherever possible.
+Only update sentences/phrases whose facts conflict with the authoritative title/price/structured fields, or insert missing required facts from those fields (e.g. smoke/pet notes) when they are truly absent.
+Do not restyle, reorder, expand, or "improve" prose that is already accurate.
+Use ONLY provided facts. Keep the result within ${descriptionMax} characters.
+Honor seller preferences for tone and required disclosures.
+
+${sharedFacts}
+
+${changeSection}
+
+Current description (base text — iterate on this; preserve user edits):
+${currentDescription}
+
+Return only the revised description text.`;
+}
+
 export async function rewriteListingDescription(params: {
   platform: Platform;
   title: string;
   price: number | null;
   fields: StructuredFields;
   currentDescription?: string | null;
+  /** Structured fields from when the description was last AI-written, if known. */
+  previousFields?: StructuredFields | null;
   sellerContext?: string | null;
 }): Promise<{ description: string; degraded: boolean; message?: string }> {
-  const { platform, title, price, fields, currentDescription, sellerContext } =
-    params;
+  const {
+    platform,
+    title,
+    price,
+    fields,
+    currentDescription,
+    previousFields,
+    sellerContext,
+  } = params;
   const limits = FIELD_LIMITS[platform];
+  const trimmedCurrent = currentDescription?.trim() ?? "";
 
   const fallback = () => {
+    // When iterating, keep the seller's draft if AI is unavailable rather than
+    // replacing it with a template — only fall back when there is nothing to keep.
+    if (trimmedCurrent) {
+      return {
+        description: trimmedCurrent.slice(0, limits.descriptionMax),
+        degraded: true as const,
+        message: hasAiProvider()
+          ? "Could not update description with AI — left your current draft unchanged."
+          : `${missingAiProviderMessage()} Left your current draft unchanged.`,
+      };
+    }
     const parts = [
       title ? `Selling: ${title}.` : null,
       fields.brand ? `Brand: ${fields.brand}.` : null,
@@ -276,25 +391,16 @@ export async function rewriteListingDescription(params: {
       messages: [
         {
           role: "user",
-          content: `Write a fresh ${PLATFORM_LABELS[platform]} listing description from the CURRENT listing fields below.
-The structured fields and title/price are the source of truth — they may have been updated since any prior description.
-Use ONLY those facts. Do not invent brand, size, measurements, or flaws that are not provided.
-Ignore outdated details in the current description when they conflict with the structured fields.
-Keep it buyer-friendly, clothing-focused, and within ${limits.descriptionMax} characters.
-Honor seller preferences in tone and required disclosures (including smoke/pet notes from the fields).
-
-Seller preferences:
-${sellerContext ?? "None provided."}
-
-Title: ${title || "(none)"}
-Price: ${price == null ? "(none)" : price}
-Structured fields (authoritative — reflect these exactly):
-${JSON.stringify(fields, null, 2)}
-
-Previous description (reference only; prefer updated fields above):
-${currentDescription?.trim() || "(none)"}
-
-Return only the new description text.`,
+          content: buildRewriteDescriptionPrompt({
+            platform,
+            title,
+            price,
+            fields,
+            currentDescription: trimmedCurrent,
+            previousFields,
+            sellerContext,
+            descriptionMax: limits.descriptionMax,
+          }),
         },
       ],
     });

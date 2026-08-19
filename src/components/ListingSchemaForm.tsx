@@ -173,7 +173,7 @@ export function ListingSchemaForm({
             >
               {rewritingDescription
                 ? descriptionAiWritten
-                  ? "Rewriting…"
+                  ? "Updating…"
                   : "Writing…"
                 : descriptionAiWritten
                   ? "Rewrite"

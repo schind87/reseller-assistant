@@ -280,6 +280,9 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
   const [saving, setSaving] = useState(false);
   const [rewritingDescription, setRewritingDescription] = useState(false);
   const [descriptionAiWritten, setDescriptionAiWritten] = useState(false);
+  /** Structured fields from the last successful AI description write (for surgical rewrites). */
+  const [descriptionFieldsSnapshot, setDescriptionFieldsSnapshot] =
+    useState<StructuredFields | null>(null);
   const [deletingListing, setDeletingListing] = useState(false);
   const [openingSell, setOpeningSell] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
@@ -343,6 +346,10 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
     setPrice(draft.price);
     setFields(draft.fields);
     setDescriptionAiWritten(Boolean(draft.description.trim()));
+    // Treat saved fields as the baseline for surgical rewrites after reload.
+    setDescriptionFieldsSnapshot(
+      draft.description.trim() ? { ...draft.fields } : null
+    );
     setDraftDirty(false);
     draftHydrated.current = true;
     // Re-allow preference backfill when the listing still has empty smoke/pet notes.
@@ -1138,11 +1145,12 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
 
   async function rewriteDescription() {
     const wasAiWritten = descriptionAiWritten;
+    const hasDraft = description.trim().length > 0;
     setRewritingDescription(true);
     setError(null);
     setStatusMessage(
-      wasAiWritten
-        ? "Rewriting description from your current fields…"
+      hasDraft
+        ? "Updating description from your current fields (keeping your edits)…"
         : "Writing description from your current fields…"
     );
     try {
@@ -1157,6 +1165,7 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
             price: Number.isFinite(priceNum) ? priceNum : null,
             description,
             structured_fields: fields,
+            previous_structured_fields: descriptionFieldsSnapshot ?? undefined,
             save: false,
           }),
         }
@@ -1174,14 +1183,19 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
       }
       setDescription(json.description);
       setDescriptionAiWritten(true);
+      setDescriptionFieldsSnapshot({ ...fields });
       setDraftDirty(true);
       setStatusMessage(
         json.degraded
           ? json.message ??
-              "Filled a simple description from your fields — edit as needed."
-          : wasAiWritten
-            ? "Description rewritten from your fields — review and save."
-            : "Description written from your fields — review and save."
+              (hasDraft
+                ? "Could not update with AI — your current draft was left unchanged."
+                : "Filled a simple description from your fields — edit as needed.")
+          : hasDraft
+            ? "Description updated for field changes — your wording was kept where possible. Review and save."
+            : wasAiWritten
+              ? "Description rewritten from your fields — review and save."
+              : "Description written from your fields — review and save."
       );
     } catch (err) {
       setStatusMessage(null);

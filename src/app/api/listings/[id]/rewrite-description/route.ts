@@ -21,6 +21,8 @@ const bodySchema = z.object({
   price: z.number().nullable().optional(),
   description: z.string().nullable().optional(),
   structured_fields: z.record(z.string(), z.unknown()).optional(),
+  /** Fields snapshot from when the description was last AI-written (for surgical updates). */
+  previous_structured_fields: z.record(z.string(), z.unknown()).optional(),
   save: z.boolean().optional(),
 });
 
@@ -49,6 +51,12 @@ export async function POST(request: Request, context: RouteContext) {
       ...listing.structured_fields,
       ...(parsed.data.structured_fields as Partial<StructuredFields> | undefined),
     };
+    const previousFields = parsed.data.previous_structured_fields
+      ? ({
+          ...emptyStructuredFields(),
+          ...(parsed.data.previous_structured_fields as Partial<StructuredFields>),
+        } satisfies StructuredFields)
+      : null;
 
     const profile = access.userId
       ? await getProfileById(access.userId).catch(() => null)
@@ -62,6 +70,7 @@ export async function POST(request: Request, context: RouteContext) {
       price,
       fields,
       currentDescription,
+      previousFields,
       sellerContext: composeSellerContext(prefs),
     });
 
