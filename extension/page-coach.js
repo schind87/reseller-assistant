@@ -2,6 +2,7 @@
 
 (function initPageCoach() {
   const HOST_ID = "reseller-assistant-page-coach";
+  const MINIMIZED_KEY = "pageCoachMinimized";
   if (document.getElementById(HOST_ID)) return;
 
   let state = null;
@@ -315,6 +316,26 @@
     }
   }
 
+  function setMinimized(next) {
+    minimized = Boolean(next);
+    try {
+      void chrome.storage.local.set({ [MINIMIZED_KEY]: minimized });
+    } catch {
+      // Ignore storage errors; in-memory state still applies for this page.
+    }
+    render();
+  }
+
+  async function loadMinimizedPreference() {
+    try {
+      const stored = await chrome.storage.local.get(MINIMIZED_KEY);
+      minimized = Boolean(stored[MINIMIZED_KEY]);
+    } catch {
+      minimized = false;
+    }
+    render();
+  }
+
   ui.doStep.addEventListener("click", () => {
     if (!state?.paired) {
       void run("coachGetState").then(() => refresh());
@@ -338,20 +359,20 @@
     }
     void run("openTweakListing");
   });
-  ui.minimize.addEventListener("click", () => {
-    minimized = true;
-    render();
-  });
-  ui.expand.addEventListener("click", () => {
-    minimized = false;
-    render();
-  });
+  ui.minimize.addEventListener("click", () => setMinimized(true));
+  ui.expand.addEventListener("click", () => setMinimized(false));
 
   chrome.runtime.onMessage.addListener((message) => {
     if (message?.type === "coachStateUpdated" && message.state) {
       state = message.state;
       render();
     }
+  });
+
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area !== "local" || !changes[MINIMIZED_KEY]) return;
+    minimized = Boolean(changes[MINIMIZED_KEY].newValue);
+    render();
   });
 
   window.addEventListener("popstate", () => {
@@ -377,7 +398,9 @@
   }, 400);
 
   syncOverlayVisibility();
-  if (onListingEditPage()) {
-    void refresh();
-  }
+  void loadMinimizedPreference().then(() => {
+    if (onListingEditPage()) {
+      void refresh();
+    }
+  });
 })();

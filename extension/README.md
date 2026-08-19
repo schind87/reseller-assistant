@@ -38,7 +38,7 @@ The side panel mirrors the same steps if you prefer tapping there.
 - Automatic when you open the marketplace from the listing hub
 - Or paste a join link / 6-digit code in the side panel
 
-Stored in `chrome.storage.local` as `{ appUrl, token, listingId, listingCache, stepIndex }`.
+Stored in `chrome.storage.local` as `{ appUrl, token, listingId, listingCache, stepIndex, pageCoachMinimized }`. Hiding the on-page helper (Hide) is remembered until you open it again from the green pill.
 
 ## Files
 
