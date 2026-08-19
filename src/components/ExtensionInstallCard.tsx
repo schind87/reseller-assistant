@@ -80,7 +80,7 @@ export function ExtensionInstallCard({
           </p>
           <a
             href="/api/extension/download"
-            className="inline-flex text-sm font-semibold text-[var(--accent)] underline-offset-2 hover:underline"
+            className="inline text-sm font-normal text-[var(--accent)] underline underline-offset-2 hover:opacity-80"
           >
             Download Chrome extension
           </a>
@@ -105,9 +105,20 @@ export function ExtensionInstallCard({
               </>
             ) : (
               <>
-                <li>Unzip the download.</li>
                 <li>
-                  chrome://extensions → Developer mode → Load unpacked.
+                  Unzip the download (on Mac, double-click the zip in Finder).
+                </li>
+                <li>
+                  chrome://extensions → Developer mode → Load unpacked → select
+                  the{" "}
+                  <span className="font-semibold text-[var(--foreground)]">
+                    reseller-assistant-extension
+                  </span>{" "}
+                  folder (the one that contains{" "}
+                  <span className="font-semibold text-[var(--foreground)]">
+                    manifest.json
+                  </span>
+                  ).
                 </li>
               </>
             )}
