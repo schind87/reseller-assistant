@@ -2479,17 +2479,12 @@ function PhotoTile({
               e.stopPropagation();
               onChangeRole();
             }}
-            className="inline-flex max-w-full items-center gap-1 truncate text-left text-sm font-semibold text-[var(--foreground)] underline decoration-[var(--border)] underline-offset-2 transition hover:text-[var(--accent)] hover:decoration-[var(--accent)] disabled:opacity-50"
+            className="min-w-0 max-w-full truncate text-left text-sm font-semibold text-[var(--foreground)] underline decoration-[var(--border)] underline-offset-2 transition hover:text-[var(--accent)] hover:decoration-[var(--accent)] disabled:opacity-50"
             title="Change photo type"
             aria-label={`Change type for ${photoRoleLabel(photo.role)} photo`}
           >
-            <span className="truncate">
-              {photoRoleLabel(photo.role)}
-              {moving ? " · moving" : ""}
-            </span>
-            <span className="shrink-0 text-xs font-medium text-[var(--muted)]" aria-hidden>
-              ▾
-            </span>
+            {photoRoleLabel(photo.role)}
+            {moving ? " · moving" : ""}
           </button>
         ) : (
           <p className="min-w-0 truncate text-sm text-[var(--muted)]">
@@ -2819,7 +2814,7 @@ function PhotoLightbox({
               className="rounded-lg bg-white/95 px-3 py-1 text-sm font-semibold text-[var(--foreground)]"
               title="Change photo type"
             >
-              {photoRoleLabel(photo.role)} ▾
+              {photoRoleLabel(photo.role)}
             </button>
           ) : (
             <p className="rounded-lg bg-black/50 px-3 py-1 text-sm font-medium text-white">
