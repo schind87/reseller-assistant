@@ -484,24 +484,37 @@ export function PhotoAspectCrop({
                   label: "Resize from bottom-right",
                 },
               ] as const
-            ).map(({ corner, left, top, cursor, label }) => (
-              <button
-                key={corner}
-                type="button"
-                aria-label={label}
-                className="absolute z-20 flex h-11 w-11 -translate-x-1/2 -translate-y-1/2 touch-none items-center justify-center"
-                style={{ left, top, cursor }}
-                onPointerDown={(e) => onCornerPointerDown(corner, e)}
-                onPointerMove={onCornerPointerMove}
-                onPointerUp={onDragPointerUp}
-                onPointerCancel={onDragPointerUp}
-              >
-                <span
-                  aria-hidden
-                  className="pointer-events-none h-4 w-4 rounded-[3px] border-2 border-white bg-[var(--accent)] shadow-[0_1px_4px_rgba(0,0,0,0.55)]"
-                />
-              </button>
-            ))}
+            ).map(({ corner, left, top, cursor, label }) => {
+              // Keep the full hit box inside the stage so overflow:hidden
+              // doesn't eat corner clicks at the edges.
+              const pad = 22;
+              const clampedLeft = Math.min(
+                layout.stageW - pad,
+                Math.max(pad, left)
+              );
+              const clampedTop = Math.min(
+                layout.stageH - pad,
+                Math.max(pad, top)
+              );
+              return (
+                <button
+                  key={corner}
+                  type="button"
+                  aria-label={label}
+                  className="absolute z-20 flex h-11 w-11 -translate-x-1/2 -translate-y-1/2 touch-none items-center justify-center"
+                  style={{ left: clampedLeft, top: clampedTop, cursor }}
+                  onPointerDown={(e) => onCornerPointerDown(corner, e)}
+                  onPointerMove={onCornerPointerMove}
+                  onPointerUp={onDragPointerUp}
+                  onPointerCancel={onDragPointerUp}
+                >
+                  <span
+                    aria-hidden
+                    className="pointer-events-none h-4 w-4 rounded-[3px] border-2 border-white bg-[var(--accent)] shadow-[0_1px_4px_rgba(0,0,0,0.55)]"
+                  />
+                </button>
+              );
+            })}
           </>
         ) : (
           <div className="flex h-full items-center justify-center text-sm text-white/70">
