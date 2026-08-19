@@ -62,3 +62,8 @@ Non-obvious gotchas:
   Then sign in at `/unlock` with `demo@reseller.local` / `2468`.
 - `createAdminClient()` memoizes the Supabase client for the process lifetime;
   changing Supabase env vars requires restarting `next dev`.
+
+### Git workflow
+
+Commit and push directly to `main`. Do **not** create feature branches or open
+pull requests unless the user explicitly asks for a branch or PR.
