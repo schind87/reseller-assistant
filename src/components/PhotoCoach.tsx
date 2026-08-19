@@ -302,8 +302,8 @@ export function PhotoCoach({ listing, initialPhotos }: PhotoCoachProps) {
           {busy
             ? "Uploading…"
             : currentRolePhotos.length > 0
-              ? "Add another photo"
-              : "Take photo"}
+              ? `Add another ${photoRoleLabel(step.role)} photo`
+              : `Take ${photoRoleLabel(step.role)} photo`}
         </BigButton>
 
         <div className="grid grid-cols-2 gap-3">
