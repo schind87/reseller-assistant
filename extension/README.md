@@ -23,7 +23,7 @@ If Chrome says it could not load `coach-shared.js` (or the manifest), the folder
 ## Easy posting flow
 
 1. Open a listing in the web app and tap **Open Mercari** / **Open Poshmark** (pairs the extension and opens the sell page in a new tab).
-2. Keep the listing tab open; on the sell page use the green **Reseller Assistant** box:
+2. Keep the listing tab open; on the **sell / create-listing** page use the green **Reseller Assistant** box (it stays hidden on other Mercari/Poshmark pages):
    - **Do this for me** — photos, title, description, then other details
    - After a successful fill, it checks the page and moves to the next step
    - On Poshmark, **brand** and **style tags** show a green tip instead of auto-fill — type and pick from the site’s suggestions

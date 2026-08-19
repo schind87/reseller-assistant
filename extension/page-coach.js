@@ -1,4 +1,4 @@
-/* global RA_COACH_STEPS */
+/* global RA_COACH_STEPS, raIsListingEditUrl */
 
 (function initPageCoach() {
   const HOST_ID = "reseller-assistant-page-coach";
@@ -7,6 +7,7 @@
   let state = null;
   let busy = false;
   let minimized = false;
+  let lastHref = location.href;
 
   const host = document.createElement("div");
   host.id = HOST_ID;
@@ -19,6 +20,19 @@
   host.style.fontFamily =
     '"Segoe UI", "Helvetica Neue", Arial, sans-serif';
   document.documentElement.appendChild(host);
+
+  function onListingEditPage() {
+    return typeof raIsListingEditUrl === "function"
+      ? raIsListingEditUrl(location.href)
+      : false;
+  }
+
+  function syncOverlayVisibility() {
+    const show = onListingEditPage();
+    host.hidden = !show;
+    host.style.display = show ? "" : "none";
+    return show;
+  }
 
   const shadow = host.attachShadow({ mode: "open" });
   shadow.innerHTML = `
@@ -200,8 +214,17 @@
   }
 
   function render() {
+    if (!syncOverlayVisibility()) return;
     host.classList.toggle("collapsed", minimized);
     if (!state) {
+      ui.stepLabel.textContent = "Connecting…";
+      ui.title.textContent = "Listing helper";
+      ui.help.textContent = "One moment…";
+      ui.preview.textContent = "";
+      ui.doStep.textContent = "Do this for me";
+      ui.status.textContent = "";
+      return;
+    }
       ui.stepLabel.textContent = "Connecting…";
       ui.title.textContent = "Listing helper";
       ui.help.textContent = "One moment…";
@@ -331,5 +354,30 @@
     }
   });
 
-  void refresh();
+  window.addEventListener("popstate", () => {
+    onLocationMaybeChanged();
+  });
+
+  function onLocationMaybeChanged() {
+    const show = onListingEditPage();
+    syncOverlayVisibility();
+    if (!show) return;
+    if (!state) {
+      void refresh();
+      return;
+    }
+    render();
+  }
+
+  // Mercari/Poshmark are SPAs — poll href so the overlay hides after leaving sell/edit.
+  window.setInterval(() => {
+    if (location.href === lastHref) return;
+    lastHref = location.href;
+    onLocationMaybeChanged();
+  }, 400);
+
+  syncOverlayVisibility();
+  if (onListingEditPage()) {
+    void refresh();
+  }
 })();

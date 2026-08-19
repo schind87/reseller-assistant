@@ -103,6 +103,33 @@ function raIsMarketplaceUrl(url) {
   }
 }
 
+/**
+ * True on create/edit listing forms (where the on-page helper should show).
+ * Browse, closet, offer, and other marketplace pages return false.
+ */
+function raIsListingEditUrl(url) {
+  try {
+    var parsed = new URL(url);
+    var host = parsed.hostname.toLowerCase();
+    var path = parsed.pathname.toLowerCase().replace(/\/+$/, "") || "/";
+    if (host === "mercari.com" || host.endsWith(".mercari.com")) {
+      return path === "/sell" || path.indexOf("/sell/") === 0;
+    }
+    if (host === "poshmark.com" || host.endsWith(".poshmark.com")) {
+      return (
+        path === "/create-listing" ||
+        path.indexOf("/create-listing/") === 0 ||
+        path === "/edit-listing" ||
+        path.indexOf("/edit-listing/") === 0 ||
+        /\/listings?\/[^/]+\/edit(?:\/|$)/.test(path)
+      );
+    }
+    return false;
+  } catch (e) {
+    return false;
+  }
+}
+
 function raPlatformFromUrl(url) {
   if (!url) return null;
   if (/poshmark/i.test(url)) return "poshmark";
