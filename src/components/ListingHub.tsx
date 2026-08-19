@@ -918,6 +918,11 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
   }
 
   async function handleAiBackgroundClick(photo: ListingPhotoWithUrl) {
+    // Already have an AI version — use the Original/AI toggle, don't re-run.
+    if (photo.processed_path) {
+      return;
+    }
+
     setError(null);
     setBgPhotoId(photo.id);
     setStatusMessage("Checking AI results for this photo…");
@@ -934,7 +939,7 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
         );
       }
       const results = Array.isArray(json.results) ? json.results : [];
-      if (results.length > 0 || photo.replace_background) {
+      if (results.length > 0) {
         setAiPickerPhoto(photo);
         setStatusMessage(null);
         return;
@@ -950,10 +955,78 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
     }
   }
 
+  async function setAiBackgroundEnabled(
+    photo: ListingPhotoWithUrl,
+    enabled: boolean
+  ) {
+    if (!photo.processed_path) {
+      if (enabled) {
+        await handleAiBackgroundClick(photo);
+      }
+      return;
+    }
+
+    setBgPhotoId(photo.id);
+    setError(null);
+    setStatusMessage(enabled ? "Showing AI version…" : "Showing original…");
+    try {
+      const res = await fetch(
+        `/api/listings/${listingId}/photos/${photo.id}/replace-background`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            replaceBackground: enabled,
+            // Enabling with an existing clean file reuses it (no fal re-run).
+            run: enabled,
+            force: false,
+          }),
+        }
+      );
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(
+          typeof json.error === "string"
+            ? json.error
+            : "Could not switch AI background"
+        );
+      }
+      const nextPhoto = json.photo as ListingPhotoWithUrl;
+      setData((prev) =>
+        prev
+          ? {
+              ...prev,
+              photos: prev.photos.map((p) =>
+                p.id === nextPhoto.id ? nextPhoto : p
+              ),
+            }
+          : prev
+      );
+      setStatusMessage(enabled ? "AI version on." : "Original photo on.");
+      await load({ syncDraft: false });
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Could not switch AI background"
+      );
+      setStatusMessage(null);
+    } finally {
+      setBgPhotoId(null);
+    }
+  }
+
   async function runAiBackground(
     photo: ListingPhotoWithUrl,
     opts?: { force?: boolean }
   ) {
+    // New AI generations require a crop first once a version already exists.
+    if (photo.processed_path) {
+      setError(
+        "This photo already has an AI version. Crop it first to create a new one."
+      );
+      setAiPickerPhoto(null);
+      return;
+    }
+
     const force = opts?.force === true;
     setBgPhotoId(photo.id);
     setError(null);
@@ -1364,6 +1437,9 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
                 onToggleCleanBackground={(photo) =>
                   void handleAiBackgroundClick(photo)
                 }
+                onSetAiBackground={(photo, enabled) =>
+                  void setAiBackgroundEnabled(photo, enabled)
+                }
                 onPreview={setPreviewPhoto}
                 onDropFiles={(files) => void uploadFilesToSection(files, "listing")}
                 onDropPhoto={(photoId) =>
@@ -1729,10 +1805,14 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
             setStatusMessage("AI background applied.");
             void load({ syncDraft: false });
           }}
-          onRunNew={() => {
-            const photo = aiPickerPhoto;
-            void runAiBackground(photo, { force: true });
-          }}
+          onRunNew={
+            aiPickerPhoto.processed_path
+              ? undefined
+              : () => {
+                  const photo = aiPickerPhoto;
+                  void runAiBackground(photo, { force: true });
+                }
+          }
           onRate={isAdmin ? rateAiResult : undefined}
         />
       ) : null}
@@ -1799,6 +1879,7 @@ function PhotoGroup({
   onDelete,
   onUseInListing,
   onToggleCleanBackground,
+  onSetAiBackground,
   onPreview,
   onDropFiles,
   onDropPhoto,
@@ -1828,6 +1909,10 @@ function PhotoGroup({
   onDelete: (photoId: string) => void;
   onUseInListing?: (photoId: string) => void;
   onToggleCleanBackground?: (photo: ListingPhotoWithUrl) => void;
+  onSetAiBackground?: (
+    photo: ListingPhotoWithUrl,
+    enabled: boolean
+  ) => void;
   onPreview: (photo: ListingPhotoWithUrl) => void;
   onDropFiles: (files: File[]) => void;
   onDropPhoto: (photoId: string) => void;
@@ -1995,6 +2080,11 @@ function PhotoGroup({
                   ? () => onToggleCleanBackground(photo)
                   : undefined
               }
+              onSetAiBackground={
+                onSetAiBackground
+                  ? (enabled) => onSetAiBackground(photo, enabled)
+                  : undefined
+              }
               labHref={labPhotoHref?.(photo.id)}
               onDelete={() => onDelete(photo.id)}
               onBeginMove={() => onBeginMove(photo.id)}
@@ -2063,6 +2153,7 @@ function PhotoTile({
   onPreview,
   onUseInListing,
   onToggleCleanBackground,
+  onSetAiBackground,
   labHref,
   onDelete,
   onBeginMove,
@@ -2080,6 +2171,7 @@ function PhotoTile({
   onPreview: () => void;
   onUseInListing?: () => void;
   onToggleCleanBackground?: () => void;
+  onSetAiBackground?: (enabled: boolean) => void;
   labHref?: string;
   onDelete: () => void;
   onBeginMove: () => void;
@@ -2300,7 +2392,49 @@ function PhotoTile({
               Use in listing
             </button>
           ) : null}
-          {onToggleCleanBackground ? (
+          {photo.processed_path && onSetAiBackground ? (
+            <div
+              role="group"
+              aria-label="Original or AI photo"
+              className="inline-flex overflow-hidden rounded-md border border-[var(--border)]"
+            >
+              <button
+                type="button"
+                disabled={disabled}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (photo.replace_background) onSetAiBackground(false);
+                }}
+                aria-pressed={!photo.replace_background}
+                title="Show original photo"
+                className={`px-2 py-1 text-sm font-semibold transition disabled:opacity-50 ${
+                  !photo.replace_background
+                    ? "bg-[var(--foreground)] text-white"
+                    : "bg-transparent text-[var(--muted)] hover:bg-[var(--surface-muted)]"
+                }`}
+              >
+                Original
+              </button>
+              <button
+                type="button"
+                disabled={disabled}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (!photo.replace_background) onSetAiBackground(true);
+                }}
+                aria-pressed={Boolean(photo.replace_background)}
+                title="Show AI background"
+                className={`inline-flex items-center gap-1 border-l border-[var(--border)] px-2 py-1 text-sm font-semibold transition disabled:opacity-50 ${
+                  photo.replace_background
+                    ? "bg-[var(--accent)] text-white"
+                    : "bg-transparent text-[var(--muted)] hover:bg-[var(--surface-muted)]"
+                }`}
+              >
+                <AiGlyph className="h-3.5 w-3.5" />
+                AI
+              </button>
+            </div>
+          ) : onToggleCleanBackground ? (
             <button
               type="button"
               disabled={disabled}
@@ -2308,24 +2442,11 @@ function PhotoTile({
                 e.stopPropagation();
                 onToggleCleanBackground();
               }}
-              aria-pressed={Boolean(photo.replace_background)}
-              title={
-                photo.replace_background
-                  ? "AI background on — click to choose another result or run again"
-                  : "Run AI background (or choose a prior result for this photo)"
-              }
-              className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-sm font-semibold transition disabled:opacity-50 ${
-                photo.replace_background
-                  ? "border-[var(--accent)] bg-[var(--accent)] text-white"
-                  : "border-[var(--border)] bg-transparent text-[var(--foreground)] hover:bg-[var(--surface-muted)]"
-              }`}
+              title="Run AI background (crop again later if you want a new AI version)"
+              className="inline-flex items-center gap-1 rounded-md border border-[var(--border)] bg-transparent px-2 py-1 text-sm font-semibold text-[var(--foreground)] transition hover:bg-[var(--surface-muted)] disabled:opacity-50"
             >
               <AiGlyph className="h-3.5 w-3.5" />
-              {cleaningBg
-                ? "AI…"
-                : photo.replace_background
-                  ? "AI on"
-                  : "AI"}
+              {cleaningBg ? "AI…" : "AI"}
             </button>
           ) : null}
           {labHref ? (

@@ -25,7 +25,7 @@ type AiPhotoBackgroundPickerProps = {
   busy?: boolean;
   onClose: () => void;
   onApplied: (photo: ListingPhotoWithUrl) => void;
-  onRunNew: () => void;
+  onRunNew?: () => void;
   onRate?: (
     resultId: string,
     rating: "up" | "down" | null
@@ -311,14 +311,20 @@ export function AiPhotoBackgroundPicker({
               {restoring ? "Restoring…" : "Use original"}
             </button>
           ) : null}
-          <button
-            type="button"
-            disabled={busy}
-            onClick={onRunNew}
-            className="rounded-lg border border-[var(--accent)] bg-[var(--accent-soft)] px-3 py-2 text-sm font-semibold text-[var(--accent)] disabled:opacity-50"
-          >
-            Run AI again
-          </button>
+          {onRunNew && !photo.processed_path ? (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={onRunNew}
+              className="rounded-lg border border-[var(--accent)] bg-[var(--accent-soft)] px-3 py-2 text-sm font-semibold text-[var(--accent)] disabled:opacity-50"
+            >
+              Run AI again
+            </button>
+          ) : photo.processed_path ? (
+            <p className="text-sm text-[var(--muted)]">
+              To create a new AI version, crop the photo first.
+            </p>
+          ) : null}
         </div>
       </div>
 
