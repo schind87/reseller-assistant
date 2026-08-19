@@ -80,7 +80,7 @@ export function ExtensionInstallCard({
           </p>
           <a
             href="/api/extension/download"
-            className="inline-flex text-sm font-semibold text-[var(--accent)] underline-offset-2 hover:underline"
+            className="inline text-sm font-normal text-[var(--accent)] underline underline-offset-2 hover:opacity-80"
           >
             Download Chrome extension
           </a>
