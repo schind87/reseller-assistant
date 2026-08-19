@@ -111,10 +111,11 @@ export async function listListings(userId: string): Promise<ListingWithThumb[]> 
   }
 
   const signed = await getSignedPhotoUrls(pathsToSign, 3600, {
-    width: 320,
-    height: 320,
-    resize: "cover",
-    quality: 70,
+    width: 640,
+    height: 640,
+    // Contain keeps the full cover; the list frames by marketplace aspect.
+    resize: "contain",
+    quality: 72,
   });
   return listings.map((listing) => {
     const path = pathByListing.get(listing.id) ?? null;

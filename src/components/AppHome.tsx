@@ -7,7 +7,7 @@ import { BigButton } from "@/components/BigButton";
 import { ExtensionInstallCard } from "@/components/ExtensionInstallCard";
 import { PinSetupCard } from "@/components/PinSetupCard";
 import { SellerOnboarding } from "@/components/SellerOnboarding";
-import { PLATFORM_LABELS } from "@/lib/platforms";
+import { PLATFORM_LABELS, PLATFORM_PHOTO_ASPECT } from "@/lib/platforms";
 import {
   type ListingPreferences,
 } from "@/lib/seller-preferences";
@@ -282,6 +282,7 @@ export function AppHome({
               const label =
                 listing.title ||
                 `${PLATFORM_LABELS[listing.platform]} draft`;
+              const aspect = PLATFORM_PHOTO_ASPECT[listing.platform];
               return (
                 <li
                   key={listing.id}
@@ -291,7 +292,12 @@ export function AppHome({
                     href={`/app/listings/${listing.id}`}
                     className="flex min-w-0 flex-1 items-stretch gap-3 transition-colors hover:bg-[var(--surface-muted)]"
                   >
-                    <div className="h-[4.75rem] w-[4.75rem] shrink-0 self-center overflow-hidden bg-[var(--surface-muted)] sm:ml-3 sm:rounded-xl">
+                    <div
+                      className="h-[4.75rem] shrink-0 self-center overflow-hidden bg-[var(--surface-muted)] sm:ml-3 sm:rounded-xl"
+                      style={{
+                        aspectRatio: `${aspect.width} / ${aspect.height}`,
+                      }}
+                    >
                       {listing.thumbUrl ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
@@ -299,7 +305,7 @@ export function AppHome({
                           alt=""
                           loading="lazy"
                           decoding="async"
-                          className="h-full w-full object-cover"
+                          className="h-full w-full object-contain"
                         />
                       ) : (
                         <div className="flex h-full items-center justify-center text-[10px] font-semibold uppercase tracking-wide text-[var(--muted)]">
