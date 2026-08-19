@@ -177,11 +177,10 @@ export function PhotoCoach({ listing, initialPhotos }: PhotoCoachProps) {
       return (
         <div className="mx-auto flex w-full max-w-lg flex-col gap-6 px-4 py-8">
           <h1 className="font-[family-name:var(--font-brand)] text-3xl text-[var(--foreground)]">
-            Photos sent
+            Photos complete
           </h1>
           <p className="text-lg leading-relaxed text-[var(--muted)]">
-            You can put the phone down. Continue on your computer — the listing
-            hub will show these garment photos so you can finish the draft.
+            You can put the phone down — these photos are already on the listing.
           </p>
           <p className="text-base text-[var(--muted)]">
             {photos.length} photo{photos.length === 1 ? "" : "s"} uploaded.
@@ -323,9 +322,9 @@ export function PhotoCoach({ listing, initialPhotos }: PhotoCoachProps) {
               : `Take ${photoRoleLabel(step.role)} photo`}
         </BigButton>
 
-        {phoneMode && stepIndex < steps.length - 1 ? (
+        {phoneMode && !isLastStep ? (
           <BigButton variant="ghost" disabled={busy} onClick={finishCoach}>
-            Done — send to computer
+            Done
           </BigButton>
         ) : !phoneMode ? (
           <BigButton
