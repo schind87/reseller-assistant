@@ -271,13 +271,16 @@ export function PhotoCoach({ listing, initialPhotos }: PhotoCoachProps) {
           {currentRolePhotos.map((photo) => (
             <li
               key={photo.id}
-              className="overflow-hidden rounded-xl ring-1 ring-[var(--border)]"
+              className="overflow-hidden rounded-xl bg-[var(--surface-muted)] ring-1 ring-[var(--border)]"
+              style={{
+                aspectRatio: `${aspect.width} / ${aspect.height}`,
+              }}
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={photo.signedUrl ?? preview ?? ""}
                 alt={photoRoleLabel(photo.role)}
-                className="aspect-square w-full object-cover"
+                className="h-full w-full object-contain"
               />
             </li>
           ))}
@@ -287,7 +290,11 @@ export function PhotoCoach({ listing, initialPhotos }: PhotoCoachProps) {
         <img
           src={preview}
           alt={`${step.title} preview`}
-          className="max-h-72 w-full rounded-2xl object-cover ring-1 ring-[var(--border)]"
+          className="w-full rounded-2xl bg-[var(--surface-muted)] object-contain ring-1 ring-[var(--border)]"
+          style={{
+            aspectRatio: `${aspect.width} / ${aspect.height}`,
+            maxHeight: "18rem",
+          }}
         />
       ) : null}
 
