@@ -220,14 +220,12 @@ export function PhotoCoach({ listing, initialPhotos }: PhotoCoachProps) {
         : `Listing photo for ${PLATFORM_LABELS[platform]} · ${aspect.label}`;
 
   const canGoBack = stepIndex > 0;
-  const nextLabel =
-    stepIndex >= steps.length - 1
-      ? phoneMode
-        ? "Done — send to computer"
-        : "Done"
-      : currentRolePhotos.length > 0
-        ? "Next"
-        : "Skip";
+  const isLastStep = stepIndex >= steps.length - 1;
+  const nextLabel = isLastStep
+    ? "Done"
+    : currentRolePhotos.length > 0
+      ? "Next"
+      : "Skip";
 
   return (
     <div className="mx-auto flex w-full max-w-lg flex-col gap-6 px-4 py-6">
@@ -248,22 +246,30 @@ export function PhotoCoach({ listing, initialPhotos }: PhotoCoachProps) {
       </div>
 
       <div>
-        <p className="mb-1 text-sm font-semibold uppercase tracking-wide text-[var(--accent)]">
-          Optional
-          {step.allowMultiple ? " · add as many as you need" : ""}
-        </p>
-        <h1 className="font-[family-name:var(--font-brand)] text-3xl text-[var(--foreground)]">
-          {step.title}
-        </h1>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            disabled={busy || !canGoBack}
+            onClick={goBack}
+            className="shrink-0 rounded-lg border border-[var(--border)] px-3 py-2 text-sm font-semibold text-[var(--foreground)] disabled:opacity-40"
+          >
+            Back
+          </button>
+          <h1 className="min-w-0 flex-1 text-center font-[family-name:var(--font-brand)] text-2xl text-[var(--foreground)] sm:text-3xl">
+            {step.title}
+          </h1>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={goNext}
+            className="shrink-0 rounded-lg border border-[var(--accent)] bg-[var(--accent)] px-3 py-2 text-sm font-semibold text-white disabled:opacity-40"
+          >
+            {nextLabel}
+          </button>
+        </div>
         <p className="mt-3 text-lg leading-relaxed text-[var(--muted)]">
           {step.instruction}
         </p>
-        {step.purpose === "listing" ? (
-          <p className="mt-2 text-base text-[var(--muted)]">
-            Aim for {PLATFORM_LABELS[platform]}&apos;s {aspect.label} frame when
-            you open the camera — the saved photo matches those borders.
-          </p>
-        ) : null}
       </div>
 
       {currentRolePhotos.length > 0 ? (
@@ -316,19 +322,6 @@ export function PhotoCoach({ listing, initialPhotos }: PhotoCoachProps) {
               ? `Add another ${photoRoleLabel(step.role)} photo`
               : `Take ${photoRoleLabel(step.role)} photo`}
         </BigButton>
-
-        <div className="grid grid-cols-2 gap-3">
-          <BigButton
-            variant="secondary"
-            disabled={busy || !canGoBack}
-            onClick={goBack}
-          >
-            Back
-          </BigButton>
-          <BigButton disabled={busy} onClick={goNext}>
-            {nextLabel}
-          </BigButton>
-        </div>
 
         {phoneMode && stepIndex < steps.length - 1 ? (
           <BigButton variant="ghost" disabled={busy} onClick={finishCoach}>
