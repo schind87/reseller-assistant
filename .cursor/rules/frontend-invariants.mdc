@@ -1,0 +1,34 @@
+---
+description: Mechanical frontend invariants for Reseller Assistant — tokens, typography, existing primitives. Not product judgment.
+globs: src/**/*.tsx,src/**/*.css,extension/**/*.css
+alwaysApply: false
+---
+
+# Frontend invariants
+
+Enforce only what inspection can catch. Product judgment lives in
+`.agents/skills/product-design/`. Tokens and APIs live in
+`.agents/skills/project-design-system/`.
+
+## Tokens
+
+- Use existing CSS variables from `src/app/globals.css` (`--background`, `--foreground`, `--muted`, `--accent`, `--accent-hover`, `--accent-soft`, `--surface`, `--surface-muted`, `--border`, `--danger`, `--font-brand`, `--font-body`) for brand color and type.
+- Do not introduce a new font family to make one screen distinctive.
+- Do not add Geist, shadcn/ui, Radix, or an icon pack unless the user explicitly asks. They are not in this repo.
+- Extension UI uses `extension/sidepanel.css` variables (`--bg`, `--ink`, `--accent`, `--radius`). Do not import Next.js fonts into the extension.
+
+## Components
+
+- Search `src/components/` before creating a new primitive.
+- Page-level primary actions use `BigButton` from `@/components/BigButton`.
+- Mercari/Poshmark listing fields use `ListingSchemaForm`, not a one-off title/description form.
+- QR display uses `QrPanel`.
+
+## Layout and controls
+
+- Interactive controls on seller flows should meet `.touch-target` (3.25rem) or `BigButton` sizing. Do not add 24px icon-only hit targets on Phone Companion or hub primary actions.
+- Heading visual language: serif brand font for `h1`–`h3` / titles; DM Sans for body. Eyebrows: small uppercase accent tracking.
+
+## Out of scope for this rule
+
+Subjective hierarchy, copy tone, whether something should be a modal, and AI-slop aesthetics belong in the product-design skill — not here.

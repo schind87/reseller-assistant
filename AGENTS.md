@@ -8,6 +8,26 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 <!-- END:nextjs-agent-rules -->
 
+## Product design (user-facing UI)
+
+When shaping, designing, implementing, modifying, auditing, hardening, or
+reviewing user-facing UI, load `.agents/skills/product-design/SKILL.md` and
+follow it. That skill is the router; do not dump the whole design system into
+the prompt.
+
+Applies to:
+
+- user-facing pages, components, and flows
+- interaction, product copy, accessibility, responsive behavior, and visible
+  states
+
+Skip:
+
+- backend-only work with no user-visible effect
+- telemetry-only work, generated files (`extension-live/`, `.next/`)
+- unrelated documentation
+- tests with no shipped UI impact
+
 ## Cursor Cloud specific instructions
 
 Reseller Assistant is a single Next.js 16 app (App Router, Turbopack) backed by
