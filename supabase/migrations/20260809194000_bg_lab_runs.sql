@@ -36,6 +36,23 @@ create index if not exists bg_lab_results_fal_request_idx
   on bg_lab_results (fal_request_id)
   where fal_request_id is not null;
 
--- Service-role admin client only. No anon/authenticated policies on purpose.
+-- RLS stays on (Data API linter). The Next.js server uses the anon key
+-- with a signed-cookie session, so policies match the rest of the household app.
 alter table bg_lab_runs enable row level security;
 alter table bg_lab_results enable row level security;
+
+drop policy if exists anon_all_bg_lab_runs on bg_lab_runs;
+create policy anon_all_bg_lab_runs
+  on bg_lab_runs
+  for all
+  to anon, authenticated
+  using (true)
+  with check (true);
+
+drop policy if exists anon_all_bg_lab_results on bg_lab_results;
+create policy anon_all_bg_lab_results
+  on bg_lab_results
+  for all
+  to anon, authenticated
+  using (true)
+  with check (true);
