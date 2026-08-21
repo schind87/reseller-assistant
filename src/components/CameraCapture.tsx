@@ -240,7 +240,7 @@ export function CameraCapture({
         ) : (
           <div className="pointer-events-none absolute inset-x-0 top-4 flex justify-center px-4">
             <p className="rounded-full bg-black/60 px-4 py-2 text-center text-sm font-semibold">
-              {guideNote ?? "For identification — will not be posted"}
+              {guideNote ?? "Will not go on the listing"}
             </p>
           </div>
         )}

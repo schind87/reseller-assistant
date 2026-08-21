@@ -171,10 +171,6 @@ export function AppHome({
           <h2 className="font-[family-name:var(--font-brand)] text-2xl">
             Seller preferences
           </h2>
-          <p className="text-base text-[var(--muted)]">
-            Choose the stores you sell on, then keep your closet details up to
-            date.
-          </p>
           <SellerOnboarding
             compact
             editing
@@ -196,7 +192,7 @@ export function AppHome({
               Admin
             </h2>
             <p className="mt-1 text-sm text-[var(--muted)]">
-              Compare fal.ai photo models on any listing photo.
+              Compare photo models on listing photos.
             </p>
             <Link
               href="/app/admin/bg-lab"
@@ -225,7 +221,6 @@ export function AppHome({
           </h1>
           <p className="mt-2 text-lg text-[var(--muted)]">
             Clothing listings for Mercari and Poshmark — one piece at a time.
-            Start here, then use your phone for garment photos.
           </p>
         </div>
         <button
@@ -281,7 +276,7 @@ export function AppHome({
         </h2>
         {listings.length === 0 ? (
           <p className="text-base text-[var(--muted)]">
-            No clothing listings yet. Tap Create new listing when you are ready.
+            No clothing listings yet. Tap Create new listing.
           </p>
         ) : (
           <ul className="flex flex-col gap-3">

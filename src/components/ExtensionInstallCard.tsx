@@ -12,7 +12,7 @@ export function ExtensionInstallCard() {
       </h2>
       <p className="text-base text-[var(--muted)]">
         Fills Mercari and Poshmark sell forms from your listing. You still press
-        Publish yourself.
+        Publish.
       </p>
       <a
         href="/api/extension/download"

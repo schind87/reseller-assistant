@@ -4,32 +4,32 @@ var RA_COACH_STEPS = [
   {
     key: "photos",
     label: "Photos",
-    help: "Add your listing photos to this page.",
+    help: "Add listing photos to this page.",
     actionLabel: "Add my photos",
   },
   {
     key: "title",
     label: "Title",
-    help: "Fill the title shoppers see first. We’ll check it stuck, then move on.",
+    help: "Fill the title shoppers see first.",
     actionLabel: "Fill title",
   },
   {
     key: "description",
     label: "Description",
-    help: "Fill the longer description. We’ll check it stuck, then move on.",
+    help: "Fill the description.",
     actionLabel: "Fill description",
   },
   {
     key: "details",
     label: "Other details",
-    help: "Fill size, color, condition, and prices. Brand and style tags get a tip in the form — type, then pick from the site’s suggestions.",
+    help: "Fill size, color, condition, and prices. For brand and style tags, type then pick a suggestion.",
     actionLabel: "Fill the rest",
   },
   {
     key: "review",
     label: "Review & list",
-    help: "Check everything looks right. You press List / Publish yourself.",
-    actionLabel: "I’m ready to review",
+    help: "Check the form, then press List / Publish on the site.",
+    actionLabel: "Review listing",
   },
 ];
 
@@ -226,7 +226,7 @@ function raPreviewForStep(listing, stepKey) {
     var count = raListingPhotoMeta(listing).length;
     return count
       ? count + " listing photo" + (count === 1 ? "" : "s") + " ready"
-      : "No listing photos yet — add them in the web app first";
+      : "No listing photos yet — add them on the listing hub first";
   }
   if (stepKey === "title") return raFieldValueFromListing(listing, "title") || "(no title)";
   if (stepKey === "description") {
@@ -243,7 +243,7 @@ function raPreviewForStep(listing, stepKey) {
     return parts.length ? parts.join(" · ") : "(no extra details yet)";
   }
   if (stepKey === "review") {
-    return "Look over the form, then press List / Publish on the site.";
+    return "Look over the form, then press List / Publish.";
   }
   return "";
 }

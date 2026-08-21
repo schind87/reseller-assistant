@@ -153,7 +153,7 @@ export async function POST(request: Request, context: RouteContext) {
   } catch (err) {
     console.error("upload photo error:", err);
     return NextResponse.json(
-      { error: "Could not upload photo" },
+      { error: "Couldn’t upload photo. Try again." },
       { status: 500 }
     );
   }

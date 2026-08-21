@@ -16,6 +16,7 @@ import {
 } from "@/lib/marketplace-categories";
 import type { StructuredFields } from "@/lib/types";
 import { AiGlyph } from "@/components/AiPhotoBackgroundPicker";
+import { BigButton } from "@/components/BigButton";
 
 type ListingSchemaFormProps = {
   schema: PlatformListingSchema;
@@ -31,6 +32,8 @@ type ListingSchemaFormProps = {
   footer: ReactNode;
   onRewriteDescription?: () => void;
   rewritingDescription?: boolean;
+  /** Disable the description AI control without changing its busy label. */
+  descriptionAiDisabled?: boolean;
   /** True after AI has written the description at least once this session / listing. */
   descriptionAiWritten?: boolean;
 };
@@ -39,21 +42,6 @@ const controlClass =
   "min-h-10 w-full rounded-lg border border-[var(--border)] bg-white px-3 py-2 text-base text-[var(--foreground)]";
 
 const STYLE_TAG_MAX = 3;
-
-function SyncedAtLabel({ syncedAt }: { syncedAt: string }) {
-  let text = syncedAt;
-  try {
-    text = new Date(syncedAt).toLocaleString();
-  } catch {
-    /* keep iso */
-  }
-  return (
-    <span suppressHydrationWarning>
-      {" · synced "}
-      {text}
-    </span>
-  );
-}
 
 function readStructured(fields: StructuredFields, key: string): string {
   const value = (fields as Record<string, unknown>)[key];
@@ -123,9 +111,18 @@ export function ListingSchemaForm({
   footer,
   onRewriteDescription,
   rewritingDescription = false,
+  descriptionAiDisabled = false,
   descriptionAiWritten = false,
 }: ListingSchemaFormProps) {
   const fieldNodes = useMemo(() => schema.fields, [schema.fields]);
+  const otherFields = useMemo(
+    () => fieldNodes.filter((field) => field.source !== "description"),
+    [fieldNodes]
+  );
+  const descriptionField = useMemo(
+    () => fieldNodes.find((field) => field.source === "description"),
+    [fieldNodes]
+  );
   const categoryOptions = useMemo(() => {
     const fromSchema = schema.fields.find((f) => f.id === "category")?.options;
     if (fromSchema?.length) return fromSchema;
@@ -158,32 +155,12 @@ export function ListingSchemaForm({
 
   function renderDescriptionField(field: ListingFieldDef) {
     return (
-      <div key={field.id} className="flex flex-col gap-1 sm:col-span-2">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <FieldLabel
-            label={`${field.label}${field.required ? "" : " (optional)"} (${description.length}/${field.maxLength ?? 5000})`}
-            hint={field.hint}
-          />
-          {onRewriteDescription ? (
-            <button
-              type="button"
-              disabled={rewritingDescription}
-              onClick={onRewriteDescription}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-1.5 text-sm font-semibold text-[var(--foreground)] disabled:opacity-50"
-            >
-              {rewritingDescription
-                ? descriptionAiWritten
-                  ? "Updating…"
-                  : "Writing…"
-                : descriptionAiWritten
-                  ? "Rewrite"
-                  : "Write with AI"}
-              {!rewritingDescription ? (
-                <AiGlyph className="h-3.5 w-3.5 text-[var(--accent)]" />
-              ) : null}
-            </button>
-          ) : null}
-        </div>
+      <Field
+        key={field.id}
+        label={`${field.label}${field.required ? "" : " (optional)"} (${description.length}/${field.maxLength ?? 5000})`}
+        hint={field.hint}
+        className="sm:col-span-2"
+      >
         <textarea
           value={description}
           maxLength={field.maxLength}
@@ -192,7 +169,7 @@ export function ListingSchemaForm({
           placeholder={field.placeholder}
           className={`${controlClass} min-h-0 py-2 leading-snug`}
         />
-      </div>
+      </Field>
     );
   }
 
@@ -400,24 +377,33 @@ export function ListingSchemaForm({
 
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-3">
-      <p className="rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-2 text-sm text-[var(--muted)]">
-        Mirrors the {schema.platform === "mercari" ? "Mercari" : "Poshmark"}{" "}
-        sell form
-        {schema.source === "extension" && schema.syncedAt ? (
-          <SyncedAtLabel syncedAt={schema.syncedAt} />
-        ) : (
-          " · built-in clothing layout"
-        )}
-        . Use{" "}
-        <span className="font-semibold text-[var(--foreground)]">
-          Sync form fields
-        </span>{" "}
-        in the extension if the marketplace form changes.
-      </p>
-
       <div className="grid gap-3 sm:grid-cols-2">
-        {fieldNodes.map((field) => renderField(field))}
+        {otherFields.map((field) => renderField(field))}
       </div>
+
+      {onRewriteDescription && descriptionField ? (
+        <BigButton
+          disabled={rewritingDescription || descriptionAiDisabled}
+          onClick={onRewriteDescription}
+        >
+          {rewritingDescription
+            ? descriptionAiWritten
+              ? "Updating…"
+              : "Writing…"
+            : descriptionAiWritten
+              ? "Rewrite description with AI"
+              : "Write description with AI"}
+          {!rewritingDescription ? (
+            <AiGlyph className="h-3.5 w-3.5 text-white" />
+          ) : null}
+        </BigButton>
+      ) : null}
+
+      {descriptionField ? (
+        <div className="grid gap-3 sm:grid-cols-2">
+          {renderDescriptionField(descriptionField)}
+        </div>
+      ) : null}
 
       {footer}
     </form>
@@ -549,7 +535,7 @@ function StyleTagsPicker({
           onKeyDown={onKeyDown}
           placeholder={
             selected.length >= max
-              ? `Maximum ${max} tags — remove one to add another`
+              ? `Maximum ${max} tags`
               : "Type to find a Poshmark style tag…"
           }
           className={`${controlClass} disabled:opacity-60`}
@@ -591,7 +577,7 @@ function StyleTagsPicker({
       </div>
 
       <p className="text-xs text-[var(--muted)]">
-        {selected.length}/{max} selected · type to choose from Poshmark’s list
+        {selected.length}/{max} selected
       </p>
     </div>
   );

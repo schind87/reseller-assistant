@@ -96,7 +96,7 @@ export function PhotoCoach({ listing, initialPhotos }: PhotoCoachProps) {
       });
       const data = await res.json();
       if (!res.ok) {
-        throw new Error(data.error ?? "Upload failed");
+        throw new Error(data.error ?? "Couldn’t upload photo. Try again.");
       }
 
       setPhotos((prev) => [...prev, data.photo]);
@@ -104,7 +104,7 @@ export function PhotoCoach({ listing, initialPhotos }: PhotoCoachProps) {
       setPendingDeleteId(null);
       setCameraOpen(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Upload failed");
+      setError(err instanceof Error ? err.message : "Couldn’t upload photo. Try again.");
     } finally {
       setBusy(false);
     }
@@ -188,7 +188,7 @@ export function PhotoCoach({ listing, initialPhotos }: PhotoCoachProps) {
         showAspectGuide={step.purpose === "listing"}
         guideNote={
           step.purpose === "identify"
-            ? "Will not be in the listing"
+            ? "Will not go on the listing"
             : step.purpose === "inventory"
               ? "Stocking photo — private by default"
               : undefined
@@ -208,7 +208,7 @@ export function PhotoCoach({ listing, initialPhotos }: PhotoCoachProps) {
             Photos complete
           </h1>
           <p className="text-lg leading-relaxed text-[var(--muted)]">
-            You can put the phone down — these photos are already on the listing.
+            These photos are already on the listing.
           </p>
           <p className="text-base text-[var(--muted)]">
             {photos.length} photo{photos.length === 1 ? "" : "s"} uploaded.
@@ -227,7 +227,7 @@ export function PhotoCoach({ listing, initialPhotos }: PhotoCoachProps) {
           Photos complete
         </h1>
         <p className="text-lg text-[var(--muted)]">
-          Great work. Edit the listing fields on the hub, or take more photos.
+          Edit the listing on the hub, or take more photos.
         </p>
         <BigButton onClick={() => router.push(`/app/listings/${listing.id}`)}>
           Back to listing hub
@@ -262,11 +262,10 @@ export function PhotoCoach({ listing, initialPhotos }: PhotoCoachProps) {
           className="rounded-xl border-2 border-amber-800 bg-amber-50 px-4 py-4 text-amber-950"
         >
           <p className="text-lg font-semibold">
-            These photos will not be in the listing
+            These photos stay off the listing
           </p>
           <p className="mt-1 text-base leading-relaxed">
-            They stay private so AI can read the tags. Shoppers will not see
-            them.
+            Shoppers will not see them. Use them so tags can be read.
           </p>
         </div>
       ) : (

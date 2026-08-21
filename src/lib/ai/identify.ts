@@ -27,7 +27,7 @@ export async function identifyFromPhotos(
 ): Promise<IdentifiedAttrs> {
   if (!hasAiProvider()) {
     return emptyIdentifiedAttrs(
-      `${missingAiProviderMessage()} Please fill in brand, size, and other details yourself.`
+      `${missingAiProviderMessage()} Fill in brand, size, and other details.`
     );
   }
 

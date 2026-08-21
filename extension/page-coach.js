@@ -199,7 +199,7 @@
         <p class="help" id="help">Getting ready…</p>
         <div class="preview" id="preview"></div>
         <div class="actions">
-          <button class="btn btn-primary" type="button" id="do-step">Do this for me</button>
+          <button class="btn btn-primary" type="button" id="do-step">Fill this field</button>
           <button class="btn-link" type="button" id="tweak">Tweak listing fields…</button>
           <div class="row">
             <button class="btn btn-secondary" type="button" id="prev">Back</button>
@@ -238,9 +238,9 @@
     if (!state) {
       ui.stepLabel.textContent = "Connecting…";
       ui.title.textContent = "Listing helper";
-      ui.help.textContent = "One moment…";
+      ui.help.textContent = "Connecting…";
       ui.preview.textContent = "";
-      ui.doStep.textContent = "Do this for me";
+      ui.doStep.textContent = "Fill this field";
       ui.status.textContent = "";
       return;
     }
@@ -267,7 +267,7 @@
     ui.title.textContent = step.label || "Step";
     ui.help.textContent = step.help || "";
     ui.preview.textContent = state.preview || state.listingTitle || "";
-    ui.doStep.textContent = step.actionLabel || "Do this for me";
+    ui.doStep.textContent = step.actionLabel || "Fill this field";
     ui.progress.style.width = `${Math.round(((index + 1) / total) * 100)}%`;
 
     if (state.message) {
@@ -316,7 +316,7 @@
       render();
     } catch (error) {
       ui.status.textContent =
-        error instanceof Error ? error.message : "Something went wrong.";
+        error instanceof Error ? error.message : "Couldn’t complete that step.";
       ui.status.className = "status err";
     } finally {
       setBusy(false);
@@ -331,7 +331,7 @@
     }
     if (state.step?.key === "review") {
       ui.status.textContent =
-        "Scroll the form, check the details, then press List yourself.";
+        "Scroll the form, then press List / Publish.";
       ui.status.className = "status ok";
       return;
     }

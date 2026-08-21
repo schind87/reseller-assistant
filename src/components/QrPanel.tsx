@@ -14,7 +14,7 @@ type QrPanelProps = {
 
 export function QrPanel({
   value,
-  title = "Scan with your phone",
+  title,
   hint,
   size,
   code,
@@ -30,15 +30,17 @@ export function QrPanel({
           : "flex flex-col items-center gap-4 rounded-2xl border border-[var(--border)] bg-white p-6 text-center"
       }
     >
-      <h2
-        className={
-          compact
-            ? "font-[family-name:var(--font-brand)] text-lg leading-tight text-[var(--foreground)]"
-            : "font-[family-name:var(--font-brand)] text-2xl text-[var(--foreground)]"
-        }
-      >
-        {title}
-      </h2>
+      {title ? (
+        <h2
+          className={
+            compact
+              ? "font-[family-name:var(--font-brand)] text-lg leading-tight text-[var(--foreground)]"
+              : "font-[family-name:var(--font-brand)] text-2xl text-[var(--foreground)]"
+          }
+        >
+          {title}
+        </h2>
+      ) : null}
       {hint ? (
         <p
           className={

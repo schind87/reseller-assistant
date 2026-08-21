@@ -91,7 +91,7 @@ function fallbackDraft(
         : fields,
     degraded: true,
     message: hasAiProvider()
-      ? "Draft generation failed — using a simple template. Edit before posting."
+      ? "Couldn’t fill fields — used a simple template. Edit before posting."
       : `${missingAiProviderMessage()} Edit the template before posting.`,
   };
 }
@@ -356,7 +356,7 @@ export async function rewriteListingDescription(params: {
         description: trimmedCurrent.slice(0, limits.descriptionMax),
         degraded: true as const,
         message: hasAiProvider()
-          ? "Could not update description with AI — left your current draft unchanged."
+          ? "Couldn’t update with AI — left your draft unchanged."
           : `${missingAiProviderMessage()} Left your current draft unchanged.`,
       };
     }
@@ -375,7 +375,7 @@ export async function rewriteListingDescription(params: {
       description: parts.join("\n\n").slice(0, limits.descriptionMax),
       degraded: true as const,
       message: hasAiProvider()
-        ? "Could not rewrite with AI — filled a simple template from your fields."
+        ? "Couldn’t write a description — filled a simple template from your fields."
         : `${missingAiProviderMessage()} Filled a simple template from your fields.`,
     };
   };

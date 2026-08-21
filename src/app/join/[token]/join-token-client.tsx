@@ -31,13 +31,13 @@ export function JoinTokenClient() {
 
     try {
       if (purpose === "extension") {
-        setExtensionMessage("Connecting Chrome extension…");
+        setExtensionMessage("Connecting Chrome helper…");
         const pairRes = await fetch(
           `/api/extension/pair?token=${encodeURIComponent(token)}`
         );
         const pairJson = await pairRes.json();
         if (!pairRes.ok) {
-          throw new Error(pairJson.error ?? "Could not pair extension");
+          throw new Error(pairJson.error ?? "Could not pair Chrome helper");
         }
 
         const ack = await pairExtensionWithListing({
@@ -48,14 +48,14 @@ export function JoinTokenClient() {
         });
         if (ack.ok) {
           setExtensionMessage(
-            "Extension connected. Open the Reseller Assistant side panel to fill Mercari or Poshmark."
+            "Chrome helper connected. Open the Reseller Assistant side panel to fill Mercari or Poshmark."
           );
           setBusy(false);
           return;
         }
 
         setExtensionMessage(
-          "Pairing link is ready, but the Chrome extension was not detected. Load unpacked from extension-live, then retry or enter the 6-digit code in the side panel."
+          "Pairing link is ready, but the Chrome helper was not detected. Install it from Profile, then retry or enter the 6-digit code in the side panel."
         );
         setBusy(false);
         return;
@@ -87,7 +87,7 @@ export function JoinTokenClient() {
         {error
           ? "Couldn’t join listing"
           : purpose === "extension"
-            ? "Pairing extension…"
+            ? "Connecting Chrome helper…"
             : "Joining listing…"}
       </h1>
       {error ? (
@@ -96,8 +96,7 @@ export function JoinTokenClient() {
             {error}
           </p>
           <p className="text-base text-[var(--muted)]">
-            Check that you scanned the current QR on the listing hub, then try
-            again.
+            Check that you scanned the current QR on the listing hub, then retry.
           </p>
           <BigButton
             disabled={busy}
@@ -128,8 +127,8 @@ export function JoinTokenClient() {
       ) : (
         <p className="text-lg text-[var(--muted)]">
           {purpose === "extension"
-            ? "Handing this listing to your Chrome extension."
-            : "Unlocking this phone and opening the Phone Companion."}
+            ? "Connecting this listing to the Chrome helper."
+            : "Opening Phone Companion…"}
         </p>
       )}
     </main>

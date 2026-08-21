@@ -47,7 +47,7 @@ export function PinSetupCard() {
       setOpen(false);
       setPin("");
       setConfirmPin("");
-      setMessage("Your PIN is saved. Next time you can sign in with email + PIN.");
+      setMessage("PIN saved.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not save PIN");
     } finally {
@@ -64,8 +64,8 @@ export function PinSetupCard() {
           </h2>
           <p className="mt-1 text-base text-[var(--muted)]">
             {hasPin
-              ? "You can sign in with email + PIN instead of an email code."
-              : "Optional: choose a 4–8 digit PIN for faster sign-in next time."}
+              ? "Sign in with email + PIN instead of an email code."
+              : "Optional 4–8 digit PIN for faster sign-in."}
           </p>
         </div>
         <button

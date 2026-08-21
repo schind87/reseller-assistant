@@ -47,7 +47,7 @@ export async function PUT(request: Request) {
     const parsed = listingPreferencesSchema.safeParse(json?.preferences ?? json);
     if (!parsed.success) {
       return NextResponse.json(
-        { error: "Please answer all of the seller questions." },
+        { error: "Answer the seller questions first." },
         { status: 400 }
       );
     }

@@ -64,13 +64,14 @@ Do not invent a second word for a listed concept. Code identifiers may differ (e
 | ← Back | Profile → home |
 | ← Back to listing hub | Desktop photos QR page |
 | Tweak listing fields | Dialog title |
-| Write listing with AI | Hub next-action + fields-section button |
+| Fill listing fields with AI | Hub fields-section button |
+| Write description with AI / Rewrite description with AI | Hub description control |
 | Create new listing | Home primary |
 | Sign out | Profile |
 
 ## Actions (established)
 
-Create new listing; Sign in; Sign in with PIN; Send me an email code; Save seller profile; Save my PIN; Set PIN / Change PIN; Write listing with AI; Write with AI / Rewrite; Open {Mercari\|Poshmark}; Delete; Close; Done; Copy / Copied; Retry QR join; Retry pairing; Take {role} photo; Add photos on this computer instead.
+Create new listing; Sign in; Sign in with PIN; Send me an email code; Save seller profile; Save my PIN; Set PIN / Change PIN; Fill listing fields with AI; Write description with AI / Rewrite description with AI; Open {Mercari\|Poshmark}; Delete; Close; Done; Copy / Copied; Retry QR join; Retry pairing; Take {role} photo; Add photos on this computer instead.
 
 ## Photo aspect (shopper-facing)
 

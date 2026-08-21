@@ -86,7 +86,7 @@ function PhotosPageInner() {
   if (!listing || !authChecked) {
     return (
       <main className="mx-auto max-w-lg px-4 py-10 text-lg text-[var(--muted)]">
-        Loading…
+        Loading listing…
       </main>
     );
   }
@@ -105,15 +105,10 @@ function PhotosPageInner() {
         <h1 className="font-[family-name:var(--font-brand)] text-3xl text-[var(--foreground)]">
           Take photos on your phone
         </h1>
-        <p className="text-lg text-[var(--muted)]">
-          The Phone Companion is built for your phone camera. Scan the QR
-          code, or add photos from the listing hub on this computer.
-        </p>
         {joinUrl ? (
           <QrPanel
             value={joinUrl}
-            title="Phone Companion"
-            hint="Scan anytime with your phone — this QR stays valid. Opens the step-by-step clothing photo guide."
+            hint="Scan with your phone. This QR stays valid."
             code={listing.join_code}
           />
         ) : (
@@ -136,7 +131,7 @@ export default function PhotosPage() {
     <Suspense
       fallback={
         <main className="mx-auto max-w-lg px-4 py-10 text-lg text-[var(--muted)]">
-          Loading…
+          Loading listing…
         </main>
       }
     >

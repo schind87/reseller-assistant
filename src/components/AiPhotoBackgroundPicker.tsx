@@ -290,7 +290,7 @@ export function AiPhotoBackgroundPicker({
                         onClick={() => void applyResult(result.id)}
                         className="ml-auto rounded-md border border-[var(--accent)] bg-[var(--accent)] px-2.5 py-1 text-sm font-semibold text-white disabled:opacity-50"
                       >
-                        {applyingId === result.id ? "Applying…" : "Use this"}
+                        {applyingId === result.id ? "Applying…" : "Use this photo"}
                       </button>
                     </div>
                   </div>
@@ -501,7 +501,7 @@ function PreviewLightbox({
             onClick={onUse}
             className="ml-auto rounded-lg border border-[var(--accent)] bg-[var(--accent)] px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
           >
-            {applying ? "Applying…" : "Use this"}
+            {applying ? "Applying…" : "Use this photo"}
           </button>
         </div>
       </div>

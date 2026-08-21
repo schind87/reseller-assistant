@@ -39,7 +39,7 @@ const SHARED_PHOTO_STEPS: PhotoStepDef[] = [
     role: "cover",
     title: "Cover photo",
     instruction:
-      "Full garment, front-facing, well lit. This is the main photo shoppers see first. You can add more than one cover-style shot if you want options.",
+      "Full garment, front-facing, well lit. This is the main photo shoppers see first.",
     optional: true,
     purpose: "listing",
     allowMultiple: true,
@@ -48,7 +48,7 @@ const SHARED_PHOTO_STEPS: PhotoStepDef[] = [
     role: "front",
     title: "Front",
     instruction:
-      "Clear front view of the whole garment on a simple background. Add as many front angles as you need.",
+      "Clear front view of the whole garment on a simple background.",
     optional: true,
     purpose: "listing",
     allowMultiple: true,
@@ -57,7 +57,7 @@ const SHARED_PHOTO_STEPS: PhotoStepDef[] = [
     role: "back",
     title: "Back",
     instruction:
-      "Show the back of the garment so shoppers see the full piece. Add more back shots if helpful.",
+      "Show the back of the garment so shoppers see the full piece.",
     optional: true,
     purpose: "listing",
     allowMultiple: true,
@@ -66,7 +66,7 @@ const SHARED_PHOTO_STEPS: PhotoStepDef[] = [
     role: "detail",
     title: "Details",
     instruction:
-      "Close-ups of fabric texture, buttons, zippers, embroidery, or style features. Take as many detail shots as you need.",
+      "Close-ups of fabric, buttons, zippers, embroidery, or style features.",
     optional: true,
     purpose: "listing",
     allowMultiple: true,
@@ -75,7 +75,7 @@ const SHARED_PHOTO_STEPS: PhotoStepDef[] = [
     role: "flaw",
     title: "Flaws",
     instruction:
-      "Photo any stains, holes, pilling, or wear. Take one shot per issue, or skip if the piece is clean.",
+      "Photo any stains, holes, pilling, or wear. Skip if the piece is clean.",
     optional: true,
     purpose: "listing",
     allowMultiple: true,
@@ -84,7 +84,7 @@ const SHARED_PHOTO_STEPS: PhotoStepDef[] = [
     role: "tag",
     title: "Brand/ID tags",
     instruction:
-      "Photo the brand label and any ID or size tags shoppers should see. These go on the listing. Add as many as you need.",
+      "Photo the brand label and any ID or size tags shoppers should see. These go on the listing.",
     optional: true,
     purpose: "listing",
     allowMultiple: true,
@@ -93,7 +93,7 @@ const SHARED_PHOTO_STEPS: PhotoStepDef[] = [
     role: "id_tag",
     title: "Identification tags",
     instruction:
-      "Photo every remaining tag — care, extra brand, style or SKU numbers. These help AI identify the item.",
+      "Photo remaining tags — care, extra brand, or style numbers. These stay off the listing.",
     optional: true,
     purpose: "identify",
     allowMultiple: true,
@@ -105,7 +105,7 @@ const MERCARI_PHOTO_STEPS: PhotoStepDef[] = SHARED_PHOTO_STEPS.map((step) => {
     return {
       ...step,
       instruction:
-        "Main listing photo — full garment, bright light, fill the square frame. Mercari allows up to 12 photos total; you can add more than one cover-style shot.",
+        "Main listing photo — full garment, bright light, fill the square frame.",
     };
   }
   return step;
@@ -117,7 +117,7 @@ const POSHMARK_PHOTO_STEPS: PhotoStepDef[] = SHARED_PHOTO_STEPS.map((step) => {
       ...step,
       title: "Cover shot",
       instruction:
-        "Poshmark shoppers judge the cover first. Flat lay or on a hanger, bright and uncluttered. Add more cover-style shots if you want options.",
+        "Flat lay or on a hanger, bright and uncluttered. Shoppers judge the cover first.",
     };
   }
   return step;

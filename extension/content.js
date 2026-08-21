@@ -630,7 +630,7 @@ function handleShowAutocompleteHelper(payload) {
   const note = document.createElement("p");
   note.className = "ra-field-helper-note";
   note.textContent =
-    "Tap a suggestion to copy it and focus the box, then choose the match from the site’s list.";
+    "Tap a suggestion to copy it, then pick the match from the site’s list.";
 
   helper.append(head, tipEl, chips, note);
   placeHelperInPage(helper, el);

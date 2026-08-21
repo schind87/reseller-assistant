@@ -66,7 +66,7 @@ export async function GET(request: Request) {
   } catch (err) {
     console.error("extension pair error:", err);
     return NextResponse.json(
-      { error: "Could not pair extension" },
+      { error: "Could not pair Chrome helper" },
       { status: 500 }
     );
   }

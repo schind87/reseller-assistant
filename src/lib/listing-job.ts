@@ -48,7 +48,7 @@ export function listingJobActionLabel(
     case "add_photos":
       return platform === "poshmark" ? "Add a cover shot" : "Add a cover photo";
     case "finish_with_ai":
-      return "Write listing with AI";
+      return "Fill listing fields with AI";
     case "open_marketplace":
       return `Open ${PLATFORM_LABELS[platform]}`;
     case "mark_posted":

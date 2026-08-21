@@ -116,7 +116,7 @@ function showPairingUi() {
   els.listingSection.hidden = true;
   els.appUrl.value = pairing?.appUrl || DEFAULT_APP_URL;
   setConnection(
-    "Not connected — open the listing in the web app, or enter a code."
+    "Not connected — open the listing, or enter a code."
   );
 }
 
@@ -141,7 +141,7 @@ function applyCoachState(state) {
   els.coachHelp.textContent = step?.help || "";
   els.coachPreview.textContent = state.preview || "";
   els.coachPreview.hidden = !state.preview;
-  els.doStepBtn.textContent = step?.actionLabel || "Do this for me";
+  els.doStepBtn.textContent = step?.actionLabel || "Fill this field";
   els.doStepBtn.disabled = busy || step?.key === "review";
   els.prevStepBtn.disabled = busy || index <= 0;
   els.nextStepBtn.disabled = busy || index >= total - 1;
@@ -155,7 +155,7 @@ function applyCoachState(state) {
   }
 
   setConnection(
-    `Connected · the helper sits beside the sell form`,
+    `Connected · helper sits beside the sell form`,
     "ok"
   );
 }

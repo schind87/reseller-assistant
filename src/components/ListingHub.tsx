@@ -19,13 +19,7 @@ import { ListingSchemaForm } from "@/components/ListingSchemaForm";
 import { ListingTweakDialog } from "@/components/ListingTweakDialog";
 import { PhotoAspectCrop } from "@/components/PhotoAspectCrop";
 import { QrPanel } from "@/components/QrPanel";
-import {
-  listingJobActionLabel,
-  listingJobBusyLabel,
-  listingJobStep,
-  listingJobStepLabel,
-  type ListingJobStep,
-} from "@/lib/listing-job";
+import { listingJobStep, listingJobStepLabel } from "@/lib/listing-job";
 import {
   getSeedListingSchema,
   type PlatformListingSchema,
@@ -619,7 +613,7 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
         const json = await res.json().catch(() => ({}));
         if (!res.ok) {
           throw new Error(
-            typeof json.error === "string" ? json.error : "Upload failed"
+            typeof json.error === "string" ? json.error : "Couldn’t upload photo. Try again."
           );
         }
         uploaded += 1;
@@ -634,7 +628,7 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
         await load({ syncDraft: false });
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Upload failed");
+      setError(err instanceof Error ? err.message : "Couldn’t upload photo. Try again.");
     } finally {
       setUploadingSection(null);
       setUploadProgress(null);
@@ -677,7 +671,7 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
         const json = await res.json().catch(() => ({}));
         if (!res.ok) {
           throw new Error(
-            typeof json.error === "string" ? json.error : "Upload failed"
+            typeof json.error === "string" ? json.error : "Couldn’t upload photo. Try again."
           );
         }
         if (json.photo) {
@@ -695,7 +689,7 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
         await load({ syncDraft: false });
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Upload failed");
+      setError(err instanceof Error ? err.message : "Couldn’t upload photo. Try again.");
     } finally {
       setUploadingSection(null);
       setUploadProgress(null);
@@ -929,29 +923,6 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
     }
   }
 
-  function runJobStep(step: ListingJobStep) {
-    switch (step) {
-      case "add_photos":
-        pickFilesForRole("cover");
-        return;
-      case "finish_with_ai":
-        void runProcess();
-        return;
-      case "open_marketplace":
-        void openMarketplaceSell();
-        return;
-      case "mark_posted":
-        void markThisPosted();
-        return;
-      case "posted":
-        return;
-      default: {
-        const _exhaustive: never = step;
-        return _exhaustive;
-      }
-    }
-  }
-
   async function changePhotoRole(photoId: string, role: PhotoRole) {
     const photo = data?.photos.find((p) => p.id === photoId);
     if (!photo) return;
@@ -1035,7 +1006,7 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
 
     setError(null);
     setBgPhotoId(photo.id);
-    setStatusMessage("Checking AI results for this photo…");
+    setStatusMessage("Checking AI results…");
     try {
       const res = await fetch(
         `/api/listings/${listingId}/photos/${photo.id}/ai-background`
@@ -1112,7 +1083,7 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
             }
           : prev
       );
-      setStatusMessage(enabled ? "AI version on." : "Original photo on.");
+      setStatusMessage(enabled ? "AI version on." : "Original on.");
       await load({ syncDraft: false });
     } catch (err) {
       setError(
@@ -1131,7 +1102,7 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
     // New AI generations require a crop first once a version already exists.
     if (photo.processed_path) {
       setError(
-        "This photo already has an AI version. Crop it first to create a new one."
+        "This photo already has an AI version. Crop it first to make a new one."
       );
       setAiPickerPhoto(null);
       return;
@@ -1146,7 +1117,7 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
             FAL_BG_MODELS.find((m) => m.id === cleanBgModelId)?.label ??
             "selected model"
           }…`
-        : "Running AI background (keeping hangers)…"
+        : "Cleaning background…"
     );
     try {
       const res = await fetch(
@@ -1214,13 +1185,13 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
 
   async function runProcess() {
     if (!data?.photos.length) {
-      setError("Add at least one photo before running AI.");
+      setError("Add at least one photo first.");
       return;
     }
 
     setProcessing(true);
     setError(null);
-    setStatusMessage("Running AI on your photos — this can take up to a minute…");
+    setStatusMessage("Filling listing fields…");
     try {
       const res = await fetch(`/api/listings/${listingId}/process`, {
         method: "POST",
@@ -1234,9 +1205,8 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
       await load({ syncDraft: true });
       setStatusMessage(
         json.degraded
-          ? json.draftMessage ??
-              "AI filled a simple template — edit the fields below."
-          : "AI filled the fields below — edit anything that looks off."
+          ? json.draftMessage ?? "Filled a simple template — edit the fields."
+          : "Listing fields filled — edit anything that looks off."
       );
     } catch (err) {
       setStatusMessage(null);
@@ -1252,9 +1222,7 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
     setRewritingDescription(true);
     setError(null);
     setStatusMessage(
-      hasDraft
-        ? "Updating description from your current fields (keeping your edits)…"
-        : "Writing description from your current fields…"
+      hasDraft ? "Updating description…" : "Writing description…"
     );
     try {
       const priceNum = price.trim() === "" ? null : Number(price);
@@ -1292,13 +1260,13 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
         json.degraded
           ? json.message ??
               (hasDraft
-                ? "Could not update with AI — your current draft was left unchanged."
-                : "Filled a simple description from your fields — edit as needed.")
+                ? "Couldn’t update with AI — left your draft unchanged."
+                : "Filled a simple description — edit as needed.")
           : hasDraft
-            ? "Description updated for field changes — your wording was kept where possible. Review and save."
+            ? "Description updated for your field changes. Review and save."
             : wasAiWritten
-              ? "Description rewritten from your fields — review and save."
-              : "Description written from your fields — review and save."
+              ? "Description rewritten. Review and save."
+              : "Description written. Review and save."
       );
     } catch (err) {
       setStatusMessage(null);
@@ -1345,12 +1313,12 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
       const opened = window.open(sellUrl, "_blank", "noopener,noreferrer");
       if (!opened) {
         throw new Error(
-          "Could not open a new tab — allow pop-ups for this site, then try again."
+          "Couldn’t open a new tab. Allow pop-ups, then try again."
         );
       }
 
       setStatusMessage(
-        `Opened ${PLATFORM_LABELS[data.listing.platform as Platform]} in a new tab. Use the helper beside the sell form.`
+        `Opened ${PLATFORM_LABELS[data.listing.platform as Platform]}. Use the helper beside the sell form.`
       );
 
       try {
@@ -1414,17 +1382,8 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
     title,
     hasListingPhoto: listingPhotos.length > 0,
   });
-  const jobActionLabel = listingJobActionLabel(jobStep, platform);
-  const nextBusyLabel = listingJobBusyLabel(jobStep, {
-    uploading,
-    processing,
-    openingSell,
-    markingPosted,
-  });
-  const nextBusy =
-    Boolean(nextBusyLabel) ||
-    (jobStep === "open_marketplace" && saving) ||
-    (jobStep === "mark_posted" && saving);
+  const fieldsAiBusy = processing || rewritingDescription || saving;
+  const canFillFieldsWithAi = listingPhotos.length > 0;
 
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-8 px-4 py-8">
@@ -1436,46 +1395,48 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
         className="hidden"
         onChange={(e) => void onDesktopFilesSelected(e)}
       />
-      <header className="flex flex-col gap-2">
-        <p className="text-sm font-semibold uppercase tracking-wide text-[var(--accent)]">
-          {PLATFORM_LABELS[platform]} · {listingJobStepLabel(jobStep)}
-        </p>
-        <h1 className="font-[family-name:var(--font-brand)] text-4xl text-[var(--foreground)]">
-          {pageTitle}
-        </h1>
-        <p className="mt-2 text-lg text-[var(--muted)]">
-          Photos, then draft, then post on {PLATFORM_LABELS[platform]}.
-        </p>
+      <header className="flex flex-col gap-4">
+        <Link
+          href="/app"
+          className="touch-target inline-flex items-center justify-center self-start rounded-xl border border-[var(--border)] bg-white px-4 text-base font-semibold text-[var(--foreground)] hover:bg-[var(--surface-muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+        >
+          ← All listings
+        </Link>
+        <div className="flex flex-col gap-2">
+          <p className="text-sm font-semibold uppercase tracking-wide text-[var(--accent)]">
+            {PLATFORM_LABELS[platform]} · {listingJobStepLabel(jobStep)}
+          </p>
+          <h1 className="font-[family-name:var(--font-brand)] text-4xl text-[var(--foreground)]">
+            {pageTitle}
+          </h1>
+        </div>
       </header>
 
       {error ? (
-        <p className="rounded-xl bg-red-50 px-4 py-3 text-base text-red-800">
+        <p
+          role="alert"
+          className="rounded-xl bg-red-50 px-4 py-3 text-base text-red-800"
+        >
           {error}
         </p>
       ) : null}
 
       {statusMessage ? (
-        <p className="rounded-xl bg-[var(--accent-soft)] px-4 py-3 text-base text-[var(--accent)]">
+        <p
+          role="status"
+          className="rounded-xl bg-[var(--accent-soft)] px-4 py-3 text-base text-[var(--accent)]"
+        >
           {statusMessage}
         </p>
       ) : null}
 
       <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_13.5rem]">
         <div className="flex min-w-0 flex-col gap-8">
-          {jobStep !== "posted" ? (
-            <div className="sticky top-0 z-20 bg-[var(--background)] py-1">
-              <BigButton
-                disabled={nextBusy}
-                onClick={() => runJobStep(jobStep)}
-              >
-                {nextBusyLabel ?? jobActionLabel}
-              </BigButton>
-            </div>
-          ) : (
+          {jobStep === "posted" ? (
             <p className="rounded-xl bg-[var(--accent-soft)] px-4 py-3 text-base text-[var(--accent)]">
               Marked as posted on {PLATFORM_LABELS[platform]}.
             </p>
-          )}
+          ) : null}
 
       <details className="rounded-xl border border-dashed border-[var(--border)] px-4 py-3">
         <summary className="cursor-pointer list-none text-sm font-semibold text-[var(--muted)] marker:content-none [&::-webkit-details-marker]:hidden">
@@ -1486,7 +1447,7 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
             href={`/api/listings/${listingId}/photos/zip`}
             className="text-base font-semibold text-[var(--accent)]"
           >
-            Download listing photos ZIP
+            Download listing photos
           </a>
           {isAdmin ? (
             <a
@@ -1578,10 +1539,6 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
             <h2 className="font-[family-name:var(--font-brand)] text-2xl">
               Photos ({photos.length})
             </h2>
-            <p className="text-base text-[var(--muted)]">
-              Drop photos here or use Add. Scan the QR for guided shots on your
-              phone.
-            </p>
 
             {movingPhotoId ? (
               <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--accent)] bg-[var(--accent-soft)] px-4 py-3">
@@ -1602,8 +1559,6 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
             <div className="space-y-3">
               <PhotoGroup
                 title="Photos shoppers will see"
-                badge="Listing photos"
-                description="Cover, front, back, details, brand/tag, and flaws for the marketplace listing."
                 photos={listingPhotos}
                 empty={
                   platform === "poshmark"
@@ -1663,7 +1618,6 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
             {pickListingRole ? (
               <PhotoRolePickerDialog
                 title="Which listing photo?"
-                description="Pick a type for the photo you’re adding — you can add as many of each as you want."
                 roles={LISTING_ROLES}
                 roleHint={(role) => roleCountLabel(photos, role)}
                 disabled={uploading}
@@ -1675,7 +1629,6 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
             {changeRolePhoto ? (
               <PhotoRolePickerDialog
                 title="Change photo type"
-                description="Pick Cover, Front, Back, or another type for this shot. You can have more than one of each."
                 roles={LISTING_ROLES}
                 selectedRole={changeRolePhoto.role}
                 roleHint={(role) => {
@@ -1695,12 +1648,11 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <p className="text-sm font-semibold text-[var(--muted)]">
-                      Optional · brand & care tags for AI
+                      Optional · brand & care tags
                     </p>
                     <p className="mt-0.5 hidden text-sm leading-relaxed text-[var(--muted)] group-open:block">
-                      Want AI to try to identify the clothing? Add close-ups of
-                      brand and care tags here. They stay off the listing
-                      unless you move them into listing photos.
+                      Stay off the listing unless you move them into listing
+                      photos as Brand/Tag.
                     </p>
                   </div>
                   <span className="shrink-0 rounded-md bg-white/80 px-2 py-1 text-xs font-semibold text-[var(--muted)] ring-1 ring-[var(--border)]">
@@ -1737,18 +1689,13 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
                       );
                     })}
                   </div>
-                ) : (
-                  <p className="mt-2 text-xs text-[var(--muted)] group-open:hidden">
-                    No tag photos yet — open to add.
-                  </p>
-                )}
+                ) : null}
               </summary>
               <div className="border-t border-[var(--border)] px-3 pb-3 pt-2">
                 <PhotoGroup
                   title="Identification photos"
-                  description="Private for AI identification. Drag into listing photos to post as a Brand/Tag shot."
                   photos={identifyPhotos}
-                  empty="No tag photos yet — drop images here or add brand and care labels."
+                  empty="Drop brand and care tag photos here."
                   section="identify"
                   photoAspect={PLATFORM_PHOTO_ASPECT[platform]}
                   onAdd={() => pickFilesForRole("id_tag")}
@@ -1791,27 +1738,23 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
           </section>
 
           <section className="flex flex-col gap-3 rounded-2xl border border-[var(--border)] bg-white p-4 sm:p-5">
-            <div>
-              <h2 className="font-[family-name:var(--font-brand)] text-xl sm:text-2xl">
-                {PLATFORM_LABELS[platform]} listing fields
-              </h2>
-              <p className="mt-1 text-sm text-[var(--muted)]">
-                Same fields you&apos;ll enter on {PLATFORM_LABELS[platform]}.
-                Write listing with AI fills them from your photos — you can
-                change anything afterward.
-              </p>
-            </div>
+            <h2 className="font-[family-name:var(--font-brand)] text-xl sm:text-2xl">
+              {PLATFORM_LABELS[platform]} listing fields
+            </h2>
 
-            {jobStep !== "add_photos" && jobStep !== "finish_with_ai" ? (
-              <BigButton
-                variant="ghost"
-                disabled={processing || listingPhotos.length === 0}
-                onClick={() => void runProcess()}
-              >
-                {processing
-                  ? "Working…"
-                  : listingJobActionLabel("finish_with_ai", platform)}
-              </BigButton>
+            <BigButton
+              disabled={fieldsAiBusy || !canFillFieldsWithAi}
+              onClick={() => void runProcess()}
+            >
+              {processing ? "Working…" : "Fill listing fields with AI"}
+              {!processing ? (
+                <AiGlyph className="h-3.5 w-3.5 text-white" />
+              ) : null}
+            </BigButton>
+            {!canFillFieldsWithAi ? (
+              <p className="text-sm text-[var(--muted)]">
+                Needs at least one photo first.
+              </p>
             ) : null}
 
             {schema ? (
@@ -1839,10 +1782,11 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
                 }}
                 onRewriteDescription={() => void rewriteDescription()}
                 rewritingDescription={rewritingDescription}
+                descriptionAiDisabled={processing || saving}
                 descriptionAiWritten={descriptionAiWritten}
                 onSubmit={(e) => void saveDraft(e)}
                 footer={
-                  <div className="pt-1">
+                  <div className="flex flex-col gap-3 pt-1">
                     <BigButton
                       type="submit"
                       disabled={
@@ -1854,6 +1798,33 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
                     >
                       {saving ? "Saving…" : "Save changes"}
                     </BigButton>
+                    {jobStep !== "posted" ? (
+                      <BigButton
+                        type="button"
+                        variant="secondary"
+                        disabled={
+                          saving ||
+                          processing ||
+                          rewritingDescription ||
+                          openingSell
+                        }
+                        onClick={() => void openMarketplaceSell()}
+                      >
+                        {openingSell
+                          ? "Opening…"
+                          : `Open ${PLATFORM_LABELS[platform]}`}
+                      </BigButton>
+                    ) : null}
+                    {jobStep === "mark_posted" ? (
+                      <BigButton
+                        type="button"
+                        variant="ghost"
+                        disabled={markingPosted || saving}
+                        onClick={() => void markThisPosted()}
+                      >
+                        {markingPosted ? "Saving…" : "Mark as posted"}
+                      </BigButton>
+                    ) : null}
                   </div>
                 }
               />
@@ -1864,18 +1835,12 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
         </div>
 
         <aside className="order-first flex flex-col gap-3 lg:sticky lg:top-0 lg:z-10 lg:order-none lg:bg-[var(--background)] lg:py-1">
-          <Link
-            href="/app"
-            className="text-base font-semibold text-[var(--accent)]"
-          >
-            ← All listings
-          </Link>
           {joinUrl ? (
             <QrPanel
               compact
               value={joinUrl}
               title="Phone Companion"
-              hint="Scan to open the companion on your phone. This QR stays valid."
+              hint="Scan with your phone. This QR stays valid."
               code={listing.join_code}
             />
           ) : (
@@ -1887,7 +1852,7 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
             <button
               type="button"
               onClick={() => setPreviewPhoto(coverPhoto)}
-              className="mx-auto w-[7.5rem] overflow-hidden rounded-xl bg-white text-left ring-1 ring-[var(--border)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+              className="w-full overflow-hidden rounded-xl bg-white text-left ring-1 ring-[var(--border)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
               aria-label="Cover photo"
             >
               <div
@@ -2048,6 +2013,7 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
           }}
           onRewriteDescription={() => void rewriteDescription()}
           rewritingDescription={rewritingDescription}
+          descriptionAiDisabled={processing || saving}
           descriptionAiWritten={descriptionAiWritten}
           saving={saving}
           draftDirty={draftDirty}
@@ -2056,13 +2022,13 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
           footerExtra={
             searchParams.get("popup") === "1" ? (
               <p className="text-sm text-[var(--muted)]">
-                Save your changes, then close this window and tap{" "}
-                <strong>Refresh listing</strong> in the Chrome extension.
+                Save, close this window, then tap{" "}
+                <strong>Refresh listing</strong> in the Chrome helper.
               </p>
             ) : (
               <p className="text-sm text-[var(--muted)]">
                 After saving, tap <strong>Refresh listing</strong> in the Chrome
-                extension so fills use your updates.
+                helper.
               </p>
             )
           }
@@ -2256,7 +2222,7 @@ function PhotoGroup({
             <p className="text-xs text-[var(--muted)]">
               {moveArmed
                 ? "Tap or drop here to move the photo"
-                : "Drop images here to upload · drag to reorder · tap a photo to enlarge"}
+                : "Drop to add · drag to reorder · tap to open"}
             </p>
           ) : null}
         </div>
@@ -2539,7 +2505,7 @@ function PhotoTile({
             : "cursor-grab active:cursor-grabbing"
       }`}
       style={{ touchAction: "manipulation" }}
-      title="Drag to reorder · long-press on phone to move · tap to enlarge"
+      title="Drag to reorder · tap to open"
       aria-busy={cleaningBg || undefined}
     >
       {dropEdge === "before" ? (
@@ -2677,7 +2643,7 @@ function PhotoTile({
                 e.stopPropagation();
                 onToggleCleanBackground();
               }}
-              title="Run AI background (crop again later if you want a new AI version)"
+              title="Clean background"
               className="inline-flex h-8 shrink-0 items-center gap-1 rounded-md border border-[var(--border)] px-2 text-sm font-semibold text-[var(--foreground)] transition hover:bg-[var(--surface-muted)] disabled:opacity-50"
             >
               <AiGlyph className="h-3.5 w-3.5" />
@@ -2746,7 +2712,7 @@ function PhotoRolePickerDialog({
   onClose,
 }: {
   title: string;
-  description: string;
+  description?: string;
   roles: PhotoRole[];
   roleHint: (role: PhotoRole) => string | null;
   selectedRole?: PhotoRole;
@@ -2781,16 +2747,15 @@ function PhotoRolePickerDialog({
         className="ra-focus-pop w-full max-w-lg rounded-2xl border-2 border-[var(--accent)] bg-[var(--surface)] p-5 shadow-2xl sm:p-6"
         onClick={(e) => e.stopPropagation()}
       >
-        <p className="text-sm font-semibold uppercase tracking-wide text-[var(--accent)]">
-          Choose photo type
-        </p>
         <h2
           id="photo-role-picker-title"
-          className="mt-1 font-[family-name:var(--font-brand)] text-3xl text-[var(--foreground)]"
+          className="font-[family-name:var(--font-brand)] text-3xl text-[var(--foreground)]"
         >
           {title}
         </h2>
-        <p className="mt-2 text-base text-[var(--muted)]">{description}</p>
+        {description ? (
+          <p className="mt-2 text-base text-[var(--muted)]">{description}</p>
+        ) : null}
 
         <div className="mt-5 grid gap-2 sm:grid-cols-2">
           {roles.map((role) => {

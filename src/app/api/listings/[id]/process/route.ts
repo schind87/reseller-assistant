@@ -45,7 +45,7 @@ export async function POST(_request: Request, context: RouteContext) {
 
     if (result.photos.length === 0) {
       return NextResponse.json(
-        { error: "Add at least one photo before running AI." },
+        { error: "Add at least one photo first." },
         { status: 400 }
       );
     }
@@ -165,7 +165,8 @@ export async function POST(_request: Request, context: RouteContext) {
       status: "ready",
       identified_attrs: identified,
       title: draft.title,
-      description: draft.description,
+      // Description is a separate hub action ("Write description with AI").
+      description: result.listing.description,
       price: draft.price,
       structured_fields: draft.structured_fields,
       cover_processed_path: coverProcessedPath,

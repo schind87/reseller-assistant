@@ -11,7 +11,7 @@ export function hasAiProvider(): boolean {
 }
 
 export function missingAiProviderMessage(): string {
-  return "AI skipped — set OPENROUTER_API_KEY (preferred) or OPENAI_API_KEY.";
+  return "AI isn’t available right now.";
 }
 
 function appReferer(): string {

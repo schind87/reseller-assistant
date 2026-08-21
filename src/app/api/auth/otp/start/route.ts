@@ -34,7 +34,7 @@ export async function POST(request: Request) {
 
     if (!process.env.RESEND_API_KEY) {
       return NextResponse.json(
-        { error: "Email sign-in is not configured yet (missing Resend)." },
+        { error: "Email sign-in isn’t available right now." },
         { status: 500 }
       );
     }
@@ -47,7 +47,7 @@ export async function POST(request: Request) {
       ok: true,
       channel: "email",
       destination: email,
-      message: "We emailed you a 6-digit sign-in code.",
+      message: "Check your email for a sign-in code.",
     });
   } catch (err) {
     console.error("otp start error:", err);

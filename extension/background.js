@@ -249,7 +249,7 @@ async function encodeListingPhotos(listing) {
   const photoMeta = raListingPhotoMeta(listing);
   if (!photoMeta.length) {
     throw new Error(
-      "No listing photos yet. Add shopper photos in the web app first."
+      "No listing photos yet. Add them on the listing hub first."
     );
   }
 
@@ -323,7 +323,7 @@ async function advanceAfterSuccess(doneLabel) {
   const current = pairing?.stepIndex || 0;
   if (current >= RA_COACH_STEPS.length - 1) {
     return buildCoachState({
-      message: `${doneLabel} Look over the form, then press List / Publish yourself.`,
+      message: `${doneLabel} Look over the form, then press List / Publish.`,
     });
   }
   const next = await setStepIndex(current + 1);
@@ -350,7 +350,7 @@ async function runCurrentStep(preferredTabId = null) {
   if (!pairing) {
     return buildCoachState({
       error: true,
-      message: "Connect a listing from the web app first.",
+      message: "Connect a listing from Reseller Assistant first.",
     });
   }
 
@@ -380,7 +380,7 @@ async function runCurrentStep(preferredTabId = null) {
       }
       if (result.truncated) {
         return buildCoachState({
-          message: `Added ${result.attached} photo. This page only took one file — tap Add my photos again, or use the ZIP, then Next step.`,
+          message: `Added ${result.attached} photo. This page only took one file — tap Add my photos again.`,
         });
       }
       return advanceAfterSuccess(
@@ -419,7 +419,7 @@ async function runCurrentStep(preferredTabId = null) {
       if (!verified) {
         return buildCoachState({
           error: true,
-          message: `${step.label} didn’t stick on the page. Tap the field and try Do this for me again.`,
+          message: `${step.label} didn’t stick on the page. Tap the field and try Fill this field again.`,
         });
       }
       return advanceAfterSuccess(`${step.label} filled.`);
@@ -475,7 +475,7 @@ async function runCurrentStep(preferredTabId = null) {
     if (step.key === "review") {
       return buildCoachState({
         message:
-          "Look over the form. When it looks right, press List / Publish on the website yourself.",
+          "Look over the form, then press List / Publish.",
       });
     }
 
@@ -555,7 +555,7 @@ async function openTweakListingWindow() {
 
   return buildCoachState({
     message:
-      "Opened the listing editor. Save there, then close the window — we’ll refresh automatically.",
+      "Opened the listing editor. Save, then close the window — it will refresh.",
   });
 }
 
@@ -702,7 +702,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       );
       const state = await buildCoachState({
         message: filled
-          ? `Filled ${filled} fields. Add photos next if you haven’t.`
+          ? `Filled ${filled} fields.`
           : "No matching fields found on this page.",
         error: !filled,
       });
@@ -712,8 +712,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       sendResponse({
         ok: false,
         error: true,
-        message:
-          error instanceof Error ? error.message : "Fill all failed.",
+          message:
+            error instanceof Error ? error.message : "Couldn’t fill fields.",
       })
     );
     return true;

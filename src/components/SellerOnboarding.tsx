@@ -163,8 +163,7 @@ export function SellerOnboarding({
       </legend>
       {!compact ? (
         <p className="text-base text-[var(--muted)]">
-          Check each marketplace you use. Tap Default next to the one new
-          listings should open on.
+          Default is where new listings open.
         </p>
       ) : null}
       <div className={compact ? "space-y-1.5" : "space-y-2"}>
@@ -311,7 +310,7 @@ export function SellerOnboarding({
         </div>
 
         <p className="text-sm text-[var(--muted)]">
-          Listing note preview: {composeSmokePetNotes(prefs)}
+          Listing note: {composeSmokePetNotes(prefs)}
         </p>
 
         {error ? (
@@ -347,8 +346,7 @@ export function SellerOnboarding({
           Tell us about your closet
         </h1>
         <p className="mt-3 text-lg text-[var(--muted)]">
-          These answers help the AI write accurate smoke/pet notes and match
-          your usual clothing listings. You can change them later.
+          Used for smoke, pet, and shipping notes on your listings.
         </p>
       </header>
 
@@ -468,11 +466,7 @@ export function SellerOnboarding({
 
       <div className="flex flex-col gap-3">
         <BigButton type="submit" disabled={busy}>
-          {busy
-            ? "Saving…"
-            : editing
-              ? "Save seller profile"
-              : "Save and continue"}
+          {busy ? "Saving…" : "Save seller profile"}
         </BigButton>
         {editing && onCancel ? (
           <BigButton type="button" variant="ghost" onClick={onCancel}>

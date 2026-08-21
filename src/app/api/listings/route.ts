@@ -32,7 +32,7 @@ export async function POST(request: Request) {
     const profile = await getProfileById(auth.user.id);
     if (!profile?.listing_prefs_completed_at) {
       return NextResponse.json(
-        { error: "Finish your seller profile before starting a listing." },
+        { error: "Save your seller profile first." },
         { status: 400 }
       );
     }

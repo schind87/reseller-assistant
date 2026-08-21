@@ -146,13 +146,13 @@ export function UnlockForm() {
           Reseller Assistant
         </h1>
         <p className="mt-1 text-base text-[var(--muted)]">
-          Guided clothing listings for Mercari and Poshmark.
+          Clothing listings for Mercari and Poshmark.
         </p>
-        <p className="mt-3 text-lg text-[var(--muted)]">
-          {codeSent
-            ? "Enter the code from your email to finish signing in."
-            : "Enter your email. Use your PIN if you have one, or get an email code."}
-        </p>
+        {codeSent ? (
+          <p className="mt-3 text-lg text-[var(--muted)]">
+            Enter the code from your email.
+          </p>
+        ) : null}
       </div>
 
       <form onSubmit={onSubmit} className="flex flex-col gap-5">

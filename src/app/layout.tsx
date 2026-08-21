@@ -17,7 +17,7 @@ const dmSans = DM_Sans({
 export const metadata: Metadata = {
   title: "Reseller Assistant",
   description:
-    "Guided clothing listings for Mercari and Poshmark — apparel only, one piece at a time.",
+    "Clothing listings for Mercari and Poshmark — one piece at a time.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

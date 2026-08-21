@@ -9,7 +9,6 @@
   <body>
     <header class="header">
       <h1>Reseller Assistant</h1>
-      <p class="tagline">Simple helper for Mercari &amp; Poshmark</p>
       <p id="connection-status" class="connection" role="status" aria-live="polite">
         Checking connection…
       </p>
@@ -18,9 +17,8 @@
     <section id="pair-section" class="card" hidden>
       <h2>Connect a listing</h2>
       <p class="help">
-        Easiest: open the listing in the web app and tap
-        <strong>Open Mercari</strong> or <strong>Open Poshmark</strong> — this
-        panel connects by itself. Or paste a join link / 6-digit code.
+        Open the listing and tap <strong>Open Mercari</strong> or
+        <strong>Open Poshmark</strong>. Or paste a join link or 6-digit code.
       </p>
 
       <label for="app-url">App URL</label>
@@ -56,7 +54,7 @@
         <input
           id="listing-id"
           type="text"
-          placeholder="Listing ID from the web app"
+          placeholder="Listing ID from Reseller Assistant"
           autocomplete="off"
           spellcheck="false"
         />
@@ -80,15 +78,10 @@
           <dd id="listing-brand">—</dd>
         </div>
         <div>
-          <dt>Now doing</dt>
+          <dt>Step</dt>
           <dd id="coach-step-label">—</dd>
         </div>
       </dl>
-
-      <p class="help">
-        On the Poshmark or Mercari sell page, the listing helper stays beside
-        the form. Use this panel if you need to connect a listing by code.
-      </p>
 
       <p id="coach-help" class="help" hidden></p>
       <p id="coach-preview" class="preview-box"></p>
@@ -99,7 +92,7 @@
         <summary>More options</summary>
         <div class="actions">
           <button id="do-step-btn" class="btn btn-primary" type="button">
-            Do this for me
+            Fill this field
           </button>
           <button id="tweak-listing-btn" class="btn btn-secondary" type="button">
             Tweak listing fields

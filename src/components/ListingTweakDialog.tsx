@@ -20,6 +20,7 @@ type ListingTweakDialogProps = {
   onSubmit: (e: FormEvent) => void;
   onRewriteDescription?: () => void;
   rewritingDescription?: boolean;
+  descriptionAiDisabled?: boolean;
   descriptionAiWritten?: boolean;
   saving?: boolean;
   draftDirty?: boolean;
@@ -41,6 +42,7 @@ export function ListingTweakDialog({
   onSubmit,
   onRewriteDescription,
   rewritingDescription = false,
+  descriptionAiDisabled = false,
   descriptionAiWritten = false,
   saving = false,
   draftDirty = false,
@@ -83,10 +85,6 @@ export function ListingTweakDialog({
             >
               Tweak listing fields
             </h2>
-            <p className="mt-1 text-base text-[var(--muted)]">
-              Change any field, save, then return to posting — the extension can
-              refresh and fill again.
-            </p>
           </div>
           <button
             type="button"
@@ -110,6 +108,7 @@ export function ListingTweakDialog({
             onFieldsChange={onFieldsChange}
             onRewriteDescription={onRewriteDescription}
             rewritingDescription={rewritingDescription}
+            descriptionAiDisabled={descriptionAiDisabled || saving}
             descriptionAiWritten={descriptionAiWritten}
             onSubmit={onSubmit}
             footer={
