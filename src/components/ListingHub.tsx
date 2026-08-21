@@ -1598,12 +1598,6 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
                 }
                 deletingPhotoId={deletingPhotoId}
                 bgPhotoId={bgPhotoId}
-                labPhotoHref={
-                  isAdmin
-                    ? (photoId) =>
-                        `/app/admin/bg-lab?photoId=${encodeURIComponent(photoId)}`
-                    : undefined
-                }
                 disabled={
                   uploading ||
                   Boolean(deletingPhotoId) ||
@@ -2066,7 +2060,6 @@ function PhotoGroup({
   uploadProgress = null,
   deletingPhotoId,
   bgPhotoId,
-  labPhotoHref,
   disabled,
   tone = "listing",
   compact = false,
@@ -2105,7 +2098,6 @@ function PhotoGroup({
   uploadProgress?: { done: number; total: number } | null;
   deletingPhotoId?: string | null;
   bgPhotoId?: string | null;
-  labPhotoHref?: (photoId: string) => string;
   disabled?: boolean;
   tone?: "private" | "listing";
   compact?: boolean;
@@ -2264,7 +2256,6 @@ function PhotoGroup({
                   : undefined
               }
               onCrop={onCrop ? () => onCrop(photo) : undefined}
-              labHref={labPhotoHref?.(photo.id)}
               onDelete={() => onDelete(photo.id)}
               onBeginMove={() => onBeginMove(photo.id)}
               onCancelMove={onCancelMove}
@@ -2335,7 +2326,6 @@ function PhotoTile({
   onToggleCleanBackground,
   onSetAiBackground,
   onCrop,
-  labHref,
   onDelete,
   onBeginMove,
   onCancelMove,
@@ -2355,7 +2345,6 @@ function PhotoTile({
   onToggleCleanBackground?: () => void;
   onSetAiBackground?: (enabled: boolean) => void;
   onCrop?: () => void;
-  labHref?: string;
   onDelete: () => void;
   onBeginMove: () => void;
   onCancelMove: () => void;
@@ -2553,11 +2542,11 @@ function PhotoTile({
         </div>
       ) : null}
       <div
-        className="bg-white px-2 py-1.5"
+        className="bg-white px-2 py-2"
         onPointerDown={(e) => e.stopPropagation()}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex min-w-0 flex-nowrap items-center gap-1">
+        <div className="flex flex-col gap-1.5">
           {onChangeRole ? (
             <button
               type="button"
@@ -2566,7 +2555,7 @@ function PhotoTile({
                 e.stopPropagation();
                 onChangeRole();
               }}
-              className="min-w-0 flex-1 truncate text-left text-sm font-semibold text-[var(--foreground)] underline decoration-[var(--border)] underline-offset-2 transition hover:text-[var(--accent)] hover:decoration-[var(--accent)] disabled:opacity-50"
+              className="w-full text-left text-sm font-semibold leading-tight text-[var(--foreground)] underline decoration-[var(--border)] underline-offset-2 transition hover:text-[var(--accent)] hover:decoration-[var(--accent)] disabled:opacity-50"
               title="Change photo type"
               aria-label={`Change type for ${photoRoleLabel(photo.role)} photo`}
             >
@@ -2574,127 +2563,117 @@ function PhotoTile({
               {moving ? " · moving" : ""}
             </button>
           ) : (
-            <p className="min-w-0 flex-1 truncate text-sm text-[var(--muted)]">
+            <p className="text-sm leading-tight text-[var(--muted)]">
               {photoRoleLabel(photo.role)}
               {moving ? " · moving" : ""}
             </p>
           )}
-          {onUseInListing ? (
-            <button
-              type="button"
-              disabled={disabled}
-              onClick={(e) => {
-                e.stopPropagation();
-                onUseInListing();
-              }}
-              className="shrink-0 rounded-md border border-[var(--accent)] bg-transparent px-1.5 py-1 text-xs font-semibold text-[var(--accent)] transition hover:bg-[var(--accent-soft)] disabled:opacity-50"
-            >
-              Use in listing
-            </button>
-          ) : null}
-          {photo.processed_path && onSetAiBackground ? (
-            <div
-              role="group"
-              aria-label="Original or AI photo"
-              className="inline-flex h-8 shrink-0 overflow-hidden rounded-md border border-[var(--border)]"
-            >
+          <div className="flex flex-wrap items-center gap-1">
+            {onUseInListing ? (
               <button
                 type="button"
                 disabled={disabled}
                 onClick={(e) => {
                   e.stopPropagation();
-                  if (photo.replace_background) onSetAiBackground(false);
+                  onUseInListing();
                 }}
-                aria-pressed={!photo.replace_background}
-                aria-label="Show original photo"
-                title="Show original photo"
-                className={`inline-flex h-8 w-8 items-center justify-center transition disabled:opacity-50 ${
-                  !photo.replace_background
-                    ? "bg-[var(--foreground)] text-white"
-                    : "bg-transparent text-[var(--muted)] hover:bg-[var(--surface-muted)]"
-                }`}
+                className="shrink-0 rounded-md border border-[var(--accent)] bg-transparent px-1.5 py-1 text-xs font-semibold text-[var(--accent)] transition hover:bg-[var(--accent-soft)] disabled:opacity-50"
               >
-                <OriginalPhotoIcon className="h-4 w-4" />
+                Use in listing
               </button>
+            ) : null}
+            {photo.processed_path && onSetAiBackground ? (
+              <div
+                role="group"
+                aria-label="Original or AI photo"
+                className="inline-flex h-8 shrink-0 overflow-hidden rounded-md border border-[var(--border)]"
+              >
+                <button
+                  type="button"
+                  disabled={disabled}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (photo.replace_background) onSetAiBackground(false);
+                  }}
+                  aria-pressed={!photo.replace_background}
+                  aria-label="Show original photo"
+                  title="Show original photo"
+                  className={`inline-flex h-8 w-8 items-center justify-center transition disabled:opacity-50 ${
+                    !photo.replace_background
+                      ? "bg-[var(--foreground)] text-white"
+                      : "bg-transparent text-[var(--muted)] hover:bg-[var(--surface-muted)]"
+                  }`}
+                >
+                  <OriginalPhotoIcon className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  disabled={disabled}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (!photo.replace_background) onSetAiBackground(true);
+                  }}
+                  aria-pressed={Boolean(photo.replace_background)}
+                  aria-label="Show AI background"
+                  title="Show AI background"
+                  className={`inline-flex h-8 w-8 items-center justify-center border-l border-[var(--border)] transition disabled:opacity-50 ${
+                    photo.replace_background
+                      ? "bg-[var(--accent)] text-white"
+                      : "bg-transparent text-[var(--muted)] hover:bg-[var(--surface-muted)]"
+                  }`}
+                >
+                  <AiGlyph className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            ) : onToggleCleanBackground ? (
               <button
                 type="button"
                 disabled={disabled}
                 onClick={(e) => {
                   e.stopPropagation();
-                  if (!photo.replace_background) onSetAiBackground(true);
+                  onToggleCleanBackground();
                 }}
-                aria-pressed={Boolean(photo.replace_background)}
-                aria-label="Show AI background"
-                title="Show AI background"
-                className={`inline-flex h-8 w-8 items-center justify-center border-l border-[var(--border)] transition disabled:opacity-50 ${
-                  photo.replace_background
-                    ? "bg-[var(--accent)] text-white"
-                    : "bg-transparent text-[var(--muted)] hover:bg-[var(--surface-muted)]"
-                }`}
+                title="Clean background"
+                aria-label="Clean background"
+                className="inline-flex h-8 shrink-0 items-center gap-1 rounded-md border border-[var(--border)] px-2 text-sm font-semibold text-[var(--foreground)] transition hover:bg-[var(--surface-muted)] disabled:opacity-50"
               >
                 <AiGlyph className="h-3.5 w-3.5" />
+                {cleaningBg ? "AI…" : "AI"}
               </button>
-            </div>
-          ) : onToggleCleanBackground ? (
+            ) : null}
+            {onCrop ? (
+              <button
+                type="button"
+                disabled={disabled}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onCrop();
+                }}
+                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-[var(--foreground)] hover:bg-[var(--surface-muted)] disabled:opacity-50"
+                aria-label={`Crop ${photoRoleLabel(photo.role)} photo`}
+                title="Crop"
+              >
+                <CropIcon className="h-4 w-4" />
+              </button>
+            ) : null}
             <button
               type="button"
               disabled={disabled}
               onClick={(e) => {
                 e.stopPropagation();
-                onToggleCleanBackground();
+                onDelete();
               }}
-              title="Clean background"
-              className="inline-flex h-8 shrink-0 items-center gap-1 rounded-md border border-[var(--border)] px-2 text-sm font-semibold text-[var(--foreground)] transition hover:bg-[var(--surface-muted)] disabled:opacity-50"
+              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-[var(--danger)] hover:bg-red-50 disabled:opacity-50"
+              aria-label={`Delete ${photoRoleLabel(photo.role)} photo`}
+              title="Delete photo"
             >
-              <AiGlyph className="h-3.5 w-3.5" />
-              {cleaningBg ? "AI…" : "AI"}
+              {deleting ? (
+                <span className="text-sm font-semibold">…</span>
+              ) : (
+                <TrashIcon className="h-4 w-4" />
+              )}
             </button>
-          ) : null}
-          {labHref ? (
-            <a
-              href={labHref}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={(e) => e.stopPropagation()}
-              onPointerDown={(e) => e.stopPropagation()}
-              title="Open this photo in AI Photo Lab"
-              className="inline-flex h-8 shrink-0 items-center rounded-md border border-[var(--border)] px-2 text-sm font-semibold text-[var(--accent)] transition hover:bg-[var(--accent-soft)]"
-            >
-              Lab
-            </a>
-          ) : null}
-          {onCrop ? (
-            <button
-              type="button"
-              disabled={disabled}
-              onClick={(e) => {
-                e.stopPropagation();
-                onCrop();
-              }}
-              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-[var(--foreground)] hover:bg-[var(--surface-muted)] disabled:opacity-50"
-              aria-label={`Crop ${photoRoleLabel(photo.role)} photo`}
-              title="Crop"
-            >
-              <CropIcon className="h-4 w-4" />
-            </button>
-          ) : null}
-          <button
-            type="button"
-            disabled={disabled}
-            onClick={(e) => {
-              e.stopPropagation();
-              onDelete();
-            }}
-            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-[var(--danger)] hover:bg-red-50 disabled:opacity-50"
-            aria-label={`Delete ${photoRoleLabel(photo.role)} photo`}
-            title="Delete photo"
-          >
-            {deleting ? (
-              <span className="text-sm font-semibold">…</span>
-            ) : (
-              <TrashIcon className="h-4 w-4" />
-            )}
-          </button>
+          </div>
         </div>
       </div>
     </li>
