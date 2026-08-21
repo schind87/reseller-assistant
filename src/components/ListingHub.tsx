@@ -2561,32 +2561,32 @@ function PhotoTile({
         </div>
       ) : null}
       <div
-        className="space-y-1 bg-white px-2 py-1.5"
+        className="bg-white px-2 py-1.5"
         onPointerDown={(e) => e.stopPropagation()}
         onClick={(e) => e.stopPropagation()}
       >
-        {onChangeRole ? (
-          <button
-            type="button"
-            disabled={disabled}
-            onClick={(e) => {
-              e.stopPropagation();
-              onChangeRole();
-            }}
-            className="min-w-0 max-w-full truncate text-left text-sm font-semibold text-[var(--foreground)] underline decoration-[var(--border)] underline-offset-2 transition hover:text-[var(--accent)] hover:decoration-[var(--accent)] disabled:opacity-50"
-            title="Change photo type"
-            aria-label={`Change type for ${photoRoleLabel(photo.role)} photo`}
-          >
-            {photoRoleLabel(photo.role)}
-            {moving ? " · moving" : ""}
-          </button>
-        ) : (
-          <p className="min-w-0 truncate text-sm text-[var(--muted)]">
-            {photoRoleLabel(photo.role)}
-            {moving ? " · moving" : ""}
-          </p>
-        )}
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex min-w-0 flex-nowrap items-center gap-1">
+          {onChangeRole ? (
+            <button
+              type="button"
+              disabled={disabled}
+              onClick={(e) => {
+                e.stopPropagation();
+                onChangeRole();
+              }}
+              className="min-w-0 flex-1 truncate text-left text-sm font-semibold text-[var(--foreground)] underline decoration-[var(--border)] underline-offset-2 transition hover:text-[var(--accent)] hover:decoration-[var(--accent)] disabled:opacity-50"
+              title="Change photo type"
+              aria-label={`Change type for ${photoRoleLabel(photo.role)} photo`}
+            >
+              {photoRoleLabel(photo.role)}
+              {moving ? " · moving" : ""}
+            </button>
+          ) : (
+            <p className="min-w-0 flex-1 truncate text-sm text-[var(--muted)]">
+              {photoRoleLabel(photo.role)}
+              {moving ? " · moving" : ""}
+            </p>
+          )}
           {onUseInListing ? (
             <button
               type="button"
@@ -2595,7 +2595,7 @@ function PhotoTile({
                 e.stopPropagation();
                 onUseInListing();
               }}
-              className="rounded-md border border-[var(--accent)] bg-transparent px-2 py-1 text-sm font-semibold text-[var(--accent)] transition hover:bg-[var(--accent-soft)] disabled:opacity-50"
+              className="shrink-0 rounded-md border border-[var(--accent)] bg-transparent px-1.5 py-1 text-xs font-semibold text-[var(--accent)] transition hover:bg-[var(--accent-soft)] disabled:opacity-50"
             >
               Use in listing
             </button>
@@ -2604,7 +2604,7 @@ function PhotoTile({
             <div
               role="group"
               aria-label="Original or AI photo"
-              className="inline-flex overflow-hidden rounded-md border border-[var(--border)]"
+              className="inline-flex h-8 shrink-0 overflow-hidden rounded-md border border-[var(--border)]"
             >
               <button
                 type="button"
@@ -2614,14 +2614,15 @@ function PhotoTile({
                   if (photo.replace_background) onSetAiBackground(false);
                 }}
                 aria-pressed={!photo.replace_background}
+                aria-label="Show original photo"
                 title="Show original photo"
-                className={`px-2 py-1 text-sm font-semibold transition disabled:opacity-50 ${
+                className={`inline-flex h-8 w-8 items-center justify-center transition disabled:opacity-50 ${
                   !photo.replace_background
                     ? "bg-[var(--foreground)] text-white"
                     : "bg-transparent text-[var(--muted)] hover:bg-[var(--surface-muted)]"
                 }`}
               >
-                Original
+                <OriginalPhotoIcon className="h-4 w-4" />
               </button>
               <button
                 type="button"
@@ -2631,15 +2632,15 @@ function PhotoTile({
                   if (!photo.replace_background) onSetAiBackground(true);
                 }}
                 aria-pressed={Boolean(photo.replace_background)}
+                aria-label="Show AI background"
                 title="Show AI background"
-                className={`inline-flex items-center gap-1 border-l border-[var(--border)] px-2 py-1 text-sm font-semibold transition disabled:opacity-50 ${
+                className={`inline-flex h-8 w-8 items-center justify-center border-l border-[var(--border)] transition disabled:opacity-50 ${
                   photo.replace_background
                     ? "bg-[var(--accent)] text-white"
                     : "bg-transparent text-[var(--muted)] hover:bg-[var(--surface-muted)]"
                 }`}
               >
                 <AiGlyph className="h-3.5 w-3.5" />
-                AI
               </button>
             </div>
           ) : onToggleCleanBackground ? (
@@ -2651,7 +2652,7 @@ function PhotoTile({
                 onToggleCleanBackground();
               }}
               title="Run AI background (crop again later if you want a new AI version)"
-              className="inline-flex items-center gap-1 rounded-md border border-[var(--border)] bg-transparent px-2 py-1 text-sm font-semibold text-[var(--foreground)] transition hover:bg-[var(--surface-muted)] disabled:opacity-50"
+              className="inline-flex h-8 shrink-0 items-center gap-1 rounded-md border border-[var(--border)] px-2 text-sm font-semibold text-[var(--foreground)] transition hover:bg-[var(--surface-muted)] disabled:opacity-50"
             >
               <AiGlyph className="h-3.5 w-3.5" />
               {cleaningBg ? "AI…" : "AI"}
@@ -2665,7 +2666,7 @@ function PhotoTile({
               onClick={(e) => e.stopPropagation()}
               onPointerDown={(e) => e.stopPropagation()}
               title="Open this photo in AI Photo Lab"
-              className="rounded-md border border-[var(--border)] px-2 py-1 text-sm font-semibold text-[var(--accent)] transition hover:bg-[var(--accent-soft)]"
+              className="inline-flex h-8 shrink-0 items-center rounded-md border border-[var(--border)] px-2 text-sm font-semibold text-[var(--accent)] transition hover:bg-[var(--accent-soft)]"
             >
               Lab
             </a>
@@ -2692,7 +2693,7 @@ function PhotoTile({
               e.stopPropagation();
               onDelete();
             }}
-            className="ml-auto inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-[var(--danger)] hover:bg-red-50 disabled:opacity-50"
+            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-[var(--danger)] hover:bg-red-50 disabled:opacity-50"
             aria-label={`Delete ${photoRoleLabel(photo.role)} photo`}
             title="Delete photo"
           >
@@ -2803,6 +2804,25 @@ function PhotoRolePickerDialog({
         </button>
       </div>
     </div>
+  );
+}
+
+function OriginalPhotoIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden="true"
+    >
+      <rect x="3" y="5" width="18" height="14" rx="2" />
+      <circle cx="8.5" cy="9.5" r="1.5" />
+      <path d="m21 15-4.5-4.5L9 18" />
+    </svg>
   );
 }
 
