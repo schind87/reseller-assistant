@@ -188,6 +188,8 @@ export function AppHome({
 
         <PinSetupCard />
 
+        <ExtensionInstallCard />
+
         {isAdmin ? (
           <section className="rounded-2xl border border-dashed border-[var(--border)] bg-[var(--surface-muted)] p-4">
             <h2 className="text-lg font-semibold text-[var(--foreground)]">
@@ -234,8 +236,6 @@ export function AppHome({
           Profile
         </button>
       </header>
-
-      <ExtensionInstallCard />
 
       {error ? (
         <p className="rounded-xl bg-red-50 px-4 py-3 text-base text-red-800">
