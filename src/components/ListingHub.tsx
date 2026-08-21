@@ -1807,8 +1807,8 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
               </h2>
               <p className="mt-1 text-sm text-[var(--muted)]">
                 Same fields you&apos;ll enter on {PLATFORM_LABELS[platform]}.
-                Finish with AI fills them from your photos — you can change
-                anything afterward.
+                Write listing with AI fills them from your photos — you can
+                change anything afterward.
               </p>
             </div>
 
@@ -1818,7 +1818,9 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
                 disabled={processing || listingPhotos.length === 0}
                 onClick={() => void runProcess()}
               >
-                {processing ? "Working…" : "Finish with AI"}
+                {processing
+                  ? "Working…"
+                  : listingJobActionLabel("finish_with_ai", platform)}
               </BigButton>
             ) : null}
 

@@ -74,7 +74,7 @@ See [`extension/README.md`](extension/README.md).
 2. **Start listing** → choose Mercari or Poshmark
 3. Scan the **QR** on the laptop hub to open the Phone Companion
 4. Tag-first photos (brand/care optional) → item shots
-5. **Finish with AI** on the hub
+5. **Write listing with AI** on the hub
 6. **Review** editable title/description/fields
 7. **Post** checklist + extension pair → mark as posted
 

@@ -54,12 +54,12 @@ Fix hierarchy, labels, state presentation, or interaction first.
 
 ## Principles
 
-1. **Action labels describe the action.** “Create new listing”, “Sign in with PIN”, “Finish with AI”, “Open Poshmark”, “Save my PIN”, “Retry QR join”.
+1. **Action labels describe the action.** “Create new listing”, “Sign in with PIN”, “Write listing with AI”, “Open Poshmark”, “Save my PIN”, “Retry QR join”.
 2. **Prefer a specific label over a vague CTA.** Avoid Get started, Continue, Submit, Confirm, OK when a precise verb exists.
 3. **Destructive actions name what will happen.** See [surfaces-destructive.md](surfaces-destructive.md).
 4. **Errors help the seller recover.** “Could not create listing” is a fallback; prefer the API’s specific `error` string. Join explains scanning the current QR, then Retry.
 5. **Stay consistent.** Mercari and Poshmark, not “the marketplace” on first mention. Listing, not “item” or “product” for the draft object. Phone Companion, not “mobile app”.
-6. **Do not invent synonyms** for canonical concepts (Finish with AI vs “Generate listing” vs “Run magic”).
+6. **Do not invent synonyms** for canonical concepts (Write listing with AI vs “Generate listing” vs “Run magic”).
 7. **Accessible names are product copy.** Icon-only or truncated controls still need `aria-label` that names the object (`Delete ${label}`, `Crop ${role} photo`).
 8. **Busy labels keep the meaning.** `Saving…` / `Starting…` / `Working…` / `Checking…` / `Sending…` — not “Hang tight”.
 9. **Structure beats explanatory prose.** If the layout already shows the next step, do not add a tutorial paragraph. Extension install stays collapsed. Hub photo instructions may use brief explanatory copy when multiple input methods are not apparent from the controls themselves. Re-evaluate the need for that copy when the interaction changes.

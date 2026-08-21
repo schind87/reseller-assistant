@@ -33,7 +33,7 @@ There is no table component.
 - **Evidence:** “No clothing listings yet. Tap Create new listing when you are ready.”
 - **Exceptions:** Photo sections use dashed Add wells instead of a paragraph when empty — the well *is* the action.
 - **Bad:** “Nothing here yet.” with no pointer.
-- **Good:** Home empty copy; “Needs at least one photo first.” under Finish with AI.
+- **Good:** Home empty copy; “Needs at least one photo first.” under Write listing with AI.
 
 ### rule/status-is-secondary
 

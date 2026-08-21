@@ -15,8 +15,8 @@ Implement, Harden, Review, or any change that affects loading, empty, error, per
 | State | Where it shows up | Verified treatment |
 | --- | --- | --- |
 | Initial loading | Listing hub, photos page, unlock Suspense, join | Named loading copy only when it orients the seller. Do not narrate routine latency. Prefer preserving layout or showing the pending state of the affected control. Same max-width as the page. No skeleton theater required unless a layout shift is severe. See [copy.md](copy.md). |
-| Incremental / busy | Buttons, photo upload, Finish with AI, sign-in | Disable the control; keep the label’s meaning (`Starting…`, `Saving…`, `Working…`, `Checking…`). Use the component’s busy affordance, not a different verb. |
-| Empty | Home listing list; photo sections; Finish with AI with zero photos | Plain muted sentence that names the next action. Example: “No clothing listings yet. Tap Create new listing when you are ready.” |
+| Incremental / busy | Buttons, photo upload, Write listing with AI, sign-in | Disable the control; keep the label’s meaning (`Starting…`, `Saving…`, `Working…`, `Checking…`). Use the component’s busy affordance, not a different verb. |
+| Empty | Home listing list; photo sections; Write listing with AI with zero photos | Plain muted sentence that names the next action. Example: “No clothing listings yet. Tap Create new listing when you are ready.” |
 | Sparse | One listing; few photos | Same list/grid; do not switch to a marketing empty-hero. |
 | Populated | Listing list; hub photos; schema form | Rows and wells as bounded objects. |
 | Large datasets | Admin photo picker (48+); many listing photos | Hub uses sections + details for private tags. Admin lab paginates/filters. Seller home is not expected to be thousands of rows; if it grows, do not pretend a table primitive exists. |

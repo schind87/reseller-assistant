@@ -12,7 +12,7 @@ Editing title/description/price/structured fields, cropping a photo, or choosing
 - Fields: [ListingSchemaForm.tsx](../../../../src/components/ListingSchemaForm.tsx) on the hub and in [ListingTweakDialog.tsx](../../../../src/components/ListingTweakDialog.tsx)
 - Crop: [PhotoAspectCrop.tsx](../../../../src/components/PhotoAspectCrop.tsx)
 - AI pick: [AiPhotoBackgroundPicker.tsx](../../../../src/components/AiPhotoBackgroundPicker.tsx)
-- Draft generation: Finish with AI on the hub
+- Draft generation: Write listing with AI on the hub
 
 ## Stable rules
 
@@ -27,12 +27,12 @@ Editing title/description/price/structured fields, cropping a photo, or choosing
 
 ### rule/ai-is-assistive
 
-- **Scope:** Finish with AI, Write with AI, backdrop replace
+- **Scope:** Write listing with AI, Write with AI, backdrop replace
 - **Rule:** AI fills or proposes; the seller can change anything afterward. Buttons that invoke AI may use `AiGlyph`. Do not auto-publish.
 - **Evidence:** Hub copy “You can change anything afterward.” Description “Write with AI” / “Rewrite”. Restore original in the AI picker.
 - **Exceptions:** None.
 - **Bad:** Replacing the form with an uneditable AI blob.
-- **Good:** Editable fields under Finish with AI.
+- **Good:** Editable fields under Write listing with AI.
 
 ### rule/platform-limits-are-visible
 

@@ -17,7 +17,7 @@ enough repetition (or an explicit product reason) are listed.
 
 ## Primary action: `BigButton` full width
 
-- **Where:** Unlock, home create, onboarding save, Finish with AI, join retry.
+- **Where:** Unlock, home create, onboarding save, Write listing with AI, join retry.
 - **Why:** Thumb-first, one obvious next step.
 - **Use when:** The screen’s main commitment.
 - **Do not use when:** Inline compact actions (Close, Default chip, list Delete, Show/Hide). Those are text or smaller bordered buttons.
@@ -44,7 +44,7 @@ enough repetition (or an explicit product reason) are listed.
 - **Where:** `ExtensionInstallCard`; hub `<details>` for private tag photos.
 - **Why:** Optional tools and private shots must not compete with Create listing / listing photos.
 - **Use when:** Advanced or optional.
-- **Do not use when:** The control is on the primary path (Finish with AI is a full section, not details).
+- **Do not use when:** The control is on the primary path (Write listing with AI is a full section, not details).
 - **Limitations:** Details/summary keyboard styling is not fully standardized.
 
 ## Dual-path with “— or —”

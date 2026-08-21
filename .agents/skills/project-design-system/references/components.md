@@ -19,7 +19,7 @@ Primary page-level button. Client component.
 
 Variants: primary = accent fill; secondary = white border; ghost = accent text; danger = `--danger` fill.
 
-**Use:** Sign-in, create listing, save profile, Finish with AI, join retry.  
+**Use:** Sign-in, create listing, save profile, Write listing with AI, join retry.  
 **Don't:** Every toolbar chip.
 
 ## CopyField

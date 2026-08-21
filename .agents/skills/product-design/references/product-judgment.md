@@ -39,7 +39,7 @@ For material UI changes, write this internally before choosing UI. Keep it short
 
 1. **Prefer behavior and defaults over new UI.** If one store is enabled, `Create new listing` starts it; do not add a settings screen for that.
 2. **Do not add UI because UI can be added.** Optional Chrome helper stays collapsed (`ExtensionInstallCard`). Admin lab stays off the default seller path.
-3. **One primary action per moment.** Home: create a listing. Hub: add photos, then Finish with AI, then open the marketplace. Sign-in: PIN or email code, not both at once as equal noise.
+3. **One primary action per moment.** Home: create a listing. Hub: add photos, then Write listing with AI, then open the marketplace. Sign-in: PIN or email code, not both at once as equal noise.
 4. **Name the object.** Delete the listing, not “Confirm”. Open Poshmark, not “Continue”.
 5. **Keep configuration rare.** Seller preferences exist because they flow into listing notes and store choice. Do not add a preference for every possible listing field.
 6. **Match surface persistence to importance.** Inline listing fields on the hub; modal for “Tweak listing fields” while posting; native `confirm` is current evidence for deletes (see coverage gaps).
