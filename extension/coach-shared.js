@@ -22,7 +22,7 @@ var RA_COACH_STEPS = [
   {
     key: "details",
     label: "Other details",
-    help: "Fill size, color, condition, and prices. Brand and style tags need a quick tap on the green tips — type, then pick from the site’s suggestions.",
+    help: "Fill size, color, condition, and prices. Brand and style tags get a tip in the form — type, then pick from the site’s suggestions.",
     actionLabel: "Fill the rest",
   },
   {

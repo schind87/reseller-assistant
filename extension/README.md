@@ -26,7 +26,7 @@ If Chrome says it could not load `coach-shared.js` (or the manifest), the folder
 2. Keep the listing tab open; on the **sell / create-listing** page the **Reseller Assistant** helper stays in a sidebar beside the form (it stays hidden on other Mercari/Poshmark pages):
    - **Do this for me** — photos, title, description, then other details
    - After a successful fill, it checks the page and moves to the next step
-   - On Poshmark, **brand** and **style tags** show a green tip instead of auto-fill — type and pick from the site’s suggestions
+   - On Poshmark, **brand** and **style tags** show a tip in the form above those fields — type and pick from the site’s suggestions
    - **Tweak listing fields** opens a large app editor popup (save there; closing refreshes the listing)
    - Use **Back** if you need to redo a step
 3. When it says to review, check the form and press **List / Publish** yourself.
