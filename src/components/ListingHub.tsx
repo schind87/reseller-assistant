@@ -186,6 +186,7 @@ function roleForSection(
       return "inventory";
     case "listing":
       if (currentRole && isPostingPhotoRole(currentRole)) return currentRole;
+      if (currentRole && isIdentifyPhotoRole(currentRole)) return "tag";
       return nextListingRole(photos);
     default: {
       const _exhaustive: never = section;
@@ -709,14 +710,6 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
     if (sectionForRole(photo.role) === section) {
       // Same-group drops belong on a photo tile (reorder), not the section.
       endPhotoDrag();
-      return;
-    }
-
-    if (isIdentifyPhotoRole(photo.role) && section === "listing") {
-      endPhotoDrag();
-      setError(
-        "Tag photos stay private for AI identification and can’t be moved into the listing.",
-      );
       return;
     }
 
@@ -1614,7 +1607,7 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
               <PhotoGroup
                 title="Photos shoppers will see"
                 badge="Listing photos"
-                description="Cover, front, back, details, and flaws for the marketplace listing."
+                description="Cover, front, back, details, brand/tag, and flaws for the marketplace listing."
                 photos={listingPhotos}
                 empty={
                   platform === "poshmark"
@@ -1710,7 +1703,8 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
                     </p>
                     <p className="mt-0.5 hidden text-sm leading-relaxed text-[var(--muted)] group-open:block">
                       Want AI to try to identify the clothing? Add close-ups of
-                      brand and care tags here. These won&apos;t be posted.
+                      brand and care tags here. They stay off the listing
+                      unless you move them into listing photos.
                     </p>
                   </div>
                   <span className="shrink-0 rounded-md bg-white/80 px-2 py-1 text-xs font-semibold text-[var(--muted)] ring-1 ring-[var(--border)]">
@@ -1755,8 +1749,8 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
               </summary>
               <div className="border-t border-[var(--border)] px-3 pb-3 pt-2">
                 <PhotoGroup
-                  title="Tag photos"
-                  description="Private identification only — never posted with the listing."
+                  title="Identification photos"
+                  description="Private for AI identification. Drag into listing photos to post as a Brand/Tag shot."
                   photos={identifyPhotos}
                   empty="No tag photos yet — drop images here or add brand and care labels."
                   section="identify"

@@ -4,7 +4,7 @@
 
 Canonical user-facing terminology. Prefer these strings. Uncertain items are marked.
 
-Do not invent a second word for a listed concept. Code identifiers may differ (e.g. `id_tag` vs “Brand/care tag”).
+Do not invent a second word for a listed concept. Code identifiers may differ (e.g. `id_tag` vs “Identification tag”).
 
 ## Product name
 
@@ -28,8 +28,8 @@ Do not invent a second word for a listed concept. Code identifiers may differ (e
 | Clothing listings | Home empty/section copy specifies clothing (apparel-only product). |
 | Photo | A shot on a listing. Roles below. |
 | Cover photo / Cover shot | Mercari “Cover photo”; Poshmark step title “Cover shot”. `photoRoleLabel`: “Cover”. |
-| Front, Back, Detail, Tag, Flaw | Shopper-facing listing roles. |
-| Brand/care tag | Identification photos (`brand_tag`, `care_tag`, `id_tag`). Hub section “brand & care tags”. Private by default. |
+| Front, Back, Detail, Brand/Tag, Flaw | Shopper-facing listing roles. `photoRoleLabel` for `tag` is “Brand/Tag”. |
+| Brand/care tag | Identification photos (`brand_tag`, `care_tag`, `id_tag`). Hub section “brand & care tags”. `photoRoleLabel`: “Identification tag”. Private by default; can be moved into listing photos as Brand/Tag. |
 | Stocking photo | `inventory` role. Private by default; “how this piece looks where you stock it”. |
 | Seller preferences / seller profile | Closet defaults. Onboarding title “Tell us about your closet”. Button “Save seller profile”. |
 | PIN | 4–8 digit sign-in. “Sign in with PIN”, “Save my PIN”. |

@@ -28,7 +28,7 @@ export async function POST(request: Request, context: RouteContext) {
     return NextResponse.json(
       {
         error:
-          "Choose a listing photo type: cover, front, back, detail, or flaw.",
+          "Choose a listing photo type: cover, front, back, detail, brand/tag, or flaw.",
       },
       { status: 400 }
     );

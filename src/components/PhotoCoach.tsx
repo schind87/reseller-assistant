@@ -11,11 +11,12 @@ import {
   PLATFORM_PHOTO_ASPECT,
   photoRoleLabel,
 } from "@/lib/platforms";
-import type {
-  Listing,
-  ListingPhotoWithUrl,
-  PhotoRole,
-  Platform,
+import {
+  isIdentifyPhotoRole,
+  type Listing,
+  type ListingPhotoWithUrl,
+  type PhotoRole,
+  type Platform,
 } from "@/lib/types";
 
 type PhotoCoachProps = {
@@ -48,6 +49,8 @@ export function PhotoCoach({ listing, initialPhotos }: PhotoCoachProps) {
   const [preview, setPreview] = useState<string | null>(null);
   const [cameraOpen, setCameraOpen] = useState(false);
   const [joinOnly, setJoinOnly] = useState(false);
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const phoneMode = searchParams.get("phone") === "1" || joinOnly;
 
   useEffect(() => {
@@ -70,11 +73,7 @@ export function PhotoCoach({ listing, initialPhotos }: PhotoCoachProps) {
   const currentRolePhotos = step
     ? photos.filter((p) => {
         if (step.purpose === "identify") {
-          return (
-            p.role === "id_tag" ||
-            p.role === "brand_tag" ||
-            p.role === "care_tag"
-          );
+          return isIdentifyPhotoRole(p.role);
         }
         return p.role === step.role;
       })
@@ -102,6 +101,7 @@ export function PhotoCoach({ listing, initialPhotos }: PhotoCoachProps) {
 
       setPhotos((prev) => [...prev, data.photo]);
       setPreview(data.photo.signedUrl ?? URL.createObjectURL(blob));
+      setPendingDeleteId(null);
       setCameraOpen(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Upload failed");
@@ -122,6 +122,7 @@ export function PhotoCoach({ listing, initialPhotos }: PhotoCoachProps) {
 
   function finishCoach() {
     setPreview(null);
+    setPendingDeleteId(null);
     setCameraOpen(false);
     setStepIndex(steps.length);
     persistStep(steps.length);
@@ -129,6 +130,7 @@ export function PhotoCoach({ listing, initialPhotos }: PhotoCoachProps) {
 
   function goNext() {
     setPreview(null);
+    setPendingDeleteId(null);
     const next = stepIndex + 1;
     if (next >= steps.length) {
       finishCoach();
@@ -141,6 +143,7 @@ export function PhotoCoach({ listing, initialPhotos }: PhotoCoachProps) {
   function goBack() {
     if (stepIndex <= 0) return;
     setPreview(null);
+    setPendingDeleteId(null);
     setCameraOpen(false);
     const prev = stepIndex - 1;
     setStepIndex(prev);
@@ -149,8 +152,33 @@ export function PhotoCoach({ listing, initialPhotos }: PhotoCoachProps) {
 
   function takeMorePhotos() {
     setPreview(null);
+    setPendingDeleteId(null);
     setStepIndex(0);
     persistStep(0);
+  }
+
+  async function deletePhoto(photo: ListingPhotoWithUrl) {
+    setDeletingId(photo.id);
+    setError(null);
+    try {
+      const res = await fetch(
+        `/api/listings/${listing.id}/photos/${photo.id}`,
+        { method: "DELETE" }
+      );
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(
+          typeof data.error === "string" ? data.error : "Could not delete photo"
+        );
+      }
+      setPhotos((prev) => prev.filter((item) => item.id !== photo.id));
+      setPreview(null);
+      setPendingDeleteId(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not delete photo");
+    } finally {
+      setDeletingId(null);
+    }
   }
 
   if (cameraOpen && step) {
@@ -160,7 +188,7 @@ export function PhotoCoach({ listing, initialPhotos }: PhotoCoachProps) {
         showAspectGuide={step.purpose === "listing"}
         guideNote={
           step.purpose === "identify"
-            ? "For AI identification only — won’t be posted"
+            ? "Will not be in the listing"
             : step.purpose === "inventory"
               ? "Stocking photo — private by default"
               : undefined
@@ -212,14 +240,13 @@ export function PhotoCoach({ listing, initialPhotos }: PhotoCoachProps) {
   }
 
   const purposeBanner =
-    step.purpose === "identify"
-      ? "Tag photos for AI — won’t be posted"
-      : step.purpose === "inventory"
-        ? "Stocking photo — private by default"
-        : `Listing photo for ${PLATFORM_LABELS[platform]} · ${aspect.label}`;
+    step.purpose === "inventory"
+      ? "Stocking photo — private by default"
+      : `Listing photo for ${PLATFORM_LABELS[platform]} · ${aspect.label}`;
 
   const canGoBack = stepIndex > 0;
   const nextLabel = currentRolePhotos.length > 0 ? "Next" : "Skip";
+  const deleting = Boolean(deletingId);
 
   return (
     <div className="mx-auto flex w-full max-w-lg flex-col gap-6 px-4 py-6">
@@ -229,21 +256,36 @@ export function PhotoCoach({ listing, initialPhotos }: PhotoCoachProps) {
         label={`Step ${stepIndex + 1} of ${steps.length}`}
       />
 
-      <div
-        className={`rounded-xl px-4 py-3 text-base font-semibold ${
-          step.purpose === "listing"
-            ? "bg-[var(--accent-soft)] text-[var(--accent)]"
-            : "bg-amber-50 text-amber-950"
-        }`}
-      >
-        {purposeBanner}
-      </div>
+      {step.purpose === "identify" ? (
+        <div
+          role="status"
+          className="rounded-xl border-2 border-amber-800 bg-amber-50 px-4 py-4 text-amber-950"
+        >
+          <p className="text-lg font-semibold">
+            These photos will not be in the listing
+          </p>
+          <p className="mt-1 text-base leading-relaxed">
+            They stay private so AI can read the tags. Shoppers will not see
+            them.
+          </p>
+        </div>
+      ) : (
+        <div
+          className={`rounded-xl px-4 py-3 text-base font-semibold ${
+            step.purpose === "listing"
+              ? "bg-[var(--accent-soft)] text-[var(--accent)]"
+              : "bg-amber-50 text-amber-950"
+          }`}
+        >
+          {purposeBanner}
+        </div>
+      )}
 
       <div>
         <div className="flex items-center gap-2">
           <button
             type="button"
-            disabled={busy || !canGoBack}
+            disabled={busy || deleting || !canGoBack}
             onClick={goBack}
             className="touch-target inline-flex shrink-0 items-center gap-1 rounded-xl px-3 text-base font-semibold text-[var(--accent)] disabled:opacity-40"
           >
@@ -255,7 +297,7 @@ export function PhotoCoach({ listing, initialPhotos }: PhotoCoachProps) {
           </h1>
           <button
             type="button"
-            disabled={busy}
+            disabled={busy || deleting}
             onClick={goNext}
             className="touch-target inline-flex shrink-0 items-center gap-1 rounded-xl px-3 text-base font-semibold text-[var(--accent)] disabled:opacity-40"
           >
@@ -269,24 +311,66 @@ export function PhotoCoach({ listing, initialPhotos }: PhotoCoachProps) {
       </div>
 
       {currentRolePhotos.length > 0 ? (
-        <ul className="grid grid-cols-3 gap-2">
-          {currentRolePhotos.map((photo) => (
-            <li
-              key={photo.id}
-              className="overflow-hidden rounded-xl bg-[var(--surface-muted)] ring-1 ring-[var(--border)]"
-              style={{
-                aspectRatio: `${aspect.width} / ${aspect.height}`,
-              }}
-            >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={photo.signedUrl ?? preview ?? ""}
-                alt={photoRoleLabel(photo.role)}
-                className="h-full w-full object-contain"
-              />
-            </li>
-          ))}
-        </ul>
+        <div className="flex flex-col gap-2">
+          <ul className="grid grid-cols-3 gap-2">
+            {currentRolePhotos.map((photo) => {
+              const pending = pendingDeleteId === photo.id;
+              const thisDeleting = deletingId === photo.id;
+              const label = photoRoleLabel(photo.role);
+              return (
+                <li
+                  key={photo.id}
+                  className="relative overflow-hidden rounded-xl bg-[var(--surface-muted)] ring-1 ring-[var(--border)]"
+                  style={{
+                    aspectRatio: `${aspect.width} / ${aspect.height}`,
+                  }}
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={photo.signedUrl ?? preview ?? ""}
+                    alt={label}
+                    className={`h-full w-full object-contain ${
+                      pending ? "opacity-40" : ""
+                    }`}
+                  />
+                  {pending ? (
+                    <div className="absolute inset-0 flex items-center justify-center bg-[var(--foreground)]/45">
+                      <button
+                        type="button"
+                        className="absolute inset-0"
+                        disabled={busy || deleting}
+                        aria-label={`Cancel deleting ${label} photo`}
+                        onClick={() => setPendingDeleteId(null)}
+                      />
+                      <button
+                        type="button"
+                        disabled={busy || deleting}
+                        onClick={() => void deletePhoto(photo)}
+                        className="relative z-10 touch-target inline-flex items-center justify-center rounded-xl text-white"
+                        aria-label={`Delete ${label} photo`}
+                      >
+                        {thisDeleting ? (
+                          <span className="text-base font-semibold">…</span>
+                        ) : (
+                          <TrashGlyph className="h-9 w-9" />
+                        )}
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      disabled={busy || deleting}
+                      onClick={() => setPendingDeleteId(photo.id)}
+                      className="absolute inset-0"
+                      aria-label={`Mark ${label} photo for deletion`}
+                    />
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+          <p className="text-sm text-[var(--muted)]">Tap a photo to delete.</p>
+        </div>
       ) : preview ? (
         <div
           className="overflow-hidden rounded-2xl bg-[var(--surface-muted)] ring-1 ring-[var(--border)]"
@@ -311,7 +395,13 @@ export function PhotoCoach({ listing, initialPhotos }: PhotoCoachProps) {
       ) : null}
 
       <div className="flex flex-col gap-3">
-        <BigButton disabled={busy} onClick={() => setCameraOpen(true)}>
+        <BigButton
+          disabled={busy || deleting}
+          onClick={() => {
+            setPendingDeleteId(null);
+            setCameraOpen(true);
+          }}
+        >
           {busy
             ? "Uploading…"
             : currentRolePhotos.length > 0
@@ -329,5 +419,26 @@ export function PhotoCoach({ listing, initialPhotos }: PhotoCoachProps) {
         ) : null}
       </div>
     </div>
+  );
+}
+
+function TrashGlyph({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden="true"
+    >
+      <path d="M3 6h18" />
+      <path d="M8 6V4h8v2" />
+      <path d="M19 6l-1 14H6L5 6" />
+      <path d="M10 11v6" />
+      <path d="M14 11v6" />
+    </svg>
   );
 }

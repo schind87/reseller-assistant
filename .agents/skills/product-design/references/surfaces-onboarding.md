@@ -36,9 +36,9 @@ First-run seller preferences, Phone Companion steps, or any “coach” sequence
 ### rule/photo-steps-are-jobs
 
 - **Scope:** Phone Companion
-- **Rule:** Each step is a photo job with title + instruction from `PHOTO_STEPS`, not a generic “upload files” screen. Optional steps are skippable. Identification/stocking shots are private by default.
+- **Rule:** Each step is a photo job with title + instruction from `PHOTO_STEPS`, not a generic “upload files” screen. Optional steps are skippable. Identification/stocking shots are private by default. Listing Brand/ID tags (`tag`) are a shopper-facing step before private identification (`id_tag`).
 - **Evidence:** `platforms.ts` copy; PhotoCoach actions “Take {role} photo” / “Add another…”.
-- **Exceptions:** Desktop hub allows unstructured add/drag onto sections.
+- **Exceptions:** Desktop hub allows unstructured add/drag onto sections. Identification photos can be dragged into listing photos, which recategorizes them as Brand/Tag.
 
 ## Good patterns
 

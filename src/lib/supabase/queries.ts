@@ -19,7 +19,6 @@ import {
   type Platform,
   type StructuredFields,
   type Workspace,
-  isIdentifyPhotoRole,
   isPostingPhotoRole,
 } from "@/lib/types";
 
@@ -578,17 +577,14 @@ export async function duplicatePhotoAsListingRole(
   role: PhotoRole
 ): Promise<ListingPhoto> {
   if (!isPostingPhotoRole(role)) {
-    throw new Error("Choose a listing photo type (cover, front, back, detail, or flaw).");
+    throw new Error(
+      "Choose a listing photo type (cover, front, back, detail, brand/tag, or flaw)."
+    );
   }
 
   const photo = await getListingPhoto(listingId, photoId);
   if (!photo) {
     throw new Error("Photo not found");
-  }
-  if (isIdentifyPhotoRole(photo.role)) {
-    throw new Error(
-      "Identification tag photos stay private and can’t be added to the listing.",
-    );
   }
 
   return addPhoto({

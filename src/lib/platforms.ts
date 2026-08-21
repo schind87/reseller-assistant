@@ -31,8 +31,9 @@ export const PLATFORM_PHOTO_ASPECT: Record<Platform, PhotoAspectGuide> = {
   poshmark: { width: 3, height: 4, label: "4×3 portrait" },
 };
 
-// Phone Companion: shopper-facing shots first (skip-friendly), then optional
-// private identification. Stocking photos stay a hub/API role, not a coach step.
+// Phone Companion: shopper-facing shots first (skip-friendly), including
+// listing Brand/ID tags, then optional private identification for AI.
+// Stocking photos stay a hub/API role, not a coach step.
 const SHARED_PHOTO_STEPS: PhotoStepDef[] = [
   {
     role: "cover",
@@ -80,10 +81,19 @@ const SHARED_PHOTO_STEPS: PhotoStepDef[] = [
     allowMultiple: true,
   },
   {
+    role: "tag",
+    title: "Brand/ID tags",
+    instruction:
+      "Photo the brand label and any ID or size tags shoppers should see. These go on the listing. Add as many as you need.",
+    optional: true,
+    purpose: "listing",
+    allowMultiple: true,
+  },
+  {
     role: "id_tag",
     title: "Identification tags",
     instruction:
-      "Optional: photo every tag on the garment — brand, size, care, style or SKU numbers. These help AI identify the item and will not be posted with the listing.",
+      "Photo every remaining tag — care, extra brand, style or SKU numbers. These help AI identify the item.",
     optional: true,
     purpose: "identify",
     allowMultiple: true,
@@ -154,7 +164,7 @@ export function photoRoleLabel(role: PhotoRole): string {
     case "brand_tag":
     case "care_tag":
     case "id_tag":
-      return "Brand/care tag";
+      return "Identification tag";
     case "inventory":
       return "Stocking";
     case "cover":
@@ -166,7 +176,7 @@ export function photoRoleLabel(role: PhotoRole): string {
     case "detail":
       return "Detail";
     case "tag":
-      return "Tag";
+      return "Brand/Tag";
     case "flaw":
       return "Flaw";
     default: {
