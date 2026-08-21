@@ -1471,20 +1471,22 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
         </p>
       ) : null}
 
-      {jobStep !== "posted" ? (
-        <div className="sticky top-0 z-20 bg-[var(--background)] py-1">
-          <BigButton
-            disabled={nextBusy}
-            onClick={() => runJobStep(jobStep)}
-          >
-            {nextBusyLabel ?? jobActionLabel}
-          </BigButton>
-        </div>
-      ) : (
-        <p className="rounded-xl bg-[var(--accent-soft)] px-4 py-3 text-base text-[var(--accent)]">
-          Marked as posted on {PLATFORM_LABELS[platform]}.
-        </p>
-      )}
+      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_13.5rem]">
+        <div className="flex min-w-0 flex-col gap-8">
+          {jobStep !== "posted" ? (
+            <div className="sticky top-0 z-20 bg-[var(--background)] py-1">
+              <BigButton
+                disabled={nextBusy}
+                onClick={() => runJobStep(jobStep)}
+              >
+                {nextBusyLabel ?? jobActionLabel}
+              </BigButton>
+            </div>
+          ) : (
+            <p className="rounded-xl bg-[var(--accent-soft)] px-4 py-3 text-base text-[var(--accent)]">
+              Marked as posted on {PLATFORM_LABELS[platform]}.
+            </p>
+          )}
 
       <details className="rounded-xl border border-dashed border-[var(--border)] px-4 py-3">
         <summary className="cursor-pointer list-none text-sm font-semibold text-[var(--muted)] marker:content-none [&::-webkit-details-marker]:hidden">
@@ -1583,8 +1585,6 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
         </div>
       </details>
 
-      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_13.5rem]">
-        <div className="flex min-w-0 flex-col gap-8">
           <section className="flex flex-col gap-6">
             <h2 className="font-[family-name:var(--font-brand)] text-2xl">
               Photos ({photos.length})
@@ -1871,7 +1871,7 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
           </section>
         </div>
 
-        <aside className="order-first lg:sticky lg:top-4 lg:order-none">
+        <aside className="order-first lg:sticky lg:top-0 lg:z-10 lg:order-none">
           {joinUrl ? (
             <QrPanel
               compact
