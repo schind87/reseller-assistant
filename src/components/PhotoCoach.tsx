@@ -245,8 +245,9 @@ export function PhotoCoach({ listing, initialPhotos }: PhotoCoachProps) {
             type="button"
             disabled={busy || !canGoBack}
             onClick={goBack}
-            className="shrink-0 rounded-lg px-3 py-2 text-sm font-semibold text-[var(--accent)] disabled:opacity-40"
+            className="touch-target inline-flex shrink-0 items-center gap-1 rounded-xl px-3 text-base font-semibold text-[var(--accent)] disabled:opacity-40"
           >
+            <span aria-hidden="true">←</span>
             Back
           </button>
           <h1 className="min-w-0 flex-1 text-center font-[family-name:var(--font-brand)] text-2xl text-[var(--foreground)] sm:text-3xl">
@@ -256,9 +257,10 @@ export function PhotoCoach({ listing, initialPhotos }: PhotoCoachProps) {
             type="button"
             disabled={busy}
             onClick={goNext}
-            className="shrink-0 rounded-lg px-3 py-2 text-sm font-semibold text-[var(--muted)] disabled:opacity-40"
+            className="touch-target inline-flex shrink-0 items-center gap-1 rounded-xl px-3 text-base font-semibold text-[var(--accent)] disabled:opacity-40"
           >
             {nextLabel}
+            <span aria-hidden="true">→</span>
           </button>
         </div>
         <p className="mt-3 text-lg leading-relaxed text-[var(--muted)]">
