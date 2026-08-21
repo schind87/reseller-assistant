@@ -56,8 +56,9 @@
       html.appendChild(style);
     }
     // Shrink the page column so the helper sits beside it, not over it.
-    // Transform on body makes Poshmark/Mercari position:fixed chrome stay
-    // in the content column; the helper is a child of <html>, so it stays docked.
+    // Do not transform/filter body: that makes it the containing block for
+    // position:fixed, so Poshmark photo crop overlays center in the document
+    // instead of the viewport the seller is looking at.
     style.textContent = `
       html.${SPACE_CLASS} {
         box-sizing: border-box !important;
@@ -68,7 +69,6 @@
         width: calc(100vw - ${SIDEBAR_WIDTH}px) !important;
         max-width: calc(100vw - ${SIDEBAR_WIDTH}px) !important;
         margin-right: 0 !important;
-        transform: translateZ(0);
         min-height: 100vh;
       }
     `;
