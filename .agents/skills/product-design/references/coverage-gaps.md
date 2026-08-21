@@ -46,7 +46,7 @@ exemplar, or `frontend-invariants.mdc` with evidence.
 
 ## Copy
 
-- Inconsistent loading strings: “Loading…”, “Loading listing…”, “Opening listing…”, “Joining listing…”.
+- Shipped loading strings still vary (“Loading…”, “Loading listing…”, “Opening listing…”, “Joining listing…”). [copy.md](copy.md) now says to use loading copy only when naming the object improves orientation, not to pick one universal sentence. Evaluate each surface rather than standardizing the phrasing.
 - “Cover photo” vs Poshmark “Cover shot” vs label “Cover”.
 - Marketplace field labels come from schemas and may diverge from hub instructional copy.
 
