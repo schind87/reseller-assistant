@@ -421,9 +421,24 @@ function clearHighlights() {
   });
 }
 
+function isVisuallyOnPage(el) {
+  if (!(el instanceof Element)) return false;
+  const style = window.getComputedStyle(el);
+  if (
+    style.display === "none" ||
+    style.visibility === "hidden" ||
+    Number(style.opacity) === 0
+  ) {
+    return false;
+  }
+  const rect = el.getBoundingClientRect();
+  return rect.width >= 8 && rect.height >= 8;
+}
+
 function highlightElement(el) {
   ensureHighlightStyle();
   clearHighlights();
+  if (!isVisuallyOnPage(el)) return;
   el.classList.add("ra-highlight-target");
   el.scrollIntoView({ behavior: "smooth", block: "center" });
 }
