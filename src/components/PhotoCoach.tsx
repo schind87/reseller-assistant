@@ -337,7 +337,7 @@ export function PhotoCoach({ listing, initialPhotos }: PhotoCoachProps) {
                     <div className="absolute inset-0 flex items-center justify-center bg-[var(--foreground)]/45">
                       <button
                         type="button"
-                        className="absolute inset-0"
+                        className="absolute inset-0 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white"
                         disabled={busy || deleting}
                         aria-label={`Cancel deleting ${label} photo`}
                         onClick={() => setPendingDeleteId(null)}
@@ -346,7 +346,7 @@ export function PhotoCoach({ listing, initialPhotos }: PhotoCoachProps) {
                         type="button"
                         disabled={busy || deleting}
                         onClick={() => void deletePhoto(photo)}
-                        className="relative z-10 touch-target inline-flex items-center justify-center rounded-xl text-white"
+                        className="relative z-10 touch-target inline-flex items-center justify-center rounded-xl text-white focus-visible:ring-2 focus-visible:ring-white"
                         aria-label={`Delete ${label} photo`}
                       >
                         {thisDeleting ? (
@@ -361,7 +361,7 @@ export function PhotoCoach({ listing, initialPhotos }: PhotoCoachProps) {
                       type="button"
                       disabled={busy || deleting}
                       onClick={() => setPendingDeleteId(photo.id)}
-                      className="absolute inset-0"
+                      className="absolute inset-0 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--accent)]"
                       aria-label={`Mark ${label} photo for deletion`}
                     />
                   )}
