@@ -362,9 +362,14 @@
   });
 
   chrome.storage.onChanged.addListener((changes, area) => {
-    if (area !== "local" || !changes[MINIMIZED_KEY]) return;
-    minimized = Boolean(changes[MINIMIZED_KEY].newValue);
-    render();
+    if (area !== "local") return;
+    if (changes[MINIMIZED_KEY]) {
+      minimized = Boolean(changes[MINIMIZED_KEY].newValue);
+      render();
+    }
+    if (changes.listingId || changes.listingCache || changes.token) {
+      void refresh();
+    }
   });
 
   window.addEventListener("popstate", () => {
@@ -375,11 +380,7 @@
     const show = onListingEditPage();
     syncOverlayVisibility();
     if (!show) return;
-    if (!state) {
-      void refresh();
-      return;
-    }
-    render();
+    void refresh();
   }
 
   // Mercari/Poshmark are SPAs — poll href so the overlay hides after leaving sell/edit.

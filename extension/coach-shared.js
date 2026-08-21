@@ -137,6 +137,14 @@ function raPlatformFromUrl(url) {
   return null;
 }
 
+/** Use cached listing details only when they belong to the currently paired listing. */
+function raListingCacheForId(cached, listingId) {
+  if (!cached || typeof cached !== "object") return null;
+  var id = listingId == null ? "" : String(listingId);
+  if (!id) return null;
+  return String(cached.id || "") === id ? cached : null;
+}
+
 function raFieldValueFromListing(listing, fieldKey) {
   if (!listing) return "";
   var structured = listing.structured_fields || listing.structuredFields || {};

@@ -42,8 +42,7 @@ import {
   readImageDimensions,
 } from "@/lib/photo-aspect";
 import {
-  requestExtensionPair,
-  waitForExtensionPairAck,
+  pairExtensionWithListing,
 } from "@/lib/extension-bridge";
 import {
   FAL_BG_MODELS,
@@ -1336,13 +1335,12 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
         });
         const tokenJson = await tokenRes.json().catch(() => ({}));
         if (tokenRes.ok && tokenJson.token) {
-          requestExtensionPair({
+          await pairExtensionWithListing({
             token: String(tokenJson.token),
             listingId,
             joinCode: data.listing.join_code,
             openSidePanel: true,
           });
-          void waitForExtensionPairAck(2000);
         }
       } catch {
         // Extension pairing is best-effort; still open the sell page.

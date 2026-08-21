@@ -1,7 +1,7 @@
 /* global RA_COACH_STEPS, RA_DETAIL_FIELDS, raIsMarketplaceUrl, raPlatformFromUrl,
    raFieldValueFromListing, raListingPhotoMeta, raPreviewForStep,
    raIsAutocompleteField, raAutocompleteValues, raAutocompleteTip,
-   raAutocompleteLabel */
+   raAutocompleteLabel, raListingCacheForId, raIsListingEditUrl */
 
 importScripts("coach-shared.js");
 
@@ -36,6 +36,14 @@ async function savePairing(payload) {
     // Badge is best-effort.
   }
 
+  // Ack as soon as listingId is stored so the web app can open Poshmark
+  // without waiting on cache fetch / side panel.
+  void finalizePairing(payload.openSidePanel !== false);
+
+  return { ok: true, appUrl, listingId };
+}
+
+async function finalizePairing(openSidePanel) {
   try {
     await refreshListingCache();
   } catch (error) {
@@ -44,21 +52,18 @@ async function savePairing(payload) {
 
   await broadcastCoachState();
 
-  if (payload.openSidePanel) {
-    try {
-      const [tab] = await chrome.tabs.query({
-        active: true,
-        currentWindow: true,
-      });
-      if (tab?.windowId != null) {
-        await chrome.sidePanel.open({ windowId: tab.windowId });
-      }
-    } catch (error) {
-      console.warn("Reseller Assistant: could not open side panel", error);
+  if (!openSidePanel) return;
+  try {
+    const [tab] = await chrome.tabs.query({
+      active: true,
+      currentWindow: true,
+    });
+    if (tab?.windowId != null) {
+      await chrome.sidePanel.open({ windowId: tab.windowId });
     }
+  } catch (error) {
+    console.warn("Reseller Assistant: could not open side panel", error);
   }
-
-  return { ok: true, appUrl, listingId };
 }
 
 async function getPairing() {
@@ -70,31 +75,38 @@ async function getPairing() {
     "listingCache",
   ]);
   if (!stored.token || !stored.listingId) return null;
+  const listingId = String(stored.listingId);
   return {
     appUrl: String(stored.appUrl || "").replace(/\/+$/, ""),
     token: String(stored.token),
-    listingId: String(stored.listingId),
+    listingId,
     stepIndex: Number.isInteger(stored.stepIndex) ? stored.stepIndex : 0,
-    listing: stored.listingCache || null,
+    listing: raListingCacheForId(stored.listingCache, listingId),
   };
 }
 
 async function refreshListingCache() {
   const pairing = await getPairing();
   if (!pairing) return null;
+  const listingId = pairing.listingId;
+  const token = pairing.token;
 
   const res = await fetch(
-    `${pairing.appUrl}/api/listings/${pairing.listingId}/extension`,
+    `${pairing.appUrl}/api/listings/${listingId}/extension`,
     {
       headers: {
         Accept: "application/json",
-        Authorization: `Bearer ${pairing.token}`,
+        Authorization: `Bearer ${token}`,
       },
     }
   );
   const json = await res.json().catch(() => ({}));
   if (!res.ok) {
     throw new Error(json.error || `Could not load listing (${res.status})`);
+  }
+  const still = await getPairing();
+  if (!still || still.listingId !== listingId || still.token !== token) {
+    return null;
   }
   const listing = json.listing || json;
   await chrome.storage.local.set({ listingCache: listing });
@@ -135,6 +147,18 @@ async function buildCoachState(extra = {}) {
         ...extra,
       };
     }
+  }
+  if (!listing) {
+    return {
+      ok: true,
+      paired: true,
+      steps: RA_COACH_STEPS,
+      stepIndex: pairing.stepIndex,
+      listingTitle: "Listing",
+      platform: null,
+      message: extra.message || "Loading this listing…",
+      ...extra,
+    };
   }
 
   const stepIndex = Math.min(
@@ -192,9 +216,15 @@ async function ensureContentScript(tabId) {
   await chrome.tabs.sendMessage(tabId, { type: "ping" });
 }
 
-async function sendToMarketplaceTab(message, preferredPlatform) {
+async function sendToMarketplaceTab(message, preferredPlatform, preferredTabId) {
   const tabs = await findMarketplaceTabs(preferredPlatform);
-  const tab = tabs[0];
+  const preferred =
+    preferredTabId && tabs.find((tab) => tab.id === preferredTabId);
+  const tab =
+    preferred ||
+    [...tabs].sort(
+      (a, b) => (b.lastAccessed || 0) - (a.lastAccessed || 0)
+    )[0];
   if (!tab?.id) {
     throw new Error(
       "Open your Mercari or Poshmark sell page in Chrome first."
@@ -247,7 +277,7 @@ async function encodeListingPhotos(listing) {
   return encoded;
 }
 
-async function fillFieldsOnPage(listing, fieldKeys, preferredPlatform) {
+async function fillFieldsOnPage(listing, fieldKeys, preferredPlatform, preferredTabId) {
   let filled = 0;
   const missing = [];
   const assisted = [];
@@ -269,7 +299,8 @@ async function fillFieldsOnPage(listing, fieldKeys, preferredPlatform) {
           label: raAutocompleteLabel(key),
           tip: raAutocompleteTip(key),
         },
-        preferredPlatform
+        preferredPlatform,
+        preferredTabId
       );
       if (result?.ok && result.shown) assisted.push(key);
       else missing.push(key);
@@ -278,7 +309,8 @@ async function fillFieldsOnPage(listing, fieldKeys, preferredPlatform) {
 
     const result = await sendToMarketplaceTab(
       { type: "fillField", fieldKey: key, value },
-      preferredPlatform
+      preferredPlatform,
+      preferredTabId
     );
     if (result?.ok && result.filled) filled += 1;
     else missing.push(key);
@@ -302,17 +334,18 @@ async function advanceAfterSuccess(doneLabel) {
   });
 }
 
-async function verifyFilledField(fieldKey, expected, preferredPlatform) {
+async function verifyFilledField(fieldKey, expected, preferredPlatform, preferredTabId) {
   // Give the page a beat to commit React/controlled input state.
   await new Promise((resolve) => setTimeout(resolve, 200));
   const result = await sendToMarketplaceTab(
     { type: "verifyField", fieldKey, value: expected },
-    preferredPlatform
+    preferredPlatform,
+    preferredTabId
   );
   return Boolean(result?.ok && result.verified);
 }
 
-async function runCurrentStep() {
+async function runCurrentStep(preferredTabId = null) {
   const pairing = await getPairing();
   if (!pairing) {
     return buildCoachState({
@@ -323,6 +356,12 @@ async function runCurrentStep() {
 
   let listing = pairing.listing;
   if (!listing) listing = await refreshListingCache();
+  if (!listing) {
+    return buildCoachState({
+      error: true,
+      message: "Could not load this listing yet. Try again in a moment.",
+    });
+  }
 
   const stepIndex = pairing.stepIndex || 0;
   const step = RA_COACH_STEPS[stepIndex];
@@ -333,7 +372,8 @@ async function runCurrentStep() {
       const photos = await encodeListingPhotos(listing);
       const result = await sendToMarketplaceTab(
         { type: "attachPhotos", photos },
-        platform
+        platform,
+        preferredTabId
       );
       if (!result?.ok) {
         throw new Error(result?.error || "Could not attach photos.");
@@ -355,7 +395,8 @@ async function runCurrentStep() {
       }
       const result = await sendToMarketplaceTab(
         { type: "fillField", fieldKey: step.key, value },
-        platform
+        platform,
+        preferredTabId
       );
       if (!result?.ok || !result.filled) {
         throw new Error(
@@ -365,10 +406,16 @@ async function runCurrentStep() {
       }
       await sendToMarketplaceTab(
         { type: "highlightNext", fieldKey: step.key },
-        platform
+        platform,
+        preferredTabId
       ).catch(() => null);
 
-      const verified = await verifyFilledField(step.key, value, platform);
+      const verified = await verifyFilledField(
+        step.key,
+        value,
+        platform,
+        preferredTabId
+      );
       if (!verified) {
         return buildCoachState({
           error: true,
@@ -382,7 +429,8 @@ async function runCurrentStep() {
       const { filled, missing, assisted } = await fillFieldsOnPage(
         listing,
         RA_DETAIL_FIELDS,
-        platform
+        platform,
+        preferredTabId
       );
       if (!filled && !(assisted && assisted.length)) {
         throw new Error(
@@ -397,7 +445,7 @@ async function runCurrentStep() {
       let verifiedCount = 0;
       for (const key of checkKeys) {
         const expected = raFieldValueFromListing(listing, key);
-        if (await verifyFilledField(key, expected, platform)) {
+        if (await verifyFilledField(key, expected, platform, preferredTabId)) {
           verifiedCount += 1;
         }
       }
@@ -565,7 +613,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.type === "coachDoStep") {
-    void runCurrentStep()
+    void runCurrentStep(sender.tab?.id ?? null)
       .then(async (state) => {
         await broadcastCoachState();
         sendResponse(state);
@@ -644,11 +692,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       if (!pairing) throw new Error("Connect a listing first.");
       let listing = pairing.listing;
       if (!listing) listing = await refreshListingCache();
+      if (!listing) throw new Error("Could not load this listing yet.");
       const keys = ["title", "description", ...RA_DETAIL_FIELDS];
       const { filled } = await fillFieldsOnPage(
         listing,
         keys,
-        listing.platform || null
+        listing.platform || null,
+        sender.tab?.id ?? null
       );
       const state = await buildCoachState({
         message: filled
@@ -675,9 +725,23 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       .catch(() => sendResponse({ ok: true }));
     return true;
   }
+});
 
-  // Keep sender available for future tab-scoped actions.
-  void sender;
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  if (changeInfo.status !== "complete") return;
+  if (!tab.url || !raIsListingEditUrl(tab.url)) return;
+  void (async () => {
+    try {
+      await ensureContentScript(tabId);
+      const state = await buildCoachState();
+      await chrome.tabs.sendMessage(tabId, {
+        type: "coachStateUpdated",
+        state,
+      });
+    } catch {
+      // Content script may not be ready yet; page-coach will refresh on load.
+    }
+  })();
 });
 
 chrome.storage.onChanged.addListener((changes, area) => {

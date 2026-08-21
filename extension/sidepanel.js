@@ -1,4 +1,4 @@
-/* global RA_COACH_STEPS */
+/* global RA_COACH_STEPS, raListingCacheForId */
 
 const DEFAULT_APP_URL = "https://reseller.mvfeed.us";
 const APP_URL_CANDIDATES = [
@@ -174,7 +174,7 @@ async function loadStoredPairing() {
       token: String(stored.token),
       listingId: String(stored.listingId),
     };
-    listing = stored.listingCache || null;
+    listing = raListingCacheForId(stored.listingCache, stored.listingId);
     return true;
   }
 
@@ -185,12 +185,14 @@ async function loadStoredPairing() {
 
 async function savePairing(next) {
   pairing = next;
+  listing = null;
   await chrome.storage.local.set({
     appUrl: next.appUrl,
     token: next.token,
     listingId: next.listingId,
     stepIndex: 0,
     pairedAt: Date.now(),
+    listingCache: null,
   });
 }
 
@@ -471,7 +473,12 @@ els.joinCode.addEventListener("paste", () => {
 
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== "local") return;
-  if (changes.listingCache || changes.stepIndex || changes.token) {
+  if (
+    changes.listingCache ||
+    changes.stepIndex ||
+    changes.token ||
+    changes.listingId
+  ) {
     void refreshCoach();
   }
 });
