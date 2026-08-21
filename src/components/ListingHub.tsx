@@ -1887,7 +1887,7 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
             <button
               type="button"
               onClick={() => setPreviewPhoto(coverPhoto)}
-              className="overflow-hidden rounded-xl bg-white text-left ring-1 ring-[var(--border)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+              className="mx-auto w-[7.5rem] overflow-hidden rounded-xl bg-white text-left ring-1 ring-[var(--border)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
               aria-label="Cover photo"
             >
               <div
@@ -1903,6 +1903,12 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
                   loading="lazy"
                   decoding="async"
                   className="h-full w-full object-contain"
+                  onError={(e) => {
+                    const full = photoFullUrl(coverPhoto);
+                    if (full && e.currentTarget.src !== full) {
+                      e.currentTarget.src = full;
+                    }
+                  }}
                 />
               </div>
             </button>
