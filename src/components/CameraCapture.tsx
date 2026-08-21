@@ -8,7 +8,7 @@ type CameraCaptureProps = {
   aspect: PhotoAspectGuide;
   showAspectGuide: boolean;
   guideNote?: string;
-  onCapture: (blob: Blob) => void;
+  onCapture: (blob: Blob) => void | Promise<void>;
   onCancel: () => void;
   onFallbackFile: (file: File) => void;
 };
@@ -81,6 +81,11 @@ export function CameraCapture({
   const streamRef = useRef<MediaStream | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
+  const [capturePhase, setCapturePhase] = useState<
+    "idle" | "capturing" | "uploading"
+  >("idle");
+  const capturingRef = useRef(false);
+  const capturing = capturePhase !== "idle";
 
   useEffect(() => {
     let cancelled = false;
@@ -128,7 +133,8 @@ export function CameraCapture({
     };
   }, []);
 
-  function captureFrame() {
+  async function captureFrame() {
+    if (capturingRef.current) return;
     const video = videoRef.current;
     if (!video || video.videoWidth === 0) return;
 
@@ -163,15 +169,30 @@ export function CameraCapture({
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
+    capturingRef.current = true;
+    setCapturePhase("capturing");
+    video.pause();
     ctx.drawImage(video, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
 
-    canvas.toBlob(
-      (blob) => {
-        if (blob) onCapture(blob);
-      },
-      "image/jpeg",
-      0.92
-    );
+    const blob = await new Promise<Blob | null>((resolve) => {
+      canvas.toBlob((next) => resolve(next), "image/jpeg", 0.92);
+    });
+
+    if (!blob) {
+      capturingRef.current = false;
+      setCapturePhase("idle");
+      void video.play();
+      return;
+    }
+
+    setCapturePhase("uploading");
+    try {
+      await onCapture(blob);
+    } finally {
+      capturingRef.current = false;
+      setCapturePhase("idle");
+      void video.play();
+    }
   }
 
   return (
@@ -232,11 +253,20 @@ export function CameraCapture({
       ) : null}
 
       <div className="flex flex-col gap-3 px-4 py-5 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
-        <BigButton disabled={!ready || Boolean(error)} onClick={captureFrame}>
-          Capture photo
+        <BigButton
+          disabled={!ready || Boolean(error) || capturing}
+          aria-busy={capturing}
+          onClick={() => void captureFrame()}
+        >
+          {capturePhase === "uploading"
+            ? "Uploading…"
+            : capturePhase === "capturing"
+              ? "Capturing…"
+              : "Capture photo"}
         </BigButton>
         <BigButton
           variant="secondary"
+          disabled={capturing}
           onClick={() => {
             // Do not set capture= on this input — that forces the camera on
             // iOS/Android and skips the photo library.

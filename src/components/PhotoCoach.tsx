@@ -166,7 +166,7 @@ export function PhotoCoach({ listing, initialPhotos }: PhotoCoachProps) {
               : undefined
         }
         onCancel={() => setCameraOpen(false)}
-        onCapture={(blob) => void uploadBlob(blob, step.role)}
+        onCapture={(blob) => uploadBlob(blob, step.role)}
         onFallbackFile={(file) => void uploadBlob(file, step.role)}
       />
     );
