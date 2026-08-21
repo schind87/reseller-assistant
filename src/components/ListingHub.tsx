@@ -1403,6 +1403,12 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
   const pageTitle = title.trim() || "Listing Draft";
   const identifyPhotos = photos.filter((p) => isIdentifyPhotoRole(p.role));
   const listingPhotos = photos.filter((p) => isPostingPhotoRole(p.role));
+  const coverPhoto =
+    listingPhotos.find((photo) => photo.role === "cover") ?? null;
+  const photoAspect = PLATFORM_PHOTO_ASPECT[platform];
+  const coverThumbSrc = coverPhoto
+    ? photoThumbUrl(coverPhoto) ?? photoFullUrl(coverPhoto)
+    : undefined;
   const jobStep = listingJobStep({
     status: listing.status,
     title,
@@ -1430,24 +1436,16 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
         className="hidden"
         onChange={(e) => void onDesktopFilesSelected(e)}
       />
-      <header className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <p className="text-sm font-semibold uppercase tracking-wide text-[var(--accent)]">
-            {PLATFORM_LABELS[platform]} · {listingJobStepLabel(jobStep)}
-          </p>
-          <h1 className="font-[family-name:var(--font-brand)] text-4xl text-[var(--foreground)]">
-            {pageTitle}
-          </h1>
-          <p className="mt-2 text-lg text-[var(--muted)]">
-            Photos, then draft, then post on {PLATFORM_LABELS[platform]}.
-          </p>
-        </div>
-        <Link
-          href="/app"
-          className="text-base font-semibold text-[var(--accent)]"
-        >
-          ← All listings
-        </Link>
+      <header className="flex flex-col gap-2">
+        <p className="text-sm font-semibold uppercase tracking-wide text-[var(--accent)]">
+          {PLATFORM_LABELS[platform]} · {listingJobStepLabel(jobStep)}
+        </p>
+        <h1 className="font-[family-name:var(--font-brand)] text-4xl text-[var(--foreground)]">
+          {pageTitle}
+        </h1>
+        <p className="mt-2 text-lg text-[var(--muted)]">
+          Photos, then draft, then post on {PLATFORM_LABELS[platform]}.
+        </p>
       </header>
 
       {error ? (
@@ -1865,7 +1863,13 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
           </section>
         </div>
 
-        <aside className="order-first lg:sticky lg:top-0 lg:z-10 lg:order-none">
+        <aside className="order-first flex flex-col gap-3 lg:sticky lg:top-0 lg:z-10 lg:order-none lg:bg-[var(--background)] lg:py-1">
+          <Link
+            href="/app"
+            className="text-base font-semibold text-[var(--accent)]"
+          >
+            ← All listings
+          </Link>
           {joinUrl ? (
             <QrPanel
               compact
@@ -1879,6 +1883,36 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
               Preparing QR…
             </div>
           )}
+          {coverPhoto && coverThumbSrc ? (
+            <button
+              type="button"
+              onClick={() => setPreviewPhoto(coverPhoto)}
+              className="mx-auto w-[7.5rem] overflow-hidden rounded-xl bg-white text-left ring-1 ring-[var(--border)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+              aria-label="Cover photo"
+            >
+              <div
+                className="w-full bg-[var(--surface-muted)]"
+                style={{
+                  aspectRatio: `${photoAspect.width} / ${photoAspect.height}`,
+                }}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={coverThumbSrc}
+                  alt={photoRoleLabel(coverPhoto.role)}
+                  loading="lazy"
+                  decoding="async"
+                  className="h-full w-full object-contain"
+                  onError={(e) => {
+                    const full = photoFullUrl(coverPhoto);
+                    if (full && e.currentTarget.src !== full) {
+                      e.currentTarget.src = full;
+                    }
+                  }}
+                />
+              </div>
+            </button>
+          ) : null}
         </aside>
       </div>
 

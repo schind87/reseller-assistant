@@ -20,7 +20,7 @@ No app shell. Each screen owns a text back link. Routes live under `src/app/`.
 - **Evidence:** `← All listings`, `← Back`, `← Back to listing hub`, Profile button on home (bordered, because it is a destination not a back link).
 - **Exceptions:** Primary forward actions use `BigButton`. External marketplace uses `window.open`.
 - **Bad:** Adding a global sidebar “for navigation”.
-- **Good:** Hub header with title left, `← All listings` right.
+- **Good:** Hub sticky QR rail with `← All listings` above Phone Companion.
 
 ### rule/url-is-the-place
 
