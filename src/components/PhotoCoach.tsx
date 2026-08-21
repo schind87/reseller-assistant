@@ -219,12 +219,7 @@ export function PhotoCoach({ listing, initialPhotos }: PhotoCoachProps) {
         : `Listing photo for ${PLATFORM_LABELS[platform]} · ${aspect.label}`;
 
   const canGoBack = stepIndex > 0;
-  const isLastStep = stepIndex >= steps.length - 1;
-  const nextLabel = isLastStep
-    ? "Done"
-    : currentRolePhotos.length > 0
-      ? "Next"
-      : "Skip";
+  const nextLabel = currentRolePhotos.length > 0 ? "Next" : "Skip";
 
   return (
     <div className="mx-auto flex w-full max-w-lg flex-col gap-6 px-4 py-6">
@@ -322,11 +317,7 @@ export function PhotoCoach({ listing, initialPhotos }: PhotoCoachProps) {
               : `Take ${photoRoleLabel(step.role)} photo`}
         </BigButton>
 
-        {phoneMode && !isLastStep ? (
-          <BigButton variant="ghost" disabled={busy} onClick={finishCoach}>
-            Done
-          </BigButton>
-        ) : !phoneMode ? (
+        {!phoneMode ? (
           <BigButton
             variant="ghost"
             onClick={() => router.push(`/app/listings/${listing.id}`)}
