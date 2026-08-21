@@ -20,6 +20,13 @@ import { ListingTweakDialog } from "@/components/ListingTweakDialog";
 import { PhotoAspectCrop } from "@/components/PhotoAspectCrop";
 import { QrPanel } from "@/components/QrPanel";
 import {
+  listingJobActionLabel,
+  listingJobBusyLabel,
+  listingJobStep,
+  listingJobStepLabel,
+  type ListingJobStep,
+} from "@/lib/listing-job";
+import {
   getSeedListingSchema,
   type PlatformListingSchema,
 } from "@/lib/listing-schemas";
@@ -284,6 +291,7 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
   const [descriptionFieldsSnapshot, setDescriptionFieldsSnapshot] =
     useState<StructuredFields | null>(null);
   const [deletingListing, setDeletingListing] = useState(false);
+  const [markingPosted, setMarkingPosted] = useState(false);
   const [openingSell, setOpeningSell] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [uploadingSection, setUploadingSection] =
@@ -846,7 +854,11 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
           description,
           price: price === "" ? null : Number(price),
           structured_fields: fields,
-          status: "ready",
+          status:
+            data.listing.status === "posted" ||
+            data.listing.status === "posting"
+              ? data.listing.status
+              : "ready",
         }),
       });
       const json = await res.json();
@@ -890,6 +902,61 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not delete listing");
       setDeletingListing(false);
+    }
+  }
+
+  async function markThisPosted() {
+    if (!data) return;
+    if (draftDirty) {
+      const saved = await saveDraft();
+      if (!saved) return;
+    }
+    setMarkingPosted(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/listings/${listingId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "posted" }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(
+          typeof json.error === "string" ? json.error : "Could not mark as posted"
+        );
+      }
+      setData((prev) =>
+        prev ? { ...prev, listing: json.listing as Listing } : prev
+      );
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Could not mark as posted"
+      );
+    } finally {
+      setMarkingPosted(false);
+    }
+  }
+
+  function runJobStep(step: ListingJobStep) {
+    switch (step) {
+      case "add_photos":
+        pickFilesForRole("cover");
+        return;
+      case "finish_with_ai":
+        void runProcess();
+        return;
+      case "open_marketplace":
+        void openMarketplaceSell();
+        return;
+      case "mark_posted":
+        void markThisPosted();
+        return;
+      case "posted":
+        return;
+      default: {
+        const _exhaustive: never = step;
+        return _exhaustive;
+      }
     }
   }
 
@@ -1292,8 +1359,26 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
       }
 
       setStatusMessage(
-        `Opened ${PLATFORM_LABELS[data.listing.platform as Platform]} in a new tab. Keep this listing open — use the green helper on the sell page.`
+        `Opened ${PLATFORM_LABELS[data.listing.platform as Platform]} in a new tab. Use the green helper on the sell page.`
       );
+
+      try {
+        const statusRes = await fetch(`/api/listings/${listingId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ status: "posting" }),
+        });
+        const statusJson = await statusRes.json().catch(() => ({}));
+        if (statusRes.ok && statusJson.listing) {
+          setData((prev) =>
+            prev
+              ? { ...prev, listing: statusJson.listing as Listing }
+              : prev
+          );
+        }
+      } catch {
+        // Opening the sell page succeeded; posting status is best-effort.
+      }
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Could not open the sell page"
@@ -1327,6 +1412,22 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
   const pageTitle = title.trim() || "Listing Draft";
   const identifyPhotos = photos.filter((p) => isIdentifyPhotoRole(p.role));
   const listingPhotos = photos.filter((p) => isPostingPhotoRole(p.role));
+  const jobStep = listingJobStep({
+    status: listing.status,
+    title,
+    hasListingPhoto: listingPhotos.length > 0,
+  });
+  const jobActionLabel = listingJobActionLabel(jobStep, platform);
+  const nextBusyLabel = listingJobBusyLabel(jobStep, {
+    uploading,
+    processing,
+    openingSell,
+    markingPosted,
+  });
+  const nextBusy =
+    Boolean(nextBusyLabel) ||
+    (jobStep === "open_marketplace" && saving) ||
+    (jobStep === "mark_posted" && saving);
 
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-8 px-4 py-8">
@@ -1341,14 +1442,13 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
       <header className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="text-sm font-semibold uppercase tracking-wide text-[var(--accent)]">
-            {PLATFORM_LABELS[platform]} · {listing.status.replaceAll("_", " ")}
+            {PLATFORM_LABELS[platform]} · {listingJobStepLabel(jobStep)}
           </p>
           <h1 className="font-[family-name:var(--font-brand)] text-4xl text-[var(--foreground)]">
             {pageTitle}
           </h1>
           <p className="mt-2 text-lg text-[var(--muted)]">
-            Add photos, run AI if you want, then edit the {PLATFORM_LABELS[platform]}{" "}
-            fields here before opening {PLATFORM_LABELS[platform]} to post.
+            Photos, then draft, then post on {PLATFORM_LABELS[platform]}.
           </p>
         </div>
         <Link
@@ -1371,6 +1471,118 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
         </p>
       ) : null}
 
+      {jobStep !== "posted" ? (
+        <div className="sticky top-0 z-20 bg-[var(--background)] py-1">
+          <BigButton
+            disabled={nextBusy}
+            onClick={() => runJobStep(jobStep)}
+          >
+            {nextBusyLabel ?? jobActionLabel}
+          </BigButton>
+        </div>
+      ) : (
+        <p className="rounded-xl bg-[var(--accent-soft)] px-4 py-3 text-base text-[var(--accent)]">
+          Marked as posted on {PLATFORM_LABELS[platform]}.
+        </p>
+      )}
+
+      <details className="rounded-xl border border-dashed border-[var(--border)] px-4 py-3">
+        <summary className="cursor-pointer list-none text-sm font-semibold text-[var(--muted)] marker:content-none [&::-webkit-details-marker]:hidden">
+          More
+        </summary>
+        <div className="mt-3 flex flex-col gap-3 border-t border-[var(--border)] pt-3">
+          <a
+            href={`/api/listings/${listingId}/photos/zip`}
+            className="text-base font-semibold text-[var(--accent)]"
+          >
+            Download listing photos ZIP
+          </a>
+          {isAdmin ? (
+            <a
+              href={`/app/admin/bg-lab?listingId=${encodeURIComponent(listingId)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-base font-semibold text-[var(--accent)]"
+            >
+              Open AI Photo Lab →
+            </a>
+          ) : null}
+          {isAdmin ? (
+            <div className="flex flex-col gap-2">
+              <p className="text-sm font-semibold text-[var(--foreground)]">
+                AI model (admin)
+              </p>
+              <ul className="grid gap-2 sm:grid-cols-2">
+                <li>
+                  <button
+                    type="button"
+                    onClick={() => chooseCleanBgModel("")}
+                    className={`flex w-full items-start justify-between gap-2 rounded-lg border px-3 py-2 text-left text-sm transition ${
+                      !cleanBgModelId
+                        ? "border-[var(--accent)] bg-[var(--accent-soft)]"
+                        : "border-[var(--border)] bg-white hover:bg-[var(--surface-muted)]"
+                    }`}
+                  >
+                    <span className="font-semibold text-[var(--foreground)]">
+                      Production default (hanger-safe)
+                    </span>
+                  </button>
+                </li>
+                {selectableCleanBgModels.map((model) => {
+                  const selected = cleanBgModelId === model.id;
+                  const ratings = bgModelRatingStats.get(model.id);
+                  const cost = formatApproxCostCents(model.approxCost);
+                  return (
+                    <li key={model.id}>
+                      <button
+                        type="button"
+                        onClick={() => chooseCleanBgModel(model.id)}
+                        className={`flex w-full items-start justify-between gap-2 rounded-lg border px-3 py-2 text-left text-sm transition ${
+                          selected
+                            ? "border-[var(--accent)] bg-[var(--accent-soft)]"
+                            : "border-[var(--border)] bg-white hover:bg-[var(--surface-muted)]"
+                        }`}
+                      >
+                        <span className="min-w-0">
+                          <span className="block font-semibold text-[var(--foreground)]">
+                            {model.label}
+                          </span>
+                          <span className="mt-0.5 block text-xs text-[var(--muted)]">
+                            {cost}
+                          </span>
+                        </span>
+                        {ratings &&
+                        (ratings.upCount > 0 || ratings.downCount > 0) ? (
+                          <span
+                            className="inline-flex shrink-0 items-center gap-1.5 text-xs font-semibold tabular-nums"
+                            title="All-time totals for this model across every photo"
+                          >
+                            <span className="text-green-600">
+                              +{ratings.upCount}
+                            </span>
+                            <span className="text-red-600">
+                              −{ratings.downCount}
+                            </span>
+                          </span>
+                        ) : null}
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          ) : null}
+          <button
+            type="button"
+            disabled={deletingListing || saving || processing}
+            onClick={() => void deleteThisListing()}
+            className="text-left text-base font-semibold text-[var(--danger)] disabled:opacity-50"
+          >
+            {deletingListing ? "Deleting…" : "Delete this listing"}
+          </button>
+        </div>
+      </details>
+
       <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_13.5rem]">
         <div className="flex min-w-0 flex-col gap-8">
           <section className="flex flex-col gap-6">
@@ -1378,10 +1590,8 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
               Photos ({photos.length})
             </h2>
             <p className="text-base text-[var(--muted)]">
-              Drop image files onto a section to upload, or use Add to choose from
-              this computer. Drag photos to reorder within a group, or long-press
-              and drop onto another section to move. Use the QR code for guided
-              shooting on your phone.
+              Drop photos here or use Add. Scan the QR for guided shots on your
+              phone.
             </p>
 
             {movingPhotoId ? (
@@ -1401,93 +1611,16 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
             ) : null}
 
             <div className="space-y-3">
-              {isAdmin ? (
-                <div className="flex flex-col gap-3 rounded-xl border border-dashed border-[var(--border)] bg-[var(--surface-muted)] px-3 py-3">
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="text-sm font-semibold text-[var(--foreground)]">
-                        AI model (admin)
-                      </p>
-                      <p className="mt-0.5 text-xs text-[var(--muted)]">
-                        Votes are all-time totals for each model across every
-                        photo.
-                      </p>
-                    </div>
-                    <a
-                      href={`/app/admin/bg-lab?listingId=${encodeURIComponent(listingId)}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="shrink-0 text-base font-semibold text-[var(--accent)] hover:underline"
-                    >
-                      Open AI Photo Lab →
-                    </a>
-                  </div>
-                  <ul className="grid gap-2 sm:grid-cols-2">
-                    <li>
-                      <button
-                        type="button"
-                        onClick={() => chooseCleanBgModel("")}
-                        className={`flex w-full items-start justify-between gap-2 rounded-lg border px-3 py-2 text-left text-sm transition ${
-                          !cleanBgModelId
-                            ? "border-[var(--accent)] bg-[var(--accent-soft)]"
-                            : "border-[var(--border)] bg-white hover:bg-[var(--surface-muted)]"
-                        }`}
-                      >
-                        <span className="font-semibold text-[var(--foreground)]">
-                          Production default (hanger-safe)
-                        </span>
-                      </button>
-                    </li>
-                    {selectableCleanBgModels.map((model) => {
-                      const selected = cleanBgModelId === model.id;
-                      const ratings = bgModelRatingStats.get(model.id);
-                      const cost = formatApproxCostCents(model.approxCost);
-                      return (
-                        <li key={model.id}>
-                          <button
-                            type="button"
-                            onClick={() => chooseCleanBgModel(model.id)}
-                            className={`flex w-full items-start justify-between gap-2 rounded-lg border px-3 py-2 text-left text-sm transition ${
-                              selected
-                                ? "border-[var(--accent)] bg-[var(--accent-soft)]"
-                                : "border-[var(--border)] bg-white hover:bg-[var(--surface-muted)]"
-                            }`}
-                          >
-                            <span className="min-w-0">
-                              <span className="block font-semibold text-[var(--foreground)]">
-                                {model.label}
-                              </span>
-                              <span className="mt-0.5 block text-xs text-[var(--muted)]">
-                                {cost}
-                              </span>
-                            </span>
-                            {ratings &&
-                            (ratings.upCount > 0 || ratings.downCount > 0) ? (
-                              <span
-                                className="inline-flex shrink-0 items-center gap-1.5 text-xs font-semibold tabular-nums"
-                                title="All-time totals for this model across every photo"
-                              >
-                                <span className="text-green-600">
-                                  +{ratings.upCount}
-                                </span>
-                                <span className="text-red-600">
-                                  −{ratings.downCount}
-                                </span>
-                              </span>
-                            ) : null}
-                          </button>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                </div>
-              ) : null}
               <PhotoGroup
                 title="Photos shoppers will see"
-                badge="Listing photos · posted"
-                description="Cover, front, back, details, and flaws for the marketplace listing. You can add multiple photos of each type. Use AI on a shot to swap the backdrop for white while keeping hangers intact."
+                badge="Listing photos"
+                description="Cover, front, back, details, and flaws for the marketplace listing."
                 photos={listingPhotos}
-                empty="No listing photos yet — drop images here or start with a clean cover shot."
+                empty={
+                  platform === "poshmark"
+                    ? "No listing photos yet — start with a cover shot."
+                    : "No listing photos yet — start with a cover photo."
+                }
                 section="listing"
                 photoAspect={PLATFORM_PHOTO_ASPECT[platform]}
                 onAdd={() => setPickListingRole(true)}
@@ -1567,18 +1700,6 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
                 }}
               />
             ) : null}
-
-            <p className="text-base text-[var(--muted)]">
-              On this computer, drop files onto sections, choose files with Add,
-              or long-press to move photos — the camera stays on your phone via
-              the companion QR.
-            </p>
-            <a
-              href={`/api/listings/${listingId}/photos/zip`}
-              className="block max-w-sm"
-            >
-              <BigButton variant="secondary">Download listing photos ZIP</BigButton>
-            </a>
 
             <details className="group rounded-xl border border-dashed border-[var(--border)] bg-[var(--surface-muted)]/50 open:border-solid">
               <summary className="cursor-pointer list-none px-4 py-3 marker:content-none [&::-webkit-details-marker]:hidden">
@@ -1679,41 +1800,27 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
             </details>
           </section>
 
-          <section className="flex flex-col gap-3 rounded-2xl border border-[var(--border)] bg-white p-6">
-            <h2 className="font-[family-name:var(--font-brand)] text-2xl">
-              Finish with AI
-            </h2>
-            <p className="text-base text-[var(--muted)]">
-              Fills the editable fields below from your photos. Listing photos
-              marked AI also get a white studio backdrop (hangers kept).
-              You can change anything afterward.
-            </p>
-            <BigButton
-              disabled={processing || photos.length === 0}
-              onClick={() => void runProcess()}
-            >
-              {processing ? "Working…" : "Finish with AI"}
-            </BigButton>
-            {photos.length === 0 ? (
-              <p className="text-sm text-[var(--muted)]">
-                Needs at least one photo first.
-              </p>
-            ) : null}
-          </section>
-
           <section className="flex flex-col gap-3 rounded-2xl border border-[var(--border)] bg-white p-4 sm:p-5">
             <div>
               <h2 className="font-[family-name:var(--font-brand)] text-xl sm:text-2xl">
                 {PLATFORM_LABELS[platform]} listing fields
               </h2>
               <p className="mt-1 text-sm text-[var(--muted)]">
-                Same fields you&apos;ll enter on {PLATFORM_LABELS[platform]}. Use{" "}
-                <span className="font-semibold text-[var(--foreground)]">
-                  Tweak listing fields
-                </span>{" "}
-                in the extension for a larger editor while posting.
+                Same fields you&apos;ll enter on {PLATFORM_LABELS[platform]}.
+                Finish with AI fills them from your photos — you can change
+                anything afterward.
               </p>
             </div>
+
+            {jobStep !== "add_photos" && jobStep !== "finish_with_ai" ? (
+              <BigButton
+                variant="ghost"
+                disabled={processing || listingPhotos.length === 0}
+                onClick={() => void runProcess()}
+              >
+                {processing ? "Working…" : "Finish with AI"}
+              </BigButton>
+            ) : null}
 
             {schema ? (
               <ListingSchemaForm
@@ -1743,22 +1850,17 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
                 descriptionAiWritten={descriptionAiWritten}
                 onSubmit={(e) => void saveDraft(e)}
                 footer={
-                  <div className="flex flex-col gap-2 pt-1 sm:flex-row">
+                  <div className="pt-1">
                     <BigButton
                       type="submit"
-                      disabled={saving || processing || rewritingDescription}
+                      disabled={
+                        saving ||
+                        processing ||
+                        rewritingDescription ||
+                        !draftDirty
+                      }
                     >
-                      {saving ? "Saving…" : draftDirty ? "Save changes" : "Saved"}
-                    </BigButton>
-                    <BigButton
-                      type="button"
-                      variant="secondary"
-                      disabled={saving || rewritingDescription || openingSell}
-                      onClick={() => void openMarketplaceSell()}
-                    >
-                      {openingSell
-                        ? "Opening…"
-                        : `Open ${PLATFORM_LABELS[platform]}`}
+                      {saving ? "Saving…" : "Save changes"}
                     </BigButton>
                   </div>
                 }
@@ -1767,16 +1869,6 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
               <p className="text-base text-[var(--muted)]">Loading fields…</p>
             )}
           </section>
-
-          <div className="border-t border-[var(--border)] pt-6">
-            <BigButton
-              variant="danger"
-              disabled={deletingListing || saving || processing}
-              onClick={() => void deleteThisListing()}
-            >
-              {deletingListing ? "Deleting…" : "Delete this listing"}
-            </BigButton>
-          </div>
         </div>
 
         <aside className="order-first lg:sticky lg:top-4 lg:order-none">

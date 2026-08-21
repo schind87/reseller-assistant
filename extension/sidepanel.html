@@ -85,36 +85,31 @@
         </div>
       </dl>
 
-      <div class="warning" role="alert">
-        <strong>Use the green box on the sell page</strong>
-        <span>
-          Open Mercari or Poshmark create/sell. A helper box appears in the
-          corner — tap <em>Do this for me</em>. When it works, the helper moves
-          to the next step automatically.
-        </span>
-      </div>
+      <p class="help">
+        Use the green helper on the Poshmark or Mercari sell page. This panel
+        only shows connection status.
+      </p>
 
-      <p id="coach-help" class="help"></p>
+      <p id="coach-help" class="help" hidden></p>
       <p id="coach-preview" class="preview-box"></p>
 
-      <div class="actions">
-        <button id="do-step-btn" class="btn btn-primary" type="button">
-          Do this for me
-        </button>
-        <button id="tweak-listing-btn" class="btn btn-secondary" type="button">
-          Tweak listing fields
-        </button>
-        <button id="next-step-btn" class="btn btn-accent" type="button">
-          Next step
-        </button>
-        <button id="prev-step-btn" class="btn btn-secondary" type="button">
-          Back
-        </button>
-      </div>
+      <p id="action-status" class="status" role="status" aria-live="polite"></p>
 
       <details class="advanced">
         <summary>More options</summary>
         <div class="actions">
+          <button id="do-step-btn" class="btn btn-primary" type="button">
+            Do this for me
+          </button>
+          <button id="tweak-listing-btn" class="btn btn-secondary" type="button">
+            Tweak listing fields
+          </button>
+          <button id="next-step-btn" class="btn btn-accent" type="button">
+            Next step
+          </button>
+          <button id="prev-step-btn" class="btn btn-secondary" type="button">
+            Back
+          </button>
           <button id="fill-all-btn" class="btn btn-secondary" type="button">
             Fill all text fields
           </button>
@@ -129,8 +124,6 @@
           </button>
         </div>
       </details>
-
-      <p id="action-status" class="status" role="status" aria-live="polite"></p>
     </section>
 
     <footer class="footer footer-discreet">

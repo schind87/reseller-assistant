@@ -226,14 +226,6 @@
       ui.status.textContent = "";
       return;
     }
-      ui.stepLabel.textContent = "Connecting…";
-      ui.title.textContent = "Listing helper";
-      ui.help.textContent = "One moment…";
-      ui.preview.textContent = "";
-      ui.doStep.textContent = "Do this for me";
-      ui.status.textContent = "";
-      return;
-    }
 
     if (!state.paired) {
       ui.stepLabel.textContent = "Not connected";

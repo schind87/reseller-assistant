@@ -140,6 +140,7 @@ function applyCoachState(state) {
   }`;
   els.coachHelp.textContent = step?.help || "";
   els.coachPreview.textContent = state.preview || "";
+  els.coachPreview.hidden = !state.preview;
   els.doStepBtn.textContent = step?.actionLabel || "Do this for me";
   els.doStepBtn.disabled = busy || step?.key === "review";
   els.prevStepBtn.disabled = busy || index <= 0;

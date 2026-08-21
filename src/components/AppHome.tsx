@@ -7,6 +7,10 @@ import { BigButton } from "@/components/BigButton";
 import { ExtensionInstallCard } from "@/components/ExtensionInstallCard";
 import { PinSetupCard } from "@/components/PinSetupCard";
 import { SellerOnboarding } from "@/components/SellerOnboarding";
+import {
+  listingJobStep,
+  listingListSubtitle,
+} from "@/lib/listing-job";
 import { PLATFORM_LABELS, PLATFORM_PHOTO_ASPECT } from "@/lib/platforms";
 import {
   type ListingPreferences,
@@ -58,7 +62,10 @@ export function AppHome({
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "Could not create listing");
       const created = json.listing as Listing;
-      setListings((prev) => [{ ...created, thumbUrl: null }, ...prev]);
+      setListings((prev) => [
+        { ...created, thumbUrl: null, hasListingPhoto: false },
+        ...prev,
+      ]);
       router.push(`/app/listings/${json.listing.id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not create listing");
@@ -286,7 +293,7 @@ export function AppHome({
               return (
                 <li
                   key={listing.id}
-                  className="flex items-stretch gap-2 overflow-hidden rounded-2xl border border-[var(--border)] bg-white"
+                  className="flex items-stretch gap-2 rounded-2xl border border-[var(--border)] bg-white"
                 >
                   <Link
                     href={`/app/listings/${listing.id}`}
@@ -317,21 +324,37 @@ export function AppHome({
                       <p className="text-lg font-semibold text-[var(--foreground)]">
                         {label}
                       </p>
-                      <p className="mt-1 text-base capitalize text-[var(--muted)]">
-                        {PLATFORM_LABELS[listing.platform]} ·{" "}
-                        {listing.status.replaceAll("_", " ")}
+                      <p className="mt-1 text-base text-[var(--muted)]">
+                        {listingListSubtitle(
+                          listing.platform,
+                          listingJobStep({
+                            status: listing.status,
+                            title: listing.title,
+                            hasListingPhoto: listing.hasListingPhoto,
+                          })
+                        )}
                       </p>
                     </span>
                   </Link>
-                  <button
-                    type="button"
-                    disabled={deletingId === listing.id}
-                    onClick={() => void deleteListing(listing.id, label)}
-                    className="shrink-0 rounded-r-2xl px-4 text-base font-semibold text-[var(--danger)] hover:bg-red-50 disabled:opacity-50"
-                    aria-label={`Delete ${label}`}
-                  >
-                    {deletingId === listing.id ? "…" : "Delete"}
-                  </button>
+                  <details className="relative shrink-0">
+                    <summary
+                      className="flex h-full cursor-pointer list-none items-center px-4 text-base font-semibold text-[var(--muted)] marker:content-none hover:bg-[var(--surface-muted)] [&::-webkit-details-marker]:hidden"
+                      aria-label={`More actions for ${label}`}
+                    >
+                      More
+                    </summary>
+                    <div className="absolute right-0 top-full z-10 mt-1 min-w-[11rem] rounded-xl border border-[var(--border)] bg-white p-1">
+                      <button
+                        type="button"
+                        disabled={deletingId === listing.id}
+                        onClick={() => void deleteListing(listing.id, label)}
+                        className="w-full rounded-lg px-3 py-2 text-left text-base font-semibold text-[var(--danger)] hover:bg-red-50 disabled:opacity-50"
+                        aria-label={`Delete ${label}`}
+                      >
+                        {deletingId === listing.id ? "…" : "Delete"}
+                      </button>
+                    </div>
+                  </details>
                 </li>
               );
             })}

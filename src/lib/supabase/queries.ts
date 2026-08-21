@@ -25,6 +25,7 @@ import {
 
 export type ListingWithThumb = Listing & {
   thumbUrl: string | null;
+  hasListingPhoto: boolean;
 };
 
 const JOIN_CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -119,9 +120,13 @@ export async function listListings(userId: string): Promise<ListingWithThumb[]> 
   });
   return listings.map((listing) => {
     const path = pathByListing.get(listing.id) ?? null;
+    const listingPhotos = photosByListing.get(listing.id) ?? [];
     return {
       ...listing,
       thumbUrl: path ? (signed.get(path) ?? null) : null,
+      hasListingPhoto: listingPhotos.some((photo) =>
+        isPostingPhotoRole(photo.role)
+      ),
     };
   });
 }

@@ -250,7 +250,7 @@ export function PhotoCoach({ listing, initialPhotos }: PhotoCoachProps) {
             type="button"
             disabled={busy || !canGoBack}
             onClick={goBack}
-            className="shrink-0 rounded-lg border border-[var(--border)] px-3 py-2 text-sm font-semibold text-[var(--foreground)] disabled:opacity-40"
+            className="shrink-0 rounded-lg px-3 py-2 text-sm font-semibold text-[var(--accent)] disabled:opacity-40"
           >
             Back
           </button>
@@ -261,7 +261,7 @@ export function PhotoCoach({ listing, initialPhotos }: PhotoCoachProps) {
             type="button"
             disabled={busy}
             onClick={goNext}
-            className="shrink-0 rounded-lg border border-[var(--accent)] bg-[var(--accent)] px-3 py-2 text-sm font-semibold text-white disabled:opacity-40"
+            className="shrink-0 rounded-lg px-3 py-2 text-sm font-semibold text-[var(--muted)] disabled:opacity-40"
           >
             {nextLabel}
           </button>

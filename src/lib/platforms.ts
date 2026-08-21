@@ -31,8 +31,8 @@ export const PLATFORM_PHOTO_ASPECT: Record<Platform, PhotoAspectGuide> = {
   poshmark: { width: 3, height: 4, label: "4×3 portrait" },
 };
 
-// Order matches the listing hub: shopper-facing shots first, then optional
-// private identification / stocking prompts.
+// Phone Companion: shopper-facing shots first (skip-friendly), then optional
+// private identification. Stocking photos stay a hub/API role, not a coach step.
 const SHARED_PHOTO_STEPS: PhotoStepDef[] = [
   {
     role: "cover",
@@ -71,15 +71,6 @@ const SHARED_PHOTO_STEPS: PhotoStepDef[] = [
     allowMultiple: true,
   },
   {
-    role: "tag",
-    title: "Tag",
-    instruction:
-      "Clear shot of the brand, size, or care tag for shoppers. Add more tag close-ups if helpful, or skip if already covered elsewhere.",
-    optional: true,
-    purpose: "listing",
-    allowMultiple: true,
-  },
-  {
     role: "flaw",
     title: "Flaws",
     instruction:
@@ -95,15 +86,6 @@ const SHARED_PHOTO_STEPS: PhotoStepDef[] = [
       "Optional: photo every tag on the garment — brand, size, care, style or SKU numbers. These help AI identify the item and will not be posted with the listing.",
     optional: true,
     purpose: "identify",
-    allowMultiple: true,
-  },
-  {
-    role: "inventory",
-    title: "Stocking photo",
-    instruction:
-      "Optional: photo how this piece looks where you stock it (closet, bin, rack) so you can find it later. Add as many angles as help you find it. Private by default — you can also use any shot in the listing if you want.",
-    optional: true,
-    purpose: "inventory",
     allowMultiple: true,
   },
 ];
