@@ -40,4 +40,11 @@ for (const [name, actual, expected] of cases) {
   }
 }
 
+if (ctx.RA_PAGE_SIDEBAR_WIDTH !== 340) {
+  throw new Error(
+    `RA_PAGE_SIDEBAR_WIDTH: expected 340, got ${ctx.RA_PAGE_SIDEBAR_WIDTH}`
+  );
+}
+
 console.log(`ok ${cases.length} pairing cache cases`);
+console.log("ok sidebar width 340");

@@ -136,10 +136,19 @@ function removeFieldHelpers(fieldKey) {
   document.querySelectorAll(selector).forEach((node) => node.remove());
 }
 
+function pageSidebarWidth() {
+  const el = document.getElementById("reseller-assistant-page-coach");
+  if (!el || el.hidden || el.style.display === "none") return 0;
+  const width = el.getBoundingClientRect().width;
+  return width > 0 ? Math.round(width) : 0;
+}
+
 function positionHelperNear(helper, el) {
   const rect = el.getBoundingClientRect();
-  const width = Math.min(320, window.innerWidth - 24);
-  let left = Math.min(Math.max(12, rect.left), window.innerWidth - width - 12);
+  const sidebar = pageSidebarWidth();
+  const contentRight = Math.max(24, window.innerWidth - sidebar);
+  const width = Math.min(320, contentRight - 24);
+  let left = Math.min(Math.max(12, rect.left), contentRight - width - 12);
   let top = rect.bottom + 8;
 
   const others = Array.from(
@@ -155,7 +164,6 @@ function positionHelperNear(helper, el) {
   helper.style.width = `${width}px`;
   helper.style.left = `${left}px`;
   helper.style.top = `${top}px`;
-  // Flip above if near bottom of viewport.
   requestAnimationFrame(() => {
     const h = helper.getBoundingClientRect().height;
     if (top + h > window.innerHeight - 12) {

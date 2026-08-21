@@ -48,6 +48,9 @@ var RA_DETAIL_FIELDS = [
   "shippingPayer",
 ];
 
+/** On-page listing helper width. Sell-page content is shifted left by this many pixels. */
+var RA_PAGE_SIDEBAR_WIDTH = 340;
+
 /** Fields that must be chosen from the site’s autocomplete (not pasted in). */
 var RA_AUTOCOMPLETE_FIELDS = {
   poshmark: ["brand", "styleTags"],

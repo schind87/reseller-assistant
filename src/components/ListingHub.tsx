@@ -1357,7 +1357,7 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
       }
 
       setStatusMessage(
-        `Opened ${PLATFORM_LABELS[data.listing.platform as Platform]} in a new tab. Use the green helper on the sell page.`
+        `Opened ${PLATFORM_LABELS[data.listing.platform as Platform]} in a new tab. Use the helper beside the sell form.`
       );
 
       try {

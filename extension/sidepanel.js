@@ -155,7 +155,7 @@ function applyCoachState(state) {
   }
 
   setConnection(
-    `Connected · open the sell page and use the green helper box`,
+    `Connected · the helper sits beside the sell form`,
     "ok"
   );
 }
