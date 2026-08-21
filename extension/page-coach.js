@@ -1,23 +1,30 @@
-/* global RA_COACH_STEPS, raIsListingEditUrl */
+/* global RA_COACH_STEPS, RA_PAGE_SIDEBAR_WIDTH, raIsListingEditUrl */
 
 (function initPageCoach() {
   const HOST_ID = "reseller-assistant-page-coach";
-  const MINIMIZED_KEY = "pageCoachMinimized";
+  const SPACE_STYLE_ID = "reseller-assistant-page-coach-space";
+  const SPACE_CLASS = "ra-reseller-assistant-has-sidebar";
+  const SIDEBAR_WIDTH =
+    typeof RA_PAGE_SIDEBAR_WIDTH === "number" ? RA_PAGE_SIDEBAR_WIDTH : 340;
   if (document.getElementById(HOST_ID)) return;
 
   let state = null;
   let busy = false;
-  let minimized = false;
   let lastHref = location.href;
 
   const host = document.createElement("div");
   host.id = HOST_ID;
+  host.setAttribute("role", "complementary");
+  host.setAttribute("aria-label", "Reseller Assistant listing helper");
   host.style.all = "initial";
   host.style.position = "fixed";
   host.style.zIndex = "2147483646";
-  host.style.right = "16px";
-  host.style.bottom = "16px";
-  host.style.width = "min(360px, calc(100vw - 24px))";
+  host.style.top = "0";
+  host.style.right = "0";
+  host.style.bottom = "0";
+  host.style.setProperty("width", `${SIDEBAR_WIDTH}px`, "important");
+  host.style.setProperty("height", "100vh", "important");
+  host.style.overflow = "hidden";
   host.style.fontFamily =
     '"Segoe UI", "Helvetica Neue", Arial, sans-serif';
   document.documentElement.appendChild(host);
@@ -28,24 +35,66 @@
       : false;
   }
 
-  function syncOverlayVisibility() {
+  function applyPageSpace(show) {
+    const html = document.documentElement;
+    const body = document.body;
+    let style = document.getElementById(SPACE_STYLE_ID);
+    if (!show) {
+      html.classList.remove(SPACE_CLASS);
+      if (body) body.classList.remove(SPACE_CLASS);
+      html.style.removeProperty("--ra-sidebar-width");
+      if (style) style.remove();
+      return;
+    }
+
+    html.classList.add(SPACE_CLASS);
+    html.style.setProperty("--ra-sidebar-width", `${SIDEBAR_WIDTH}px`);
+    if (body) body.classList.add(SPACE_CLASS);
+    if (!style) {
+      style = document.createElement("style");
+      style.id = SPACE_STYLE_ID;
+      html.appendChild(style);
+    }
+    // Shrink the page column so the helper sits beside it, not over it.
+    // Transform on body makes Poshmark/Mercari position:fixed chrome stay
+    // in the content column; the helper is a child of <html>, so it stays docked.
+    style.textContent = `
+      html.${SPACE_CLASS} {
+        box-sizing: border-box !important;
+        overflow-x: auto !important;
+      }
+      html.${SPACE_CLASS} body.${SPACE_CLASS} {
+        box-sizing: border-box !important;
+        width: calc(100vw - ${SIDEBAR_WIDTH}px) !important;
+        max-width: calc(100vw - ${SIDEBAR_WIDTH}px) !important;
+        margin-right: 0 !important;
+        transform: translateZ(0);
+        min-height: 100vh;
+      }
+    `;
+  }
+
+  function syncSidebarVisibility() {
     const show = onListingEditPage();
     host.hidden = !show;
-    host.style.display = show ? "" : "none";
+    host.style.display = show ? "block" : "none";
+    applyPageSpace(show);
     return show;
   }
 
   const shadow = host.attachShadow({ mode: "open" });
   shadow.innerHTML = `
     <style>
-      :host { all: initial; }
+      :host { display: block; width: 100%; height: 100%; }
       * { box-sizing: border-box; font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif; }
       .panel {
-        background: #fff;
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+        max-height: 100vh;
+        background: #f7f4ef;
         color: #1a1a1a;
-        border: 2px solid #1f5c4a;
-        border-radius: 16px;
-        box-shadow: 0 12px 40px rgba(0,0,0,0.22);
+        border-left: 2px solid #1f5c4a;
         overflow: hidden;
       }
       .head {
@@ -55,20 +104,18 @@
         gap: 8px;
         background: #1f5c4a;
         color: #fff;
-        padding: 12px 14px;
+        padding: 14px 16px;
+        flex-shrink: 0;
       }
       .head strong { font-size: 16px; }
-      .head button {
-        border: 0;
-        background: rgba(255,255,255,0.18);
-        color: #fff;
-        border-radius: 8px;
-        padding: 6px 10px;
-        font-size: 14px;
-        font-weight: 700;
-        cursor: pointer;
+      .body {
+        padding: 16px;
+        display: grid;
+        gap: 10px;
+        align-content: start;
+        flex: 1;
+        overflow: auto;
       }
-      .body { padding: 14px; display: grid; gap: 10px; }
       .step {
         font-size: 13px;
         font-weight: 700;
@@ -79,13 +126,13 @@
       .title { font-size: 22px; font-weight: 750; line-height: 1.2; margin: 0; }
       .help { margin: 0; font-size: 15px; color: #4a4a4a; line-height: 1.4; }
       .preview {
-        background: #f4f7f5;
+        background: #fff;
         border-radius: 10px;
         padding: 10px 12px;
         font-size: 14px;
         color: #243;
-        max-height: 72px;
-        overflow: hidden;
+        max-height: 88px;
+        overflow: auto;
       }
       .bar {
         height: 8px;
@@ -140,33 +187,10 @@
         color: #666;
         margin: 0;
       }
-      .mini {
-        display: none;
-        align-items: center;
-        justify-content: space-between;
-        gap: 10px;
-        background: #1f5c4a;
-        color: #fff;
-        border-radius: 999px;
-        padding: 12px 16px;
-        box-shadow: 0 8px 24px rgba(0,0,0,0.2);
-        cursor: pointer;
-        border: 0;
-        width: 100%;
-        font-size: 15px;
-        font-weight: 700;
-      }
-      :host(.collapsed) .panel { display: none; }
-      :host(.collapsed) .mini { display: flex; }
     </style>
-    <button class="mini" type="button" id="expand">
-      <span>Reseller Assistant</span>
-      <span id="mini-step">Open helper</span>
-    </button>
     <div class="panel" id="panel">
       <div class="head">
         <strong>Reseller Assistant</strong>
-        <button type="button" id="minimize" aria-label="Minimize">Hide</button>
       </div>
       <div class="body">
         <div class="step" id="step-label">Connecting…</div>
@@ -189,8 +213,6 @@
   `;
 
   const ui = {
-    root: shadow.getElementById("panel").parentNode || shadow,
-    panelWrap: host,
     progress: shadow.getElementById("progress"),
     stepLabel: shadow.getElementById("step-label"),
     title: shadow.getElementById("title"),
@@ -201,9 +223,6 @@
     prev: shadow.getElementById("prev"),
     next: shadow.getElementById("next"),
     status: shadow.getElementById("status"),
-    minimize: shadow.getElementById("minimize"),
-    expand: shadow.getElementById("expand"),
-    miniStep: shadow.getElementById("mini-step"),
   };
 
   function setBusy(next) {
@@ -215,8 +234,7 @@
   }
 
   function render() {
-    if (!syncOverlayVisibility()) return;
-    host.classList.toggle("collapsed", minimized);
+    if (!syncSidebarVisibility()) return;
     if (!state) {
       ui.stepLabel.textContent = "Connecting…";
       ui.title.textContent = "Listing helper";
@@ -236,7 +254,6 @@
       ui.preview.textContent = "";
       ui.doStep.textContent = "Check connection";
       ui.progress.style.width = "0%";
-      ui.miniStep.textContent = "Not connected";
       ui.status.textContent = "";
       ui.status.className = "status";
       return;
@@ -252,7 +269,6 @@
     ui.preview.textContent = state.preview || state.listingTitle || "";
     ui.doStep.textContent = step.actionLabel || "Do this for me";
     ui.progress.style.width = `${Math.round(((index + 1) / total) * 100)}%`;
-    ui.miniStep.textContent = `${index + 1}/${total}: ${step.label || "Step"}`;
 
     if (state.message) {
       ui.status.textContent = state.message;
@@ -308,26 +324,6 @@
     }
   }
 
-  function setMinimized(next) {
-    minimized = Boolean(next);
-    try {
-      void chrome.storage.local.set({ [MINIMIZED_KEY]: minimized });
-    } catch {
-      // Ignore storage errors; in-memory state still applies for this page.
-    }
-    render();
-  }
-
-  async function loadMinimizedPreference() {
-    try {
-      const stored = await chrome.storage.local.get(MINIMIZED_KEY);
-      minimized = Boolean(stored[MINIMIZED_KEY]);
-    } catch {
-      minimized = false;
-    }
-    render();
-  }
-
   ui.doStep.addEventListener("click", () => {
     if (!state?.paired) {
       void run("coachGetState").then(() => refresh());
@@ -351,8 +347,6 @@
     }
     void run("openTweakListing");
   });
-  ui.minimize.addEventListener("click", () => setMinimized(true));
-  ui.expand.addEventListener("click", () => setMinimized(false));
 
   chrome.runtime.onMessage.addListener((message) => {
     if (message?.type === "coachStateUpdated" && message.state) {
@@ -362,9 +356,10 @@
   });
 
   chrome.storage.onChanged.addListener((changes, area) => {
-    if (area !== "local" || !changes[MINIMIZED_KEY]) return;
-    minimized = Boolean(changes[MINIMIZED_KEY].newValue);
-    render();
+    if (area !== "local") return;
+    if (changes.listingId || changes.listingCache || changes.token) {
+      void refresh();
+    }
   });
 
   window.addEventListener("popstate", () => {
@@ -373,26 +368,20 @@
 
   function onLocationMaybeChanged() {
     const show = onListingEditPage();
-    syncOverlayVisibility();
+    syncSidebarVisibility();
     if (!show) return;
-    if (!state) {
-      void refresh();
-      return;
-    }
-    render();
+    void refresh();
   }
 
-  // Mercari/Poshmark are SPAs — poll href so the overlay hides after leaving sell/edit.
+  // Mercari/Poshmark are SPAs — poll href so the sidebar hides after leaving sell/edit.
   window.setInterval(() => {
     if (location.href === lastHref) return;
     lastHref = location.href;
     onLocationMaybeChanged();
   }, 400);
 
-  syncOverlayVisibility();
-  void loadMinimizedPreference().then(() => {
-    if (onListingEditPage()) {
-      void refresh();
-    }
-  });
+  syncSidebarVisibility();
+  if (onListingEditPage()) {
+    void refresh();
+  }
 })();

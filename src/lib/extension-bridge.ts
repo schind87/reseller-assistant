@@ -27,6 +27,24 @@ export function requestExtensionPair(payload: ExtensionPairPayload): void {
   );
 }
 
+/** Listen for ack first, then post the pair message so the ack cannot be missed. */
+export async function pairExtensionWithListing(
+  payload: ExtensionPairPayload,
+  timeoutMs = 2000
+): Promise<{ ok: boolean; error?: string }> {
+  const pending = waitForExtensionPairAck(timeoutMs);
+  requestExtensionPair(payload);
+  const ack = await pending;
+  if (
+    ack.ok &&
+    ack.listingId &&
+    String(ack.listingId) !== String(payload.listingId)
+  ) {
+    return { ok: false, error: "Extension paired a different listing" };
+  }
+  return ack;
+}
+
 /** Ask the content-script bridge to announce itself. */
 export function pingExtensionBridge(): void {
   if (typeof window === "undefined") return;
@@ -63,7 +81,7 @@ export function readCachedExtensionPresent(): boolean | null {
 /** Wait briefly for the extension bridge to acknowledge pairing. */
 export function waitForExtensionPairAck(
   timeoutMs = 1500
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<{ ok: boolean; error?: string; listingId?: string }> {
   if (typeof window === "undefined") {
     return Promise.resolve({ ok: false, error: "No window" });
   }
@@ -85,6 +103,8 @@ export function waitForExtensionPairAck(
       resolve({
         ok: Boolean(data.ok),
         error: typeof data.error === "string" ? data.error : undefined,
+        listingId:
+          typeof data.listingId === "string" ? data.listingId : undefined,
       });
     }
 

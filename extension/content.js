@@ -19,7 +19,6 @@ const FIELD_KEYWORDS = {
 
 const HIGHLIGHT_STYLE_ID = "reseller-assistant-highlight-style";
 const HELPER_STYLE_ID = "reseller-assistant-helper-style";
-const HELPER_ROOT_ID = "reseller-assistant-field-helpers";
 
 function ensureHighlightStyle() {
   if (document.getElementById(HIGHLIGHT_STYLE_ID)) return;
@@ -40,21 +39,17 @@ function ensureHelperStyle() {
   const style = document.createElement("style");
   style.id = HELPER_STYLE_ID;
   style.textContent = `
-    #${HELPER_ROOT_ID} {
-      position: fixed;
-      inset: 0;
-      pointer-events: none;
-      z-index: 2147483645;
-    }
     .ra-field-helper {
-      pointer-events: auto;
-      position: fixed;
-      width: min(320px, calc(100vw - 24px));
+      display: block;
+      position: relative;
+      box-sizing: border-box;
+      width: 100%;
+      max-width: 100%;
+      margin: 0 0 10px;
       background: #fff;
       color: #1a1a1a;
       border: 2px solid #1f5c4a;
       border-radius: 12px;
-      box-shadow: 0 10px 28px rgba(0,0,0,0.18);
       padding: 10px 12px;
       font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
       font-size: 13px;
@@ -119,49 +114,88 @@ function ensureHelperStyle() {
   document.documentElement.appendChild(style);
 }
 
-function getHelperRoot() {
-  let root = document.getElementById(HELPER_ROOT_ID);
-  if (!root) {
-    root = document.createElement("div");
-    root.id = HELPER_ROOT_ID;
-    document.documentElement.appendChild(root);
+function isOurUi(node) {
+  if (!node || typeof node.closest !== "function") return false;
+  return Boolean(
+    node.closest("#reseller-assistant-page-coach") ||
+      node.closest(".ra-field-helper")
+  );
+}
+
+function disconnectHelper(helper) {
+  if (helper?._raObserver) {
+    helper._raObserver.disconnect();
+    helper._raObserver = null;
   }
-  return root;
 }
 
 function removeFieldHelpers(fieldKey) {
   const selector = fieldKey
     ? `.ra-field-helper[data-field="${CSS.escape(fieldKey)}"]`
     : ".ra-field-helper";
-  document.querySelectorAll(selector).forEach((node) => node.remove());
+  document.querySelectorAll(selector).forEach((node) => {
+    disconnectHelper(node);
+    node.remove();
+  });
 }
 
-function positionHelperNear(helper, el) {
-  const rect = el.getBoundingClientRect();
-  const width = Math.min(320, window.innerWidth - 24);
-  let left = Math.min(Math.max(12, rect.left), window.innerWidth - width - 12);
-  let top = rect.bottom + 8;
-
-  const others = Array.from(
-    document.querySelectorAll(".ra-field-helper")
-  ).filter((node) => node !== helper);
-  for (const other of others) {
-    const o = other.getBoundingClientRect();
-    if (Math.abs(o.left - left) < 48 && Math.abs(o.top - top) < 48) {
-      top = o.bottom + 8;
+function fieldRow(el) {
+  const labeled = el.closest("label");
+  if (labeled && labeled !== document.body) {
+    const inputs = labeled.querySelectorAll(
+      "input, textarea, select, [contenteditable='true']"
+    );
+    if (Array.from(inputs).filter((input) => !isOurUi(input)).length <= 2) {
+      return labeled;
     }
   }
 
-  helper.style.width = `${width}px`;
-  helper.style.left = `${left}px`;
-  helper.style.top = `${top}px`;
-  // Flip above if near bottom of viewport.
-  requestAnimationFrame(() => {
-    const h = helper.getBoundingClientRect().height;
-    if (top + h > window.innerHeight - 12) {
-      helper.style.top = `${Math.max(12, rect.top - h - 8)}px`;
+  const selectors = [
+    "[role='group']",
+    "[class*='form-group' i]",
+    "[class*='FormField' i]",
+    "[class*='form-field' i]",
+    "[class*='field-wrapper' i]",
+    "[class*='FieldWrapper' i]",
+    "[class*='listing-field' i]",
+    "li",
+  ];
+  for (const sel of selectors) {
+    const found = el.closest(sel);
+    if (!found || found === document.body || isOurUi(found)) continue;
+    const inputs = found.querySelectorAll(
+      "input, textarea, select, [contenteditable='true']"
+    );
+    const ours = Array.from(inputs).filter((input) => !isOurUi(input));
+    if (ours.length >= 1 && ours.length <= 3) return found;
+  }
+
+  return el.parentElement && el.parentElement !== document.body
+    ? el.parentElement
+    : el;
+}
+
+function placeHelperInPage(helper, el) {
+  const row = fieldRow(el);
+  if (helper.nextElementSibling === row && helper.parentNode === row.parentNode) {
+    return;
+  }
+  row.before(helper);
+}
+
+function keepHelperInPage(helper, el) {
+  let target = el;
+  const fieldKey = helper.dataset.field;
+  const observer = new MutationObserver(() => {
+    if (!document.contains(target)) {
+      const next = fieldKey ? findField(fieldKey, null) : null;
+      if (!next) return;
+      target = next;
     }
+    placeHelperInPage(helper, target);
   });
+  observer.observe(document.body, { childList: true, subtree: true });
+  helper._raObserver = observer;
 }
 
 function normalizeText(value) {
@@ -190,7 +224,7 @@ function isFillable(el) {
 function candidates() {
   return Array.from(
     document.querySelectorAll("input, textarea, select, [contenteditable='true']")
-  ).filter(isFillable);
+  ).filter((el) => isFillable(el) && !isOurUi(el));
 }
 
 function labelTextFor(el) {
@@ -359,6 +393,7 @@ function fillByClickingOption(value) {
   ).filter((node) => {
     if (!(node instanceof HTMLElement)) return false;
     if (node.closest("#reseller-assistant-page-coach")) return false;
+    if (node.closest(".ra-field-helper")) return false;
     const text = normalizeText(node.textContent || "");
     if (!text || text.length > 80) return false;
     return (
@@ -534,7 +569,10 @@ function handleShowAutocompleteHelper(payload) {
   close.className = "ra-field-helper-close";
   close.setAttribute("aria-label", "Dismiss");
   close.textContent = "×";
-  close.addEventListener("click", () => helper.remove());
+  close.addEventListener("click", () => {
+    disconnectHelper(helper);
+    helper.remove();
+  });
   head.append(title, close);
 
   const tipEl = document.createElement("p");
@@ -550,16 +588,16 @@ function handleShowAutocompleteHelper(payload) {
     chip.textContent = value;
     chip.title = "Copy and focus the field — then pick from suggestions";
     chip.addEventListener("click", () => {
+      const live = findField(fieldKey, null) || el;
       try {
-        el.focus();
+        live.focus();
       } catch {
         /* ignore */
       }
-      // Seed a few characters so autocomplete often opens; user still picks.
       try {
         const seed = value.slice(0, Math.min(value.length, 12));
-        setNativeValue(el, seed);
-        dispatchInputEvents(el);
+        setNativeValue(live, seed);
+        dispatchInputEvents(live);
       } catch {
         /* ignore */
       }
@@ -580,20 +618,8 @@ function handleShowAutocompleteHelper(payload) {
     "Tap a suggestion to copy it and focus the box, then choose the match from the site’s list.";
 
   helper.append(head, tipEl, chips, note);
-  getHelperRoot().appendChild(helper);
-  positionHelperNear(helper, el);
-
-  const onScrollOrResize = () => {
-    if (!helper.isConnected || !document.contains(el)) {
-      helper.remove();
-      window.removeEventListener("scroll", onScrollOrResize, true);
-      window.removeEventListener("resize", onScrollOrResize);
-      return;
-    }
-    positionHelperNear(helper, el);
-  };
-  window.addEventListener("scroll", onScrollOrResize, true);
-  window.addEventListener("resize", onScrollOrResize);
+  placeHelperInPage(helper, el);
+  keepHelperInPage(helper, el);
 
   return { ok: true, shown: true, fieldKey, values };
 }

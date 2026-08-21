@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Reseller Assistant",
-  "version": "0.5.7",
+  "version": "0.5.10",
   "description": "Autofill Mercari and Poshmark listing pages from Reseller Assistant.",
   "permissions": ["storage", "activeTab", "sidePanel", "tabs", "scripting"],
   "host_permissions": [

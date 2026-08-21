@@ -22,7 +22,7 @@ var RA_COACH_STEPS = [
   {
     key: "details",
     label: "Other details",
-    help: "Fill size, color, condition, and prices. Brand and style tags need a quick tap on the green tips — type, then pick from the site’s suggestions.",
+    help: "Fill size, color, condition, and prices. Brand and style tags get a tip in the form — type, then pick from the site’s suggestions.",
     actionLabel: "Fill the rest",
   },
   {
@@ -47,6 +47,9 @@ var RA_DETAIL_FIELDS = [
   "packageWeight",
   "shippingPayer",
 ];
+
+/** On-page listing helper width. Sell-page content is shifted left by this many pixels. */
+var RA_PAGE_SIDEBAR_WIDTH = 340;
 
 /** Fields that must be chosen from the site’s autocomplete (not pasted in). */
 var RA_AUTOCOMPLETE_FIELDS = {
@@ -135,6 +138,14 @@ function raPlatformFromUrl(url) {
   if (/poshmark/i.test(url)) return "poshmark";
   if (/mercari/i.test(url)) return "mercari";
   return null;
+}
+
+/** Use cached listing details only when they belong to the currently paired listing. */
+function raListingCacheForId(cached, listingId) {
+  if (!cached || typeof cached !== "object") return null;
+  var id = listingId == null ? "" : String(listingId);
+  if (!id) return null;
+  return String(cached.id || "") === id ? cached : null;
 }
 
 function raFieldValueFromListing(listing, fieldKey) {

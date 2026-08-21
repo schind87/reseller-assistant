@@ -23,22 +23,22 @@ If Chrome says it could not load `coach-shared.js` (or the manifest), the folder
 ## Easy posting flow
 
 1. Open a listing in the web app and tap **Open Mercari** / **Open Poshmark** (pairs the extension and opens the sell page in a new tab).
-2. Keep the listing tab open; on the **sell / create-listing** page use the green **Reseller Assistant** box (it stays hidden on other Mercari/Poshmark pages):
+2. Keep the listing tab open; on the **sell / create-listing** page the **Reseller Assistant** helper stays in a sidebar beside the form (it stays hidden on other Mercari/Poshmark pages):
    - **Do this for me** — photos, title, description, then other details
    - After a successful fill, it checks the page and moves to the next step
-   - On Poshmark, **brand** and **style tags** show a green tip instead of auto-fill — type and pick from the site’s suggestions
+   - On Poshmark, **brand** and **style tags** show a tip in the form above those fields — type and pick from the site’s suggestions
    - **Tweak listing fields** opens a large app editor popup (save there; closing refreshes the listing)
    - Use **Back** if you need to redo a step
 3. When it says to review, check the form and press **List / Publish** yourself.
 
-The side panel mirrors the same steps if you prefer tapping there.
+The Chrome side panel mirrors the same steps if you prefer tapping there.
 
 ## Pairing
 
 - Automatic when you open the marketplace from the listing hub
 - Or paste a join link / 6-digit code in the side panel
 
-Stored in `chrome.storage.local` as `{ appUrl, token, listingId, listingCache, stepIndex, pageCoachMinimized }`. Hiding the on-page helper (Hide) is remembered until you open it again from the green pill.
+Stored in `chrome.storage.local` as `{ appUrl, token, listingId, listingCache, stepIndex }`.
 
 ## Files
 
@@ -48,7 +48,7 @@ Stored in `chrome.storage.local` as `{ appUrl, token, listingId, listingCache, s
 | `coach-shared.js` | Shared step definitions |
 | `background.js` | Pairing, listing cache, coach actions |
 | `bridge.js` | Web app → extension pairing |
-| `page-coach.js` | On-page helper UI (shadow DOM) |
+| `page-coach.js` | On-page listing sidebar (shadow DOM) |
 | `content.js` | Field fill + photo attach |
 | `sidepanel.*` | Pairing + mirror of coach |
 

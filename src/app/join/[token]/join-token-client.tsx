@@ -4,8 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { BigButton } from "@/components/BigButton";
 import {
-  requestExtensionPair,
-  waitForExtensionPairAck,
+  pairExtensionWithListing,
 } from "@/lib/extension-bridge";
 
 export function JoinTokenClient() {
@@ -41,14 +40,12 @@ export function JoinTokenClient() {
           throw new Error(pairJson.error ?? "Could not pair extension");
         }
 
-        requestExtensionPair({
+        const ack = await pairExtensionWithListing({
           token: String(pairJson.token),
           listingId: String(pairJson.listingId),
           joinCode: pairJson.joinCode ?? null,
           openSidePanel: true,
         });
-
-        const ack = await waitForExtensionPairAck(2000);
         if (ack.ok) {
           setExtensionMessage(
             "Extension connected. Open the Reseller Assistant side panel to fill Mercari or Poshmark."

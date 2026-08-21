@@ -33,7 +33,7 @@
     if (!token || !listingId) return false;
 
     const appUrl = normalizeAppUrl(payload.appUrl || window.location.origin);
-    await chrome.runtime.sendMessage({
+    const result = await chrome.runtime.sendMessage({
       type: "applyPairing",
       appUrl,
       token,
@@ -41,6 +41,9 @@
       joinCode: payload.joinCode ? String(payload.joinCode) : null,
       openSidePanel: payload.openSidePanel !== false,
     });
+    if (!result?.ok) {
+      throw new Error(result?.error || "Pair failed");
+    }
     acknowledge({ listingId, appUrl });
     return true;
   }
