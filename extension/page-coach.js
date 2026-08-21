@@ -22,8 +22,9 @@
   host.style.top = "0";
   host.style.right = "0";
   host.style.bottom = "0";
-  host.style.width = `${SIDEBAR_WIDTH}px`;
-  host.style.height = "100%";
+  host.style.setProperty("width", `${SIDEBAR_WIDTH}px`, "important");
+  host.style.setProperty("height", "100vh", "important");
+  host.style.overflow = "hidden";
   host.style.fontFamily =
     '"Segoe UI", "Helvetica Neue", Arial, sans-serif';
   document.documentElement.appendChild(host);
@@ -84,12 +85,13 @@
   const shadow = host.attachShadow({ mode: "open" });
   shadow.innerHTML = `
     <style>
-      :host { all: initial; display: block; height: 100%; }
+      :host { display: block; width: 100%; height: 100%; }
       * { box-sizing: border-box; font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif; }
       .panel {
         display: flex;
         flex-direction: column;
         height: 100%;
+        max-height: 100vh;
         background: #f7f4ef;
         color: #1a1a1a;
         border-left: 2px solid #1f5c4a;
