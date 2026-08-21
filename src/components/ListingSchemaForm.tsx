@@ -188,7 +188,7 @@ export function ListingSchemaForm({
           value={description}
           maxLength={field.maxLength}
           onChange={(e) => onDescriptionChange(e.target.value)}
-          rows={5}
+          rows={20}
           placeholder={field.placeholder}
           className={`${controlClass} min-h-0 py-2 leading-snug`}
         />
