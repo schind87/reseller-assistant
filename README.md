@@ -4,7 +4,7 @@ Easy coach for listing clothing on **Mercari** and **Poshmark**.
 
 Phone takes guided photos → laptop reviews the AI draft → checklist (or Chrome extension) helps you post.
 
-Live app: **https://reseller-assistant.vercel.app** (custom domain **https://reseller.mvfeed.us** once DNS is set)
+Live app: **https://reseller.mvfeed.us**
 
 ## Stack
 
@@ -42,8 +42,8 @@ Open [http://localhost:3000](http://localhost:3000) → email code sign-in (or e
 | `NEXT_PUBLIC_SUPABASE_URL` | yes | Supabase project URL |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | yes | Publishable/anon key |
 | `SUPABASE_SERVICE_ROLE_KEY` | no* | Prefer service role in production |
-| `SESSION_SECRET` | yes | Signs temporary QR phone-join cookies |
-| `NEXT_PUBLIC_APP_URL` | yes | Canonical URL for redirects |
+| `SESSION_SECRET` | yes in production | Signs seller session JWTs (`ra_session`, ~30 days) and QR phone-join cookies. Keep stable; rotating it signs everyone out. Do not reuse the Supabase anon key. |
+| `NEXT_PUBLIC_APP_URL` | yes | Canonical public URL (`https://reseller.mvfeed.us` in production) |
 | `OPENROUTER_API_KEY` | no | Preferred AI key (Gemini identify + GPT draft via OpenRouter) |
 | `OPENROUTER_IDENTIFY_MODEL` | no | Default `google/gemini-2.5-pro` |
 | `OPENROUTER_DRAFT_MODEL` | no | Default `openai/gpt-4o` |
@@ -54,9 +54,9 @@ Open [http://localhost:3000](http://localhost:3000) → email code sign-in (or e
 
 ## Domain
 
-Production custom domain: **https://reseller.mvfeed.us**
+Canonical production URL: **https://reseller.mvfeed.us**
 
-Until DNS propagates, use **https://reseller-assistant.vercel.app**. QR join links use the hostname you are currently on.
+Stable Vercel production aliases (`reseller-assistant.vercel.app` and the project/git-main `*.vercel.app` aliases) redirect there. Unique preview/deployment URLs are not redirected, so they stay usable for testing. QR and join links use the hostname of the current request, which is the canonical host for normal production traffic.
 
 ### Cloudflare DNS
 

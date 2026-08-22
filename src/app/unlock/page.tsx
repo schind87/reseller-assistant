@@ -1,7 +1,20 @@
 import { Suspense } from "react";
+import { redirect } from "next/navigation";
+import { safeInternalPath } from "@/lib/safe-internal-path";
+import { getSessionFromCookies, isUserSession } from "@/lib/session";
 import { UnlockForm } from "./unlock-form";
 
-export default function UnlockPage() {
+type PageProps = {
+  searchParams: Promise<{ next?: string | string[] }>;
+};
+
+export default async function UnlockPage({ searchParams }: PageProps) {
+  const session = await getSessionFromCookies();
+  if (isUserSession(session)) {
+    const params = await searchParams;
+    redirect(safeInternalPath(params.next));
+  }
+
   return (
     <Suspense
       fallback={

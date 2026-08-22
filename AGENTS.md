@@ -61,6 +61,8 @@ SESSION_SECRET=<any long random string>
 NEXT_PUBLIC_APP_URL=http://localhost:3000
 ```
 
+`SESSION_SECRET` is required in production. It signs seller session JWTs (`ra_session`) and QR join cookies. Keep it stable; do not fall back to the Supabase anon key in production. Local/preview may still run without it.
+
 Non-obvious gotchas:
 - The committed migrations alone did **not** provision `profiles`, `login_otps`,
   or `listings.user_id` (they were created outside migrations on the hosted

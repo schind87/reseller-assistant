@@ -14,13 +14,17 @@ export async function GET() {
     }
 
     const join = await getSessionFromCookies();
+    const joinOnly = isUnlocked(join) && join?.kind === "join";
     return NextResponse.json({
       unlocked: isUnlocked(join),
       signedIn: false,
-      joinOnly: isUnlocked(join) && join?.kind === "join",
+      joinOnly,
     });
   } catch (err) {
     console.error("auth status error:", err);
-    return NextResponse.json({ unlocked: false, signedIn: false });
+    return NextResponse.json(
+      { error: "Could not check sign-in" },
+      { status: 500 }
+    );
   }
 }

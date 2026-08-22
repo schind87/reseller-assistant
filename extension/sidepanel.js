@@ -3,6 +3,7 @@
 const DEFAULT_APP_URL = "https://reseller.mvfeed.us";
 const APP_URL_CANDIDATES = [
   "https://reseller.mvfeed.us",
+  // Stable production alias; the app 308s this host to the canonical URL.
   "https://reseller-assistant.vercel.app",
   "http://localhost:3000",
 ];

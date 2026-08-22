@@ -3,9 +3,31 @@ import { cookies } from "next/headers";
 import type { NextRequest } from "next/server";
 
 export const SESSION_COOKIE = "ra_session";
-const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 30; // 30 days
+export const USER_SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 30; // 30 days
 const JOIN_COOKIE = "ra_join";
 const JOIN_MAX_AGE_SECONDS = 60 * 60 * 12;
+
+type SessionCookieOptions = {
+  httpOnly: true;
+  secure: boolean;
+  sameSite: "lax";
+  path: "/";
+  maxAge: number;
+};
+
+function sessionCookieBaseOptions(maxAge: number): SessionCookieOptions {
+  return {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    path: "/",
+    maxAge,
+  };
+}
+
+export function userSessionCookieOptions(): SessionCookieOptions {
+  return sessionCookieBaseOptions(USER_SESSION_MAX_AGE_SECONDS);
+}
 
 export type AuthSessionPayload = {
   kind: "user";
@@ -22,12 +44,26 @@ export type JoinSessionPayload = {
 
 export type SessionPayload = AuthSessionPayload | JoinSessionPayload;
 
+function dedicatedSessionSecretRequired(): boolean {
+  if (process.env.VERCEL_ENV === "preview") return false;
+  if (process.env.VERCEL_ENV === "development") return false;
+  if (process.env.VERCEL_ENV === "production") return true;
+  return process.env.NODE_ENV === "production";
+}
+
 function getSecretKey(): Uint8Array {
-  const secret =
-    process.env.SESSION_SECRET ||
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
-    "dev-only-insecure-secret";
-  return new TextEncoder().encode(secret);
+  const dedicated = process.env.SESSION_SECRET;
+  if (dedicated) {
+    return new TextEncoder().encode(dedicated);
+  }
+  if (dedicatedSessionSecretRequired()) {
+    throw new Error(
+      "SESSION_SECRET is required to sign and verify seller sessions in production"
+    );
+  }
+  const localFallback =
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "dev-only-insecure-secret";
+  return new TextEncoder().encode(localFallback);
 }
 
 export async function signUserSession(payload: {
@@ -62,8 +98,9 @@ export async function signJoinToken(listingId?: string): Promise<string> {
 export async function verifySessionToken(
   token: string
 ): Promise<SessionPayload | null> {
+  const secretKey = getSecretKey();
   try {
-    const { payload } = await jwtVerify(token, getSecretKey());
+    const { payload } = await jwtVerify(token, secretKey);
     if (payload.kind === "user" && typeof payload.userId === "string") {
       return {
         kind: "user",
@@ -97,36 +134,20 @@ export async function createUserSessionCookie(payload: {
 }): Promise<void> {
   const token = await signUserSession(payload);
   const cookieStore = await cookies();
-  cookieStore.set(SESSION_COOKIE, token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    path: "/",
-    maxAge: SESSION_MAX_AGE_SECONDS,
-  });
+  cookieStore.set(SESSION_COOKIE, token, userSessionCookieOptions());
 }
 
 export async function createSessionCookie(listingId?: string): Promise<void> {
   const token = await signJoinToken(listingId);
   const cookieStore = await cookies();
-  cookieStore.set(JOIN_COOKIE, token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    path: "/",
-    maxAge: JOIN_MAX_AGE_SECONDS,
-  });
+  cookieStore.set(JOIN_COOKIE, token, sessionCookieBaseOptions(JOIN_MAX_AGE_SECONDS));
 }
 
 export async function clearSessionCookie(): Promise<void> {
   const cookieStore = await cookies();
   for (const name of [SESSION_COOKIE, JOIN_COOKIE]) {
     cookieStore.set(name, "", {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      path: "/",
-      maxAge: 0,
+      ...sessionCookieBaseOptions(0),
     });
   }
 }

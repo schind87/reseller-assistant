@@ -17,7 +17,7 @@ export function missingAiProviderMessage(): string {
 function appReferer(): string {
   return (
     process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") ||
-    "https://reseller-assistant.vercel.app"
+    "https://reseller.mvfeed.us"
   );
 }
 

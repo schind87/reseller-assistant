@@ -1,6 +1,7 @@
 import { randomBytes } from "crypto";
 import { v4 as uuidv4 } from "uuid";
 import { getProfileById } from "@/lib/auth/otp";
+import { CANONICAL_PRODUCTION_ORIGIN } from "@/lib/canonical-host";
 import { bakeExifOrientation } from "@/lib/image-orient";
 import { composeSmokePetNotes } from "@/lib/seller-preferences";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -937,16 +938,17 @@ export async function markPosted(id: string): Promise<Listing> {
 }
 
 export function appUrl(path = "", origin?: string | null): string {
-  const base = (
-    origin ||
+  const fallback =
     process.env.NEXT_PUBLIC_APP_URL ||
-    "http://localhost:3000"
-  ).replace(/\/$/, "");
+    (process.env.NODE_ENV === "production"
+      ? CANONICAL_PRODUCTION_ORIGIN
+      : "http://localhost:3000");
+  const base = (origin || fallback).replace(/\/$/, "");
   if (!path) return base;
   return `${base}${path.startsWith("/") ? path : `/${path}`}`;
 }
 
-/** Prefer the browser Origin header so QR links work on vercel.app before custom DNS. */
+/** Prefer the request host so preview/deployment URLs keep working. Production aliases redirect to reseller.mvfeed.us first. */
 export function requestOrigin(request: Request): string | null {
   const origin = request.headers.get("origin");
   if (origin) return origin;

@@ -3,6 +3,7 @@
 import { useCallback, useState, useSyncExternalStore, type FormEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { BigButton } from "@/components/BigButton";
+import { safeInternalPath } from "@/lib/safe-internal-path";
 
 const REMEMBER_EMAIL_KEY = "ra-remember-email";
 
@@ -60,8 +61,7 @@ export function UnlockForm() {
 
   function goApp() {
     persistEmailPreference(displayEmail, displayRemember);
-    const next = searchParams.get("next") || "/app";
-    router.replace(next.startsWith("/") ? next : "/app");
+    router.replace(safeInternalPath(searchParams.get("next")));
     router.refresh();
   }
 

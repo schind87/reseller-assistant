@@ -1,14 +1,36 @@
 import { NextResponse, type NextRequest } from "next/server";
 import {
+  CANONICAL_PRODUCTION_HOST,
+  hostnameOf,
+  shouldRedirectToCanonicalHost,
+} from "@/lib/canonical-host";
+import {
   getSessionFromRequest,
   isUnlocked,
   isUserSession,
 } from "@/lib/session";
 
+function redirectToCanonicalHost(request: NextRequest): NextResponse | null {
+  const hostname = hostnameOf(
+    request.headers.get("x-forwarded-host") ||
+      request.headers.get("host") ||
+      request.nextUrl.hostname
+  );
+  if (!shouldRedirectToCanonicalHost(hostname)) return null;
+  const url = request.nextUrl.clone();
+  url.protocol = "https:";
+  url.hostname = CANONICAL_PRODUCTION_HOST;
+  url.port = "";
+  return NextResponse.redirect(url, 308);
+}
+
 /**
  * Gate /app/* behind signed-in user session; allow QR join for listing photo paths.
  */
 export async function proxy(request: NextRequest) {
+  const canonical = redirectToCanonicalHost(request);
+  if (canonical) return canonical;
+
   const { pathname } = request.nextUrl;
 
   const isPublic =
