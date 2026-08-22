@@ -22,6 +22,7 @@ type ListingTweakDialogProps = {
   rewritingDescription?: boolean;
   descriptionAiDisabled?: boolean;
   descriptionAiWritten?: boolean;
+  fieldsDisabled?: boolean;
   saving?: boolean;
   draftDirty?: boolean;
   footerExtra?: ReactNode;
@@ -44,6 +45,7 @@ export function ListingTweakDialog({
   rewritingDescription = false,
   descriptionAiDisabled = false,
   descriptionAiWritten = false,
+  fieldsDisabled = false,
   saving = false,
   draftDirty = false,
   footerExtra,
@@ -110,13 +112,14 @@ export function ListingTweakDialog({
             rewritingDescription={rewritingDescription}
             descriptionAiDisabled={descriptionAiDisabled || saving}
             descriptionAiWritten={descriptionAiWritten}
+            fieldsDisabled={fieldsDisabled}
             onSubmit={onSubmit}
             footer={
               <div className="sticky bottom-0 -mx-1 flex flex-col gap-3 border-t border-[var(--border)] bg-[var(--surface)] px-1 pt-4">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
                   <button
                     type="submit"
-                    disabled={saving || rewritingDescription}
+                    disabled={saving || rewritingDescription || fieldsDisabled}
                     className="touch-target rounded-xl bg-[var(--accent)] px-5 text-base font-semibold text-white disabled:opacity-60"
                   >
                     {saving

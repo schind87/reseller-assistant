@@ -52,7 +52,9 @@ Do not invent a second word for a listed concept. Code identifiers may differ (e
 
 `ListingStatus`: `drafting_photos`, `processing`, `ready`, `posting`, `posted`.
 
-**Uncertain:** UI currently displays `status.replaceAll("_", " ")` (e.g. “drafting photos”). There is no accepted pretty-name map. Do not invent badge labels like “In review” without recording a decision.
+Seller-facing job states (not raw status slugs): Needs photos, Review draft, Ready to post, Post not confirmed (`posting`), Posted. **Mark as posted** is the action for `Post not confirmed`, not a state label.
+
+Untitled home rows use `{Platform} draft` as the title and the job state alone as the subtitle so the marketplace is not repeated.
 
 ## Navigation and screen titles
 
@@ -71,7 +73,7 @@ Do not invent a second word for a listed concept. Code identifiers may differ (e
 
 ## Actions (established)
 
-Create new listing; Sign in; Sign in with PIN; Send me an email code; Save seller profile; Save my PIN; Set PIN / Change PIN; Fill listing fields with AI; Write description with AI / Rewrite description with AI; Open {Mercari\|Poshmark}; Delete; Close; Done; Copy / Copied; Retry QR join; Retry pairing; Take {role} photo; Add photos on this computer instead.
+Create new listing; Sign in; Sign in with PIN; Send me an email code; Save seller profile; Save my PIN; Set PIN / Change PIN; Fill listing fields with AI; Write description with AI / Rewrite description with AI; Open {Mercari\|Poshmark}; Mark as posted; Clean background; Delete; Close; Done; Copy / Copied; Retry QR join; Retry pairing; Take {role} photo; Add photos on this computer instead.
 
 ## Photo aspect (shopper-facing)
 

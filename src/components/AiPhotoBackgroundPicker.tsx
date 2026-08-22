@@ -201,7 +201,7 @@ export function AiPhotoBackgroundPicker({
       className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center"
       role="dialog"
       aria-modal="true"
-      aria-label="Choose AI photo result"
+      aria-label="Choose a cleaned photo"
       onClick={onClose}
     >
       <div
@@ -211,7 +211,7 @@ export function AiPhotoBackgroundPicker({
         <div className="flex items-start justify-between gap-3 border-b border-[var(--border)] px-4 py-3">
           <div>
             <h2 className="text-lg font-semibold text-[var(--foreground)]">
-              AI photo results
+              Cleaned photo results
             </h2>
             <p className="mt-0.5 text-sm text-[var(--muted)]">
               Pick a result for this photo crop. Hold Compare to see the
@@ -238,7 +238,7 @@ export function AiPhotoBackgroundPicker({
             <p className="text-sm text-[var(--muted)]">Loading results…</p>
           ) : results.length === 0 ? (
             <p className="text-sm text-[var(--muted)]">
-              No AI results for this crop yet.
+              No cleaned photos for this crop yet.
             </p>
           ) : (
             <ul className="grid gap-3 sm:grid-cols-2">
@@ -318,11 +318,11 @@ export function AiPhotoBackgroundPicker({
               onClick={onRunNew}
               className="rounded-lg border border-[var(--accent)] bg-[var(--accent-soft)] px-3 py-2 text-sm font-semibold text-[var(--accent)] disabled:opacity-50"
             >
-              Run AI again
+              Clean again
             </button>
           ) : photo.processed_path ? (
             <p className="text-sm text-[var(--muted)]">
-              To create a new AI version, crop the photo first.
+              To clean again, crop the photo first.
             </p>
           ) : null}
         </div>

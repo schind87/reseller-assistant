@@ -36,10 +36,12 @@ type ListingSchemaFormProps = {
   descriptionAiDisabled?: boolean;
   /** True after AI has written the description at least once this session / listing. */
   descriptionAiWritten?: boolean;
+  /** Lock listing fields (and description) while Fill listing fields with AI is running. */
+  fieldsDisabled?: boolean;
 };
 
 const controlClass =
-  "min-h-10 w-full rounded-lg border border-[var(--border)] bg-white px-3 py-2 text-base text-[var(--foreground)]";
+  "min-h-10 w-full rounded-lg border border-[var(--border)] bg-white px-3 py-2 text-base text-[var(--foreground)] disabled:cursor-not-allowed disabled:bg-[var(--surface-muted)] disabled:opacity-60";
 
 const STYLE_TAG_MAX = 3;
 
@@ -113,6 +115,7 @@ export function ListingSchemaForm({
   rewritingDescription = false,
   descriptionAiDisabled = false,
   descriptionAiWritten = false,
+  fieldsDisabled = false,
 }: ListingSchemaFormProps) {
   const fieldNodes = useMemo(() => schema.fields, [schema.fields]);
   const otherFields = useMemo(
@@ -167,6 +170,7 @@ export function ListingSchemaForm({
           onChange={(e) => onDescriptionChange(e.target.value)}
           rows={20}
           placeholder={field.placeholder}
+          disabled={fieldsDisabled || rewritingDescription}
           className={`${controlClass} min-h-0 py-2 leading-snug`}
         />
       </Field>
@@ -222,6 +226,7 @@ export function ListingSchemaForm({
           selected={selected}
           max={STYLE_TAG_MAX}
           hint={field.hint}
+          disabled={fieldsDisabled}
           onChange={(next) =>
             onFieldsChange(writeStructuredTags(fields, key, next))
           }
@@ -279,13 +284,13 @@ export function ListingSchemaForm({
         <Field key={field.id} label={label} hint={field.hint}>
           <select
             value={value}
-            disabled={!fields.category || options.length === 0}
+            disabled={!fields.category || options.length === 0 || fieldsDisabled}
             onChange={(e) =>
               onFieldsChange(
                 writeStructured(fields, key, e.target.value, "select")
               )
             }
-            className={`${controlClass} disabled:opacity-50`}
+            className={controlClass}
           >
             <option value="">
               {!fields.category
@@ -377,9 +382,20 @@ export function ListingSchemaForm({
 
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-3">
-      <div className="grid gap-3 sm:grid-cols-2">
-        {otherFields.map((field) => renderField(field))}
-      </div>
+      <fieldset
+        disabled={fieldsDisabled}
+        aria-busy={fieldsDisabled || undefined}
+        className="min-w-0 border-0 p-0"
+      >
+        <legend className="sr-only">
+          {fieldsDisabled
+            ? "Listing fields locked while AI fills them"
+            : "Listing fields"}
+        </legend>
+        <div className="grid gap-3 sm:grid-cols-2">
+          {otherFields.map((field) => renderField(field))}
+        </div>
+      </fieldset>
 
       {onRewriteDescription && descriptionField ? (
         <BigButton
@@ -415,12 +431,14 @@ function StyleTagsPicker({
   selected,
   max,
   hint,
+  disabled = false,
   onChange,
 }: {
   options: string[];
   selected: string[];
   max: number;
   hint?: string;
+  disabled?: boolean;
   onChange: (next: string[]) => void;
 }) {
   const [query, setQuery] = useState("");
@@ -445,7 +463,7 @@ function StyleTagsPicker({
   }, [options, query, selectedSet]);
 
   const showDropdown =
-    open && query.trim().length > 0 && selected.length < max;
+    !disabled && open && query.trim().length > 0 && selected.length < max;
 
   function clearBlurTimer() {
     if (blurTimer.current != null) {
@@ -502,8 +520,9 @@ function StyleTagsPicker({
             <button
               key={tag}
               type="button"
+              disabled={disabled}
               onClick={() => removeTag(tag)}
-              className="inline-flex items-center gap-1 rounded-md border border-[var(--border)] bg-[var(--surface-muted)] px-2 py-1 text-sm font-medium text-[var(--foreground)]"
+              className="inline-flex items-center gap-1 rounded-md border border-[var(--border)] bg-[var(--surface-muted)] px-2 py-1 text-sm font-medium text-[var(--foreground)] disabled:cursor-not-allowed disabled:opacity-60"
             >
               {tag}
               <span aria-hidden className="text-[var(--muted)]">
@@ -518,7 +537,7 @@ function StyleTagsPicker({
         <input
           type="text"
           value={query}
-          disabled={selected.length >= max}
+          disabled={disabled || selected.length >= max}
           onChange={(e) => {
             setQuery(e.target.value);
             setOpen(true);
@@ -538,7 +557,7 @@ function StyleTagsPicker({
               ? `Maximum ${max} tags`
               : "Type to find a Poshmark style tag…"
           }
-          className={`${controlClass} disabled:opacity-60`}
+          className={controlClass}
           autoComplete="off"
           role="combobox"
           aria-expanded={showDropdown}

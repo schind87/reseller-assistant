@@ -326,7 +326,8 @@ export function AppHome({
                             status: listing.status,
                             title: listing.title,
                             hasListingPhoto: listing.hasListingPhoto,
-                          })
+                          }),
+                          Boolean(listing.title?.trim())
                         )}
                       </p>
                     </span>

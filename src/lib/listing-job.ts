@@ -30,7 +30,7 @@ export function listingJobStepLabel(step: ListingJobStep): string {
     case "open_marketplace":
       return "Ready to post";
     case "mark_posted":
-      return "Mark as posted";
+      return "Post not confirmed";
     case "posted":
       return "Posted";
     default: {
@@ -64,9 +64,12 @@ export function listingJobActionLabel(
 
 export function listingListSubtitle(
   platform: Platform,
-  step: ListingJobStep
+  step: ListingJobStep,
+  titled: boolean
 ): string {
-  return `${PLATFORM_LABELS[platform]} · ${listingJobStepLabel(step)}`;
+  const state = listingJobStepLabel(step);
+  if (!titled) return state;
+  return `${PLATFORM_LABELS[platform]} · ${state}`;
 }
 
 export function listingJobBusyLabel(

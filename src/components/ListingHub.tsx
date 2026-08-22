@@ -1560,14 +1560,22 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
               <PhotoGroup
                 title="Photos shoppers will see"
                 photos={listingPhotos}
-                empty={
-                  platform === "poshmark"
-                    ? "No listing photos yet — start with a cover shot."
-                    : "No listing photos yet — start with a cover photo."
+                addLabel={
+                  listingPhotos.length === 0
+                    ? platform === "poshmark"
+                      ? "+ Cover shot"
+                      : "+ Cover photo"
+                    : "+ Add"
                 }
                 section="listing"
                 photoAspect={PLATFORM_PHOTO_ASPECT[platform]}
-                onAdd={() => setPickListingRole(true)}
+                onAdd={() => {
+                  if (listingPhotos.length === 0) {
+                    pickFilesForRole("cover");
+                    return;
+                  }
+                  setPickListingRole(true);
+                }}
                 onDelete={(photoId) => void deletePhoto(photoId)}
                 onToggleCleanBackground={(photo) =>
                   void handleAiBackgroundClick(photo)
@@ -1689,7 +1697,6 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
                 <PhotoGroup
                   title="Identification photos"
                   photos={identifyPhotos}
-                  empty="Drop brand and care tag photos here."
                   section="identify"
                   photoAspect={PLATFORM_PHOTO_ASPECT[platform]}
                   onAdd={() => pickFilesForRole("id_tag")}
@@ -1745,7 +1752,11 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
                 <AiGlyph className="h-3.5 w-3.5 text-white" />
               ) : null}
             </BigButton>
-            {!canFillFieldsWithAi ? (
+            {processing ? (
+              <p className="text-sm text-[var(--muted)]" role="status">
+                Listing fields are locked until this finishes.
+              </p>
+            ) : !canFillFieldsWithAi ? (
               <p className="text-sm text-[var(--muted)]">
                 Needs at least one photo first.
               </p>
@@ -1778,6 +1789,7 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
                 rewritingDescription={rewritingDescription}
                 descriptionAiDisabled={processing || saving}
                 descriptionAiWritten={descriptionAiWritten}
+                fieldsDisabled={processing}
                 onSubmit={(e) => void saveDraft(e)}
                 footer={
                   <div className="flex flex-col gap-3 pt-1">
@@ -1834,7 +1846,7 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
               compact
               value={joinUrl}
               title="Phone Companion"
-              hint="Scan with your phone. This QR stays valid."
+              hint="Scan with your phone"
               code={listing.join_code}
             />
           ) : (
@@ -2009,6 +2021,7 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
           rewritingDescription={rewritingDescription}
           descriptionAiDisabled={processing || saving}
           descriptionAiWritten={descriptionAiWritten}
+          fieldsDisabled={processing}
           saving={saving}
           draftDirty={draftDirty}
           onSubmit={(e) => void saveDraft(e)}
@@ -2038,6 +2051,7 @@ function PhotoGroup({
   description,
   photos,
   empty,
+  addLabel = "+ Add",
   section,
   photoAspect,
   onAdd,
@@ -2068,7 +2082,8 @@ function PhotoGroup({
   badge?: string;
   description?: string;
   photos: ListingPhotoWithUrl[];
-  empty: string;
+  empty?: string;
+  addLabel?: string;
   section: PhotoSection;
   photoAspect: PhotoAspectGuide;
   onAdd: () => void;
@@ -2210,18 +2225,16 @@ function PhotoGroup({
               {description}
             </p>
           ) : null}
-          {!uploading ? (
+          {moveArmed && !uploading ? (
             <p className="text-xs text-[var(--muted)]">
-              {moveArmed
-                ? "Tap or drop here to move the photo"
-                : "Drop to add · drag to reorder · tap to open"}
+              Tap or drop here to move the photo
             </p>
           ) : null}
         </div>
       ) : description && !uploading ? (
         <p className="mb-2 text-xs text-[var(--muted)]">{description}</p>
       ) : null}
-      {photos.length === 0 && !uploading ? (
+      {photos.length === 0 && !uploading && empty ? (
         <p className="text-sm text-[var(--muted)]">{empty}</p>
       ) : photos.length > 0 || uploading ? (
         <ul className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
@@ -2287,7 +2300,7 @@ function PhotoGroup({
                 aspectRatio: `${photoAspect.width} / ${photoAspect.height}`,
               }}
             >
-              + Add
+              {addLabel}
             </button>
           </li>
         </ul>
@@ -2302,7 +2315,7 @@ function PhotoGroup({
           }}
           className="mt-3 flex min-h-28 w-full flex-col items-center justify-center rounded-xl border-2 border-dashed border-[var(--border)] bg-white text-base font-semibold text-[var(--accent)] hover:border-[var(--accent)] disabled:opacity-50"
         >
-          + Add
+          {addLabel}
         </button>
       ) : null}
       {/* section id kept for debugging / a11y context */}
@@ -2585,7 +2598,7 @@ function PhotoTile({
             {photo.processed_path && onSetAiBackground ? (
               <div
                 role="group"
-                aria-label="Original or AI photo"
+                aria-label="Original or cleaned photo"
                 className="inline-flex h-8 shrink-0 overflow-hidden rounded-md border border-[var(--border)]"
               >
                 <button
@@ -2596,8 +2609,8 @@ function PhotoTile({
                     if (photo.replace_background) onSetAiBackground(false);
                   }}
                   aria-pressed={!photo.replace_background}
-                  aria-label="Show original photo"
-                  title="Show original photo"
+                  aria-label="Show original"
+                  title="Show original"
                   className={`inline-flex h-8 w-8 items-center justify-center transition disabled:opacity-50 ${
                     !photo.replace_background
                       ? "bg-[var(--foreground)] text-white"
@@ -2614,8 +2627,8 @@ function PhotoTile({
                     if (!photo.replace_background) onSetAiBackground(true);
                   }}
                   aria-pressed={Boolean(photo.replace_background)}
-                  aria-label="Show AI background"
-                  title="Show AI background"
+                  aria-label="Show cleaned"
+                  title="Show cleaned"
                   className={`inline-flex h-8 w-8 items-center justify-center border-l border-[var(--border)] transition disabled:opacity-50 ${
                     photo.replace_background
                       ? "bg-[var(--accent)] text-white"
@@ -2638,7 +2651,7 @@ function PhotoTile({
                 className="inline-flex h-8 shrink-0 items-center gap-1 rounded-md border border-[var(--border)] px-2 text-sm font-semibold text-[var(--foreground)] transition hover:bg-[var(--surface-muted)] disabled:opacity-50"
               >
                 <AiGlyph className="h-3.5 w-3.5" />
-                {cleaningBg ? "AI…" : "AI"}
+                {cleaningBg ? "Cleaning…" : "Clean"}
               </button>
             ) : null}
             {onCrop ? (

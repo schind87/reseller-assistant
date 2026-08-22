@@ -108,7 +108,7 @@ function PhotosPageInner() {
         {joinUrl ? (
           <QrPanel
             value={joinUrl}
-            hint="Scan with your phone. This QR stays valid."
+            hint="Scan with your phone"
             code={listing.join_code}
           />
         ) : (
