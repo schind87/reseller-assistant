@@ -66,7 +66,7 @@ Sign-in, PIN setup, seller preferences, listing schema fields, or any new `<form
 ## Bad patterns
 
 - Autocomplete off on email/PIN without a reason.
-- Mixing `BigButton` primary with a second equally-weighted primary on the same step without an “or” separator (unlock does use a muted “— or —” between PIN and email code — keep that hierarchy).
+- Mixing `BigButton` primary with a second equally-weighted primary on the same step. Unlock shows one primary (`Send me an email code` or `Sign in with PIN`); email-code recovery uses `BigButton` `ghost`.
 
 ## Coverage gaps
 

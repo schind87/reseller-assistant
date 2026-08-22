@@ -3,137 +3,153 @@
 import { useCallback, useState, useSyncExternalStore, type FormEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { BigButton } from "@/components/BigButton";
+import {
+  clearRememberedIdentity,
+  getRememberedIdentitySnapshot,
+  parseRememberedIdentity,
+  readRememberedIdentity,
+  rememberedHasPinForEmail,
+  saveRememberedIdentity,
+  subscribeRememberedIdentity,
+} from "@/lib/remembered-identity";
 import { safeInternalPath } from "@/lib/safe-internal-path";
 
-const REMEMBER_EMAIL_KEY = "ra-remember-email";
-
-function readRememberedEmail(): string {
-  try {
-    return window.localStorage.getItem(REMEMBER_EMAIL_KEY) ?? "";
-  } catch {
-    return "";
-  }
-}
-
-function subscribeRememberedEmail(onStoreChange: () => void) {
-  window.addEventListener("storage", onStoreChange);
-  return () => window.removeEventListener("storage", onStoreChange);
-}
+type BusyAction = "pin" | "send" | "verify" | null;
 
 export function UnlockForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const rememberedEmail = useSyncExternalStore(
-    subscribeRememberedEmail,
-    readRememberedEmail,
+  const rememberedRaw = useSyncExternalStore(
+    subscribeRememberedIdentity,
+    getRememberedIdentitySnapshot,
     () => ""
   );
-  const [email, setEmail] = useState("");
-  const [emailTouched, setEmailTouched] = useState(false);
-  const [rememberEmail, setRememberEmail] = useState(false);
-  const [rememberTouched, setRememberTouched] = useState(false);
+  const remembered = parseRememberedIdentity(rememberedRaw);
+  const [typedEmail, setTypedEmail] = useState<string | null>(null);
+  const [rememberOverride, setRememberOverride] = useState<boolean | null>(
+    null
+  );
   const [pin, setPin] = useState("");
   const [code, setCode] = useState("");
   const [codeSent, setCodeSent] = useState(false);
   const [hint, setHint] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState<BusyAction>(null);
 
-  const displayEmail = emailTouched ? email : rememberedEmail || email;
-  const displayRemember =
-    rememberTouched ? rememberEmail : Boolean(rememberedEmail);
+  const email = typedEmail ?? remembered?.email ?? "";
+  const rememberEmail = rememberOverride ?? Boolean(remembered);
+  const knownPin = rememberedHasPinForEmail(remembered, email);
+  const showPin = knownPin && !codeSent;
 
-  const persistEmailPreference = useCallback(
-    (nextEmail: string, remember: boolean) => {
-      try {
-        if (remember && nextEmail.includes("@")) {
-          window.localStorage.setItem(REMEMBER_EMAIL_KEY, nextEmail.trim());
-        } else {
-          window.localStorage.removeItem(REMEMBER_EMAIL_KEY);
-        }
-        window.dispatchEvent(new Event("storage"));
-      } catch {
-        // ignore storage failures
+  const persistIdentity = useCallback(
+    (nextEmail: string, remember: boolean, hasPin?: boolean) => {
+      if (!remember) {
+        clearRememberedIdentity();
+        return;
       }
+      const existing = readRememberedIdentity();
+      const nextHasPin =
+        typeof hasPin === "boolean"
+          ? hasPin
+          : Boolean(
+              existing &&
+                rememberedHasPinForEmail(existing, nextEmail)
+            );
+      saveRememberedIdentity(nextEmail, nextHasPin);
     },
     []
   );
 
   function goApp() {
-    persistEmailPreference(displayEmail, displayRemember);
     router.replace(safeInternalPath(searchParams.get("next")));
     router.refresh();
   }
 
   async function sendCode() {
-    setBusy(true);
+    setBusy("send");
     setError(null);
     try {
-      persistEmailPreference(displayEmail, displayRemember);
+      persistIdentity(email, rememberEmail);
       const res = await fetch("/api/auth/otp/start", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: displayEmail }),
+        body: JSON.stringify({ email }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "Could not send code");
       setHint(json.message ?? "Check your email for a sign-in code.");
       setCodeSent(true);
       setCode("");
+      setPin("");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not send code");
     } finally {
-      setBusy(false);
+      setBusy(null);
     }
   }
 
   async function verifyCode() {
-    setBusy(true);
+    setBusy("verify");
     setError(null);
     try {
       const res = await fetch("/api/auth/otp/verify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: displayEmail, token: code }),
+        body: JSON.stringify({ email, token: code }),
       });
       const json = await res.json();
-      if (!res.ok) throw new Error(json.error ?? "That code did not work");
+      if (!res.ok) {
+        throw new Error(
+          typeof json.error === "string"
+            ? json.error
+            : "That code did not work. Try again."
+        );
+      }
+      persistIdentity(email, rememberEmail, Boolean(json.hasPin));
       goApp();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not sign in");
     } finally {
-      setBusy(false);
+      setBusy(null);
     }
   }
 
   async function loginWithPin() {
-    setBusy(true);
+    setBusy("pin");
     setError(null);
     try {
-      persistEmailPreference(displayEmail, displayRemember);
+      persistIdentity(email, rememberEmail);
       const res = await fetch("/api/auth/pin/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: displayEmail, pin }),
+        body: JSON.stringify({ email, pin }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "Could not sign in");
+      persistIdentity(email, rememberEmail, true);
       goApp();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not sign in");
     } finally {
-      setBusy(false);
+      setBusy(null);
     }
   }
 
   function onSubmit(e: FormEvent) {
     e.preventDefault();
+    if (busy) return;
     if (codeSent) {
-      void verifyCode();
+      if (code.length >= 4) void verifyCode();
+      return;
     }
+    if (showPin) {
+      if (pin.length >= 4) void loginWithPin();
+      return;
+    }
+    if (email.includes("@")) void sendCode();
   }
 
-  const emailReady = displayEmail.includes("@");
+  const emailReady = email.includes("@");
   const pinReady = pin.length >= 4;
 
   return (
@@ -148,11 +164,6 @@ export function UnlockForm() {
         <p className="mt-1 text-base text-[var(--muted)]">
           Clothing listings for Mercari and Poshmark.
         </p>
-        {codeSent ? (
-          <p className="mt-3 text-lg text-[var(--muted)]">
-            Enter the code from your email.
-          </p>
-        ) : null}
       </div>
 
       <form onSubmit={onSubmit} className="flex flex-col gap-5">
@@ -162,13 +173,13 @@ export function UnlockForm() {
             type="email"
             autoComplete="email"
             name="email"
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
             className="touch-target rounded-xl border border-[var(--border)] bg-white px-4 text-xl"
             placeholder="you@email.com"
-            value={displayEmail}
-            onChange={(e) => {
-              setEmailTouched(true);
-              setEmail(e.target.value);
-            }}
+            value={email}
+            onChange={(e) => setTypedEmail(e.target.value)}
             required
           />
         </label>
@@ -177,32 +188,35 @@ export function UnlockForm() {
           <input
             type="checkbox"
             className="h-5 w-5 accent-[var(--accent)]"
-            checked={displayRemember}
+            checked={rememberEmail}
             onChange={(e) => {
               const next = e.target.checked;
-              setRememberTouched(true);
-              setRememberEmail(next);
-              persistEmailPreference(displayEmail, next);
+              if (!next) setTypedEmail(email);
+              setRememberOverride(next);
+              persistIdentity(email, next);
             }}
           />
           <span>Remember this email on this device</span>
         </label>
 
-        <label className="flex flex-col gap-2 text-left">
-          <span className="text-base font-semibold">PIN</span>
-          <input
-            type="password"
-            inputMode="numeric"
-            autoComplete="current-password"
-            name="pin"
-            className="touch-target rounded-xl border border-[var(--border)] bg-white px-4 text-center text-3xl tracking-[0.3em]"
-            placeholder="••••"
-            value={pin}
-            onChange={(e) =>
-              setPin(e.target.value.replace(/\D/g, "").slice(0, 8))
-            }
-          />
-        </label>
+        {showPin ? (
+          <label className="flex flex-col gap-2 text-left">
+            <span className="text-base font-semibold">PIN</span>
+            <input
+              type="password"
+              inputMode="numeric"
+              autoComplete="current-password"
+              name="pin"
+              spellCheck={false}
+              className="touch-target rounded-xl border border-[var(--border)] bg-white px-4 text-center text-3xl tracking-[0.3em]"
+              placeholder="••••"
+              value={pin}
+              onChange={(e) =>
+                setPin(e.target.value.replace(/\D/g, "").slice(0, 8))
+              }
+            />
+          </label>
+        ) : null}
 
         {codeSent ? (
           <label className="flex flex-col gap-2 text-left">
@@ -212,6 +226,7 @@ export function UnlockForm() {
               inputMode="numeric"
               autoComplete="one-time-code"
               name="otp"
+              spellCheck={false}
               className="touch-target rounded-xl border border-[var(--border)] bg-white px-4 text-center text-3xl tracking-[0.3em]"
               placeholder="123456"
               value={code}
@@ -224,26 +239,42 @@ export function UnlockForm() {
         ) : null}
 
         {hint ? (
-          <p className="rounded-xl bg-[var(--accent-soft)] px-4 py-3 text-center text-base text-[var(--foreground)]">
+          <p
+            role="status"
+            aria-live="polite"
+            className="rounded-xl bg-[var(--accent-soft)] px-4 py-3 text-center text-base text-[var(--foreground)]"
+          >
             {hint}
           </p>
         ) : null}
 
         {error ? (
-          <p className="rounded-xl bg-red-50 px-4 py-3 text-center text-base text-red-800">
+          <p
+            role="alert"
+            aria-live="assertive"
+            className="rounded-xl bg-red-50 px-4 py-3 text-center text-base text-red-800"
+          >
             {error}
           </p>
         ) : null}
 
         {codeSent ? (
           <>
-            <BigButton type="submit" disabled={busy || code.length < 4}>
-              {busy ? "Checking…" : "Sign in"}
+            <BigButton type="submit" disabled={Boolean(busy) || code.length < 4}>
+              {busy === "verify" ? "Checking…" : "Sign in"}
+            </BigButton>
+            <BigButton
+              type="button"
+              variant="ghost"
+              disabled={Boolean(busy)}
+              onClick={() => void sendCode()}
+            >
+              {busy === "send" ? "Sending…" : "Send again"}
             </BigButton>
             <button
               type="button"
-              className="text-base text-[var(--accent)] underline"
-              disabled={busy}
+              className="text-base font-semibold text-[var(--accent)]"
+              disabled={Boolean(busy)}
               onClick={() => {
                 setCodeSent(false);
                 setCode("");
@@ -254,28 +285,30 @@ export function UnlockForm() {
               Back
             </button>
           </>
-        ) : (
+        ) : showPin ? (
           <>
             <BigButton
-              type="button"
-              disabled={busy || !emailReady || !pinReady}
-              onClick={() => void loginWithPin()}
+              type="submit"
+              disabled={Boolean(busy) || !emailReady || !pinReady}
             >
-              {busy ? "Checking…" : "Sign in with PIN"}
+              {busy === "pin" ? "Checking…" : "Sign in with PIN"}
             </BigButton>
-
-            <p className="text-center text-base font-semibold uppercase tracking-wide text-[var(--muted)]">
-              — or —
-            </p>
-
             <BigButton
               type="button"
-              disabled={busy || !emailReady}
+              variant="ghost"
+              disabled={Boolean(busy) || !emailReady}
               onClick={() => void sendCode()}
             >
-              {busy ? "Sending…" : "Send me an email code"}
+              {busy === "send" ? "Sending…" : "Email me a code instead"}
             </BigButton>
           </>
+        ) : (
+          <BigButton
+            type="submit"
+            disabled={Boolean(busy) || !emailReady}
+          >
+            {busy === "send" ? "Sending…" : "Send me an email code"}
+          </BigButton>
         )}
       </form>
     </main>

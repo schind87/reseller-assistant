@@ -39,8 +39,7 @@ export async function POST(request: Request) {
     if (!profile) {
       return NextResponse.json(
         {
-          error:
-            "Email or PIN did not match. Use “Send me a code” if you have not set a PIN yet.",
+          error: "Email or PIN did not match.",
         },
         { status: 401 }
       );
@@ -54,6 +53,7 @@ export async function POST(request: Request) {
     return NextResponse.json({
       ok: true,
       user: { id: profile.id, email: profile.email },
+      hasPin: true,
     });
   } catch (err) {
     console.error("pin login error:", err);

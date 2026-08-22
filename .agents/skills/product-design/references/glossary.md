@@ -73,7 +73,7 @@ Untitled home rows use `{Platform} draft` as the title and the job state alone a
 
 ## Actions (established)
 
-Create new listing; Sign in; Sign in with PIN; Send me an email code; Save seller profile; Save my PIN; Set PIN / Change PIN; Fill listing fields with AI; Write description with AI / Rewrite description with AI; Open {Mercari\|Poshmark}; Mark as posted; Clean background; Delete; Close; Done; Copy / Copied; Retry QR join; Retry pairing; Take {role} photo; Add photos on this computer instead.
+Create new listing; Sign in; Sign in with PIN; Send me an email code; Email me a code instead; Send again; Save seller profile; Save my PIN; Set PIN / Change PIN; Fill listing fields with AI; Write description with AI / Rewrite description with AI; Open {Mercari\|Poshmark}; Mark as posted; Clean background; Delete; Close; Done; Copy / Copied; Retry QR join; Retry pairing; Take {role} photo; Add photos on this computer instead.
 
 ## Photo aspect (shopper-facing)
 

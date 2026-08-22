@@ -23,7 +23,7 @@ gap over a fake win.
 
 | Exemplar | Surface | Principle |
 | --- | --- | --- |
-| [unlock-dual-sign-in.md](unlock-dual-sign-in.md) | Sign-in | Two complete methods, one shared email, stable busy labels |
+| [unlock-dual-sign-in.md](unlock-dual-sign-in.md) | Sign-in | One primary method; PIN only when this device already knows it |
 | [home-listing-list.md](home-listing-list.md) | Home list | The row is the listing; empty names the next action |
 | [quiet-extension-hint.md](quiet-extension-hint.md) | Optional tool | Don’t let optional chrome compete with the primary job |
 | [listing-tweak-dialog.md](listing-tweak-dialog.md) | Dialog + editor | Overlay only for focus; sticky header/body/footer |

@@ -2,9 +2,15 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import { BigButton } from "@/components/BigButton";
+import {
+  readRememberedIdentity,
+  rememberedEmailsMatch,
+  saveRememberedIdentity,
+} from "@/lib/remembered-identity";
 
 export function PinSetupCard() {
   const [hasPin, setHasPin] = useState<boolean | null>(null);
+  const [profileEmail, setProfileEmail] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
   const [pin, setPin] = useState("");
   const [confirmPin, setConfirmPin] = useState("");
@@ -19,7 +25,19 @@ export function PinSetupCard() {
         const res = await fetch("/api/auth/pin");
         const json = await res.json();
         if (!cancelled && res.ok) {
-          setHasPin(Boolean(json.hasPin));
+          const nextHasPin = Boolean(json.hasPin);
+          const email =
+            typeof json.email === "string" ? json.email : null;
+          setHasPin(nextHasPin);
+          setProfileEmail(email);
+          const identity = readRememberedIdentity();
+          if (
+            identity &&
+            email &&
+            rememberedEmailsMatch(identity.email, email)
+          ) {
+            saveRememberedIdentity(email, nextHasPin);
+          }
         }
       } catch {
         // ignore
@@ -48,6 +66,11 @@ export function PinSetupCard() {
       setPin("");
       setConfirmPin("");
       setMessage("PIN saved.");
+      const identity = readRememberedIdentity();
+      const email = profileEmail || identity?.email;
+      if (identity && email && rememberedEmailsMatch(identity.email, email)) {
+        saveRememberedIdentity(email, true);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not save PIN");
     } finally {
