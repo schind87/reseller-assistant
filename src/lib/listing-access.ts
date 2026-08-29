@@ -1,19 +1,26 @@
 import { NextResponse } from "next/server";
+import { isAdminEmail } from "@/lib/admin";
 import { getAuthUser } from "@/lib/api-auth";
 import { getSessionFromCookies, isUnlocked } from "@/lib/session";
 import { getListing } from "@/lib/supabase/queries";
 import type { Listing } from "@/lib/types";
 
 /**
- * Allow listing access for the owning user, or a QR join session for that listing.
- * When writeRequiresOwner is true, only the signed-in owner may proceed
- * (used for AI process / join-token creation). Photo upload allows join sessions.
+ * Allow listing access for the owning user, an admin, or a QR join session.
+ * When writeRequiresOwner is true, only the signed-in owner or an admin
+ * may proceed (used for AI process / join-token creation / delete).
+ * Photo upload allows join sessions.
  */
 export async function authorizeListingAccess(
   listingId: string,
   opts?: { writeRequiresOwner?: boolean }
 ): Promise<
-  | { listing: Listing; userId: string | null; error?: undefined }
+  | {
+      listing: Listing;
+      userId: string | null;
+      isAdmin: boolean;
+      error?: undefined;
+    }
   | { error: NextResponse }
 > {
   const listing = await getListing(listingId);
@@ -24,13 +31,16 @@ export async function authorizeListingAccess(
   }
 
   const user = await getAuthUser();
+  if (user && isAdminEmail(user.email)) {
+    return { listing, userId: user.id, isAdmin: true };
+  }
   if (user && listing.user_id === user.id) {
-    return { listing, userId: user.id };
+    return { listing, userId: user.id, isAdmin: false };
   }
 
   // Legacy listings without user_id: signed-in user may use them
   if (user && !listing.user_id) {
-    return { listing, userId: user.id };
+    return { listing, userId: user.id, isAdmin: false };
   }
 
   if (opts?.writeRequiresOwner) {
@@ -48,7 +58,7 @@ export async function authorizeListingAccess(
     isUnlocked(join) &&
     (!join.listingId || join.listingId === listingId)
   ) {
-    return { listing, userId: user?.id ?? null };
+    return { listing, userId: user?.id ?? null, isAdmin: false };
   }
 
   if (!user) {

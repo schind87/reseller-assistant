@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { DM_Sans, Source_Serif_4 } from "next/font/google";
+import { AdminBar } from "@/components/AdminBar";
+import { getAdminUser } from "@/lib/admin";
 import "./globals.css";
 
 const sourceSerif = Source_Serif_4({
@@ -20,13 +22,18 @@ export const metadata: Metadata = {
     "Clothing listings for Mercari and Poshmark — one piece at a time.",
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default async function RootLayout({ children }: LayoutProps<"/">) {
+  const admin = await getAdminUser();
+
   return (
     <html
       lang="en"
-      className={`${sourceSerif.variable} ${dmSans.variable} h-full antialiased`}
+      className={`${sourceSerif.variable} ${dmSans.variable} h-full antialiased${admin ? " scroll-pt-14" : ""}`}
     >
-      <body className="min-h-full flex flex-col font-sans">{children}</body>
+      <body className="min-h-full flex flex-col font-sans">
+        {admin ? <AdminBar /> : null}
+        {children}
+      </body>
     </html>
   );
 }

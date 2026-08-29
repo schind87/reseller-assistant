@@ -21,9 +21,11 @@ Load this file whenever UI work has a target screen, overlay, or flow. Then load
 | QR join / extension pair | [join-token-client.tsx](../../../../src/app/join/[token]/join-token-client.tsx), [QrPanel](../../../../src/components/QrPanel.tsx) | [surfaces-navigation.md](surfaces-navigation.md) |
 | Marketplace field forms | [ListingSchemaForm](../../../../src/components/ListingSchemaForm.tsx) | [surfaces-forms.md](surfaces-forms.md), [surfaces-editors.md](surfaces-editors.md) |
 | Dialogs | [ListingTweakDialog](../../../../src/components/ListingTweakDialog.tsx), crop, AI picker, role picker | [surfaces-dialogs.md](surfaces-dialogs.md) |
-| Destructive flows | Delete listing / photo in `AppHome` and `ListingHub` | [surfaces-destructive.md](surfaces-destructive.md) |
+| Destructive flows | Delete listing / photo in `AppHome` and `ListingHub`; admin Users | [surfaces-destructive.md](surfaces-destructive.md) |
 | Chrome extension | [extension/](../../../../extension/) | Follow extension CSS tokens; do not invent a second web app |
-| Admin AI Photo Lab | [AiBgDebugConsole](../../../../src/components/AiBgDebugConsole.tsx) | Admin-only; do not copy its density onto seller screens |
+| Admin AI Photo Lab | [AiBgDebugConsole](../../../../src/components/AiBgDebugConsole.tsx) | [surfaces-admin.md](surfaces-admin.md) |
+| Admin users | [AdminUsersConsole](../../../../src/components/AdminUsersConsole.tsx) | [surfaces-admin.md](surfaces-admin.md), [surfaces-lists.md](surfaces-lists.md) |
+| Admin bar | [AdminBar](../../../../src/components/AdminBar.tsx) | [surfaces-admin.md](surfaces-admin.md), [surfaces-navigation.md](surfaces-navigation.md) |
 
 ## Not present as product surfaces
 
@@ -32,9 +34,9 @@ Do not load or invent references for:
 - **Drawers / sheets** — not used. Hub uses a sticky QR column, not a drawer.
 - **Data tables** — seller UI is lists and photo grids, not tables.
 - **Marketing landing / dashboard KPIs** — `/` redirects to `/app` or `/unlock`.
-- **Global app chrome / sidebar nav** — screens are self-contained with a back link.
+- **Global app chrome / sidebar nav** — seller screens are self-contained with a back link. Admins get a thin top bar only; do not extend that into a seller shell.
 
-Search/filter exists only inside AI Photo Lab. Treat it as admin, not a seller pattern.
+Search/filter exists in AI Photo Lab and Admin users. Treat it as admin, not a seller pattern.
 
 ## How to add a surface file
 

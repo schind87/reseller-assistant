@@ -58,8 +58,9 @@ export async function POST(request: Request, context: RouteContext) {
         } satisfies StructuredFields)
       : null;
 
-    const profile = access.userId
-      ? await getProfileById(access.userId).catch(() => null)
+    const profileOwnerId = listing.user_id ?? access.userId;
+    const profile = profileOwnerId
+      ? await getProfileById(profileOwnerId).catch(() => null)
       : null;
     const prefs =
       profile?.listing_preferences ?? defaultListingPreferences();

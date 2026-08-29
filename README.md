@@ -50,7 +50,7 @@ Open [http://localhost:3000](http://localhost:3000) → email code sign-in (or e
 | `OPENAI_API_KEY` | no | Fallback if OpenRouter is unset |
 | `FAL_KEY` | no* | Pixelcut / BiRefNet Clean bg + AI Photo Lab inference |
 | `FAL_ADMIN_KEY` | no | ADMIN-scoped fal key so AI Photo Lab can read actual billed costs |
-| `ADMIN_EMAILS` | no | Comma-separated emails for `/app/admin/bg-lab` (AI Photo Lab) |
+| `ADMIN_EMAILS` | no | Comma-separated emails for `/app/admin/*` (AI Photo Lab, Users) |
 
 ## Domain
 

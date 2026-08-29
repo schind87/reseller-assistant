@@ -9,7 +9,7 @@ Moving between home, listing hub, photos, profile, join, admin, or marketplace t
 
 ## Canonical owner
 
-No app shell. Each screen owns a text back link. Routes live under `src/app/`.
+No seller app shell. Each seller screen owns a text back link. Admins additionally get [AdminBar](../../../../src/components/AdminBar.tsx). Routes live under `src/app/`.
 
 ## Stable rules
 
@@ -18,9 +18,9 @@ No app shell. Each screen owns a text back link. Routes live under `src/app/`.
 - **Scope:** In-app movement
 - **Rule:** Back/parent navigation is an accent text link (`text-base font-semibold text-[var(--accent)]`), often with a leading `←`, not a hamburger or persistent sidebar.
 - **Evidence:** `← All listings`, `← Back`, `← Back to listing hub`, Profile button on home (bordered, because it is a destination not a back link).
-- **Exceptions:** Primary forward actions use `BigButton`. External marketplace uses `window.open`.
+- **Exceptions:** Primary forward actions use `BigButton`. External marketplace uses `window.open`. Admins get a sticky top bar (`AdminBar`) that is not seller chrome.
 - **Bad:** Adding a global sidebar “for navigation”.
-- **Good:** Hub sticky QR rail with `← All listings` above Phone Companion.
+- **Good:** Hub sticky QR rail with `← All listings` above Phone Companion; admin bar only when `getAdminUser()` is set.
 
 ### rule/url-is-the-place
 
@@ -28,7 +28,7 @@ No app shell. Each screen owns a text back link. Routes live under `src/app/`.
 - **Rule:** Listing hub is `/app/listings/[id]`. Phone Companion is `/app/listings/[id]/photos?phone=1`. Join tokens are `/join/[token]`. Old `/review` and `/post` redirect to the hub — do not revive them as separate apps.
 - **Rationale:** One listing, one hub.
 - **Evidence:** `review/page.tsx` and `post/page.tsx` redirects.
-- **Exceptions:** Admin lab `/app/admin/bg-lab` with `listingId` / `photoId` query.
+- **Exceptions:** Admin lab `/app/admin/bg-lab` with `listingId` / `photoId` query. Admin users `/app/admin/users` with filter query params.
 
 ### rule/marketplace-is-external
 

@@ -10,7 +10,8 @@ Any delete, replace, restore, or irreversible photo/listing change.
 
 ## Canonical owner
 
-- Delete listing: [AppHome.tsx](../../../../src/components/AppHome.tsx) `deleteListing`
+- Delete listing: [AppHome.tsx](../../../../src/components/AppHome.tsx) `deleteListing`; admin Users page
+- Delete user: [AdminUsersConsole](../../../../src/components/AdminUsersConsole.tsx)
 - Delete photo: [ListingHub.tsx](../../../../src/components/ListingHub.tsx)
 - Restore original photo: AI picker
 

@@ -1,6 +1,5 @@
 import { redirect } from "next/navigation";
 import { AppHome } from "@/components/AppHome";
-import { isAdminEmail } from "@/lib/admin";
 import { getAuthUser } from "@/lib/api-auth";
 import { getProfileById } from "@/lib/auth/otp";
 import { listListings, type ListingWithThumb } from "@/lib/supabase/queries";
@@ -26,7 +25,6 @@ export default async function AppHomePage() {
       preferencesCompleted={Boolean(profile?.listing_prefs_completed_at)}
       initialPreferences={profile?.listing_preferences ?? null}
       userEmail={user.email}
-      isAdmin={isAdminEmail(user.email)}
     />
   );
 }

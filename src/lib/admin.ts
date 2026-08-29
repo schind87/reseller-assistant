@@ -4,6 +4,7 @@ import { normalizeEmail } from "@/lib/auth/otp";
 
 /**
  * Comma-separated admin emails, e.g. ADMIN_EMAILS=you@example.com,other@example.com
+ * Gates /app/admin/* (AI Photo Lab, Users) and the admin bar.
  */
 export function adminEmails(): string[] {
   return (process.env.ADMIN_EMAILS ?? "")

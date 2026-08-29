@@ -18,7 +18,7 @@ Do not invent a second word for a listed concept. Code identifiers may differ (e
 | --- | --- |
 | Seller | The signed-in user. Copy usually says “you”. |
 | Shopper | Buyer on Mercari/Poshmark; appears in photo instructions. |
-| Admin | `ADMIN_EMAILS` only. Not a seller-facing word except “Admin” on Profile. |
+| Admin | `ADMIN_EMAILS` only. Not a seller-facing word except the admin bar and Users page. |
 
 ## Product objects
 
@@ -65,6 +65,8 @@ Untitled home rows use `{Platform} draft` as the title and the job state alone a
 | ← All listings | Hub |
 | ← Back | Profile → home |
 | ← Back to listing hub | Desktop photos QR page |
+| Users | Admin users page |
+| AI Photo Lab | Admin lab title and admin-bar link |
 | Tweak listing fields | Dialog title |
 | Fill listing fields with AI | Hub fields-section button |
 | Write description with AI / Rewrite description with AI | Hub description control |

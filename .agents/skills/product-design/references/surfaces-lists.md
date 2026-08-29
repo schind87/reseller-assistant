@@ -5,12 +5,13 @@
 
 ## Load when
 
-Home listing list, hub photo sections, admin photo picker (admin only).
+Home listing list, hub photo sections, admin photo picker, admin users list.
 
 ## Canonical owner
 
 - Listings: [AppHome.tsx](../../../../src/components/AppHome.tsx)
 - Photos: photo section UI in [ListingHub.tsx](../../../../src/components/ListingHub.tsx)
+- Admin users: [AdminUsersConsole.tsx](../../../../src/components/AdminUsersConsole.tsx)
 
 There is no table component.
 
@@ -50,7 +51,7 @@ There is no table component.
 
 ## Bad patterns
 
-- KPI summary above the list.
+- KPI summary above the list. Admin users may use one muted count line.
 - Making every photo a heavy card with icon toolbars always visible at desktop density without a reason (hub shows actions on the photo — keep them labeled).
 
 ## Coverage gaps

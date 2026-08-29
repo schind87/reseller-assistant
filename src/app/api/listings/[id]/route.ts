@@ -92,8 +92,9 @@ export async function PATCH(request: Request, context: RouteContext) {
     }
 
     const ownerWrite =
-      access.userId != null &&
-      (!access.listing.user_id || access.listing.user_id === access.userId);
+      access.isAdmin ||
+      (access.userId != null &&
+        (!access.listing.user_id || access.listing.user_id === access.userId));
 
     if (!ownerWrite) {
       const keys = Object.keys(parsed.data);
