@@ -25,7 +25,7 @@ export function AdminBar({ initialAdmin }: AdminBarProps) {
         if (!cancelled) setIsAdmin(Boolean(json.isAdmin));
       })
       .catch(() => {
-        if (!cancelled) setIsAdmin(false);
+        // Keep the last known admin state if status cannot be reached.
       });
     return () => {
       cancelled = true;
