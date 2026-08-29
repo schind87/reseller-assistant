@@ -31,7 +31,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
       className={`${sourceSerif.variable} ${dmSans.variable} h-full antialiased${admin ? " scroll-pt-14" : ""}`}
     >
       <body className="min-h-full flex flex-col font-sans">
-        {admin ? <AdminBar /> : null}
+        {admin ? <AdminBar initialAdmin /> : null}
         {children}
       </body>
     </html>

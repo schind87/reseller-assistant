@@ -73,7 +73,7 @@ export function AppHome({
 
   async function logout() {
     await fetch("/api/auth/logout", { method: "POST" });
-    router.replace("/unlock");
+    window.location.replace("/unlock");
   }
 
   async function deleteListing(listingId: string, label: string) {

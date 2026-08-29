@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -8,8 +9,30 @@ const LINKS = [
   { href: "/app/admin/users", label: "Users" },
 ] as const;
 
-export function AdminBar() {
+type AdminBarProps = {
+  initialAdmin: boolean;
+};
+
+export function AdminBar({ initialAdmin }: AdminBarProps) {
   const pathname = usePathname();
+  const [isAdmin, setIsAdmin] = useState(initialAdmin);
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetch("/api/auth/status")
+      .then((res) => res.json())
+      .then((json: { isAdmin?: boolean }) => {
+        if (!cancelled) setIsAdmin(Boolean(json.isAdmin));
+      })
+      .catch(() => {
+        if (!cancelled) setIsAdmin(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [pathname]);
+
+  if (!isAdmin) return null;
 
   return (
     <nav

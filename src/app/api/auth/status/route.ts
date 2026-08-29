@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { isAdminEmail } from "@/lib/admin";
 import { getAuthUser } from "@/lib/api-auth";
 import { getSessionFromCookies, isUnlocked } from "@/lib/session";
 
@@ -9,6 +10,7 @@ export async function GET() {
       return NextResponse.json({
         unlocked: true,
         signedIn: true,
+        isAdmin: isAdminEmail(user.email),
         user,
       });
     }
@@ -18,6 +20,7 @@ export async function GET() {
     return NextResponse.json({
       unlocked: isUnlocked(join),
       signedIn: false,
+      isAdmin: false,
       joinOnly,
     });
   } catch (err) {
