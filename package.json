@@ -7,10 +7,12 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "extension:live": "node scripts/sync-extension-live.mjs"
+    "photos:migrate-r2": "node scripts/migrate-photos-to-r2.mjs"
   },
   "dependencies": {
     "@ai-sdk/openai": "^3.0.91",
+    "@aws-sdk/client-s3": "^3.1121.0",
+    "@aws-sdk/s3-request-presigner": "^3.1121.0",
     "@supabase/ssr": "^0.12.4",
     "@supabase/supabase-js": "^2.109.0",
     "ai": "^6.0.246",

@@ -9,7 +9,8 @@ Live app: **https://reseller.mvfeed.us**
 ## Stack
 
 - Next.js 16 (App Router) + TypeScript + Tailwind 4
-- Supabase (Postgres + Storage + Auth)
+- Supabase (Postgres + Auth)
+- Cloudflare R2 for listing photos (private bucket, presigned URLs). Local/dev can keep using the Supabase `listing-photos` bucket when R2 env vars are unset.
 - Passwordless sign-in: email one-time code (Resend), or your own PIN
 - Optional OpenRouter (or OpenAI) vision/drafting and Clean bg via Pixelcut on fal
 
@@ -51,6 +52,22 @@ Open [http://localhost:3000](http://localhost:3000) → email code sign-in (or e
 | `FAL_KEY` | no* | Pixelcut / BiRefNet Clean bg + AI Photo Lab inference |
 | `FAL_ADMIN_KEY` | no | ADMIN-scoped fal key so AI Photo Lab can read actual billed costs |
 | `ADMIN_EMAILS` | no | Comma-separated emails for `/app/admin/*` (AI Photo Lab, Users) |
+| `R2_ACCOUNT_ID` | prod* | Cloudflare account ID. Required with the other `R2_*` vars to store listing photos on R2 |
+| `R2_ACCESS_KEY_ID` | prod* | R2 S3 API token access key |
+| `R2_SECRET_ACCESS_KEY` | prod* | R2 S3 API token secret |
+| `R2_BUCKET_NAME` | prod* | Private R2 bucket (example: `listing-photos`). Standard storage, not Infrequent Access |
+| `R2_ENDPOINT` | no | Defaults to `https://<R2_ACCOUNT_ID>.r2.cloudflarestorage.com` |
+
+\*Photos stay on the Supabase `listing-photos` bucket until all four `R2_ACCOUNT_ID` / `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` / `R2_BUCKET_NAME` (or `R2_BUCKET`) values are set. After they are set, new uploads go to R2 and reads try R2 first, then Supabase.
+
+Copy existing production objects:
+
+```bash
+npm run photos:migrate-r2 -- --dry-run
+npm run photos:migrate-r2
+```
+
+The script needs the same `R2_*` vars plus `NEXT_PUBLIC_SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`. It does not delete Supabase originals unless you pass `--delete-source`.
 
 ## Domain
 
@@ -84,3 +101,4 @@ See [`extension/README.md`](extension/README.md).
 - `npm run build` — production build
 - `npm run start` — serve production build
 - `npm run lint` — ESLint
+- `npm run photos:migrate-r2` — copy Supabase `listing-photos` objects to R2 (`--dry-run`, `--skip-thumbs`, `--delete-source`)

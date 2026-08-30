@@ -4,6 +4,13 @@ import { getProfileById } from "@/lib/auth/otp";
 import { CANONICAL_PRODUCTION_ORIGIN } from "@/lib/canonical-host";
 import { bakeExifOrientation } from "@/lib/image-orient";
 import { composeSmokePetNotes } from "@/lib/seller-preferences";
+import {
+  getSignedPhotoUrl,
+  getSignedPhotoUrls,
+  LISTING_GRID_THUMB,
+  removePhotoObjects,
+  uploadPhotoObject,
+} from "@/lib/photo-storage";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { PlatformListingSchema } from "@/lib/listing-schemas";
 import {
@@ -384,12 +391,7 @@ export async function deleteListing(id: string): Promise<void> {
 
   const uniquePaths = [...new Set(storagePaths)];
   if (uniquePaths.length > 0) {
-    const { error: storageError } = await supabase.storage
-      .from("listing-photos")
-      .remove(uniquePaths);
-    if (storageError) {
-      console.error("deleteListing storage:", storageError.message);
-    }
+    await removePhotoObjects(uniquePaths);
   }
 
   const { error } = await supabase.from("listings").delete().eq("id", id);
@@ -633,12 +635,7 @@ export async function deleteListingPhoto(
         )
     );
     if (orphans.length > 0) {
-      const { error: storageError } = await supabase.storage
-        .from("listing-photos")
-        .remove(orphans);
-      if (storageError) {
-        console.error("deleteListingPhoto storage:", storageError.message);
-      }
+      await removePhotoObjects(orphans);
     }
   }
 
@@ -654,112 +651,8 @@ export async function deleteListingPhoto(
   return photo;
 }
 
-export async function getSignedPhotoUrl(
-  storagePath: string,
-  expiresIn = 3600
-): Promise<string | null> {
-  if (!storagePath) return null;
-  const map = await getSignedPhotoUrls([storagePath], expiresIn);
-  return map.get(storagePath) ?? null;
-}
-
-export type PhotoSignTransform = {
-  width: number;
-  height?: number;
-  resize?: "cover" | "contain" | "fill";
-  quality?: number;
-};
-
-/** Sign many storage paths (one Storage call, or parallel when transforming). */
-export async function getSignedPhotoUrls(
-  storagePaths: string[],
-  expiresIn = 3600,
-  transform?: PhotoSignTransform
-): Promise<Map<string, string | null>> {
-  const unique = [
-    ...new Set(storagePaths.filter((p): p is string => Boolean(p))),
-  ];
-  const out = new Map<string, string | null>();
-  if (unique.length === 0) return out;
-
-  const supabase = createAdminClient();
-
-  // createSignedUrls does not accept transform — sign in parallel when needed.
-  if (transform) {
-    await Promise.all(
-      unique.map(async (path) => {
-        const { data: one, error: oneError } = await supabase.storage
-          .from("listing-photos")
-          .createSignedUrl(path, expiresIn, { transform });
-        if (oneError) {
-          console.error("getSignedPhotoUrls transform:", path, oneError.message);
-          out.set(path, null);
-          return;
-        }
-        out.set(path, one.signedUrl);
-      })
-    );
-    return out;
-  }
-
-  const { data, error } = await supabase.storage
-    .from("listing-photos")
-    .createSignedUrls(unique, expiresIn);
-
-  if (error) {
-    console.error("getSignedPhotoUrls:", error.message);
-    // Fall back to parallel single-path signs so images still load.
-    await Promise.all(
-      unique.map(async (path) => {
-        const { data: one, error: oneError } = await supabase.storage
-          .from("listing-photos")
-          .createSignedUrl(path, expiresIn);
-        if (oneError) {
-          console.error("getSignedPhotoUrls fallback:", path, oneError.message);
-          out.set(path, null);
-          return;
-        }
-        out.set(path, one.signedUrl);
-      })
-    );
-    return out;
-  }
-
-  for (const path of unique) out.set(path, null);
-  for (const row of data ?? []) {
-    const path = row.path;
-    if (!path) continue;
-    out.set(path, row.signedUrl ?? null);
-  }
-
-  // If createSignedUrls returned rows but keys didn't match our paths, retry misses.
-  const missing = unique.filter((path) => !out.get(path));
-  if (missing.length > 0) {
-    await Promise.all(
-      missing.map(async (path) => {
-        const { data: one, error: oneError } = await supabase.storage
-          .from("listing-photos")
-          .createSignedUrl(path, expiresIn);
-        if (oneError) {
-          console.error("getSignedPhotoUrls miss:", path, oneError.message);
-          out.set(path, null);
-          return;
-        }
-        out.set(path, one.signedUrl);
-      })
-    );
-  }
-
-  return out;
-}
-
-const LISTING_GRID_THUMB: PhotoSignTransform = {
-  width: 640,
-  height: 640,
-  // Contain keeps the full photo; the hub frames tiles to the marketplace aspect.
-  resize: "contain",
-  quality: 72,
-};
+export { getSignedPhotoUrl, getSignedPhotoUrls };
+export type { PhotoSignTransform } from "@/lib/photo-storage";
 
 /** Attach signed original + processed URLs (full + grid thumbs) in parallel. */
 export async function withSignedPhotoUrls(
@@ -794,22 +687,23 @@ export async function uploadListingPhoto(
   bytes: ArrayBuffer | Buffer,
   contentType = "image/jpeg"
 ): Promise<{ storagePath: string; photo: ListingPhoto }> {
-  const supabase = createAdminClient();
   const storagePath = `${listingId}/${role}-${uuidv4()}.jpg`;
   const input = Buffer.isBuffer(bytes) ? bytes : Buffer.from(bytes);
   // Bake EXIF Orientation so storage pixels match how browsers display the photo.
   const oriented = await bakeExifOrientation(input);
   void contentType;
 
-  const { error: uploadError } = await supabase.storage
-    .from("listing-photos")
-    .upload(storagePath, oriented.buffer, {
+  try {
+    await uploadPhotoObject({
+      path: storagePath,
+      bytes: oriented.buffer,
       contentType: oriented.contentType,
       upsert: false,
     });
-
-  if (uploadError) {
-    throw new Error(`uploadListingPhoto: ${uploadError.message}`);
+  } catch (err) {
+    throw new Error(
+      `uploadListingPhoto: ${err instanceof Error ? err.message : String(err)}`
+    );
   }
 
   const photo = await addPhoto({
@@ -835,16 +729,18 @@ export async function uploadOrientedFalSource(
   buffer: Buffer;
 }> {
   const oriented = await bakeExifOrientation(bytes);
-  const supabase = createAdminClient();
   const storagePath = `fal-orient/${uuidv4()}.jpg`;
-  const { error } = await supabase.storage
-    .from("listing-photos")
-    .upload(storagePath, oriented.buffer, {
+  try {
+    await uploadPhotoObject({
+      path: storagePath,
+      bytes: oriented.buffer,
       contentType: oriented.contentType,
       upsert: false,
     });
-  if (error) {
-    throw new Error(`uploadOrientedFalSource: ${error.message}`);
+  } catch (err) {
+    throw new Error(
+      `uploadOrientedFalSource: ${err instanceof Error ? err.message : String(err)}`
+    );
   }
   const url = await getSignedPhotoUrl(storagePath, 3600);
   if (!url) {
@@ -860,13 +756,7 @@ export async function uploadOrientedFalSource(
 }
 
 export async function removeStoragePaths(paths: string[]): Promise<void> {
-  const unique = [...new Set(paths.filter(Boolean))];
-  if (unique.length === 0) return;
-  const supabase = createAdminClient();
-  await supabase.storage
-    .from("listing-photos")
-    .remove(unique)
-    .catch(() => undefined);
+  await removePhotoObjects(paths);
 }
 
 /**
@@ -884,21 +774,22 @@ export async function replaceListingPhotoOriginal(
     throw new Error("Photo not found");
   }
 
-  const supabase = createAdminClient();
   const input = Buffer.isBuffer(bytes) ? bytes : Buffer.from(bytes);
   const oriented = await bakeExifOrientation(input);
   void contentType;
   const storagePath = `${listingId}/${photo.role}-${uuidv4()}.jpg`;
 
-  const { error: uploadError } = await supabase.storage
-    .from("listing-photos")
-    .upload(storagePath, oriented.buffer, {
+  try {
+    await uploadPhotoObject({
+      path: storagePath,
+      bytes: oriented.buffer,
       contentType: oriented.contentType,
       upsert: false,
     });
-
-  if (uploadError) {
-    throw new Error(`replaceListingPhotoOriginal: ${uploadError.message}`);
+  } catch (err) {
+    throw new Error(
+      `replaceListingPhotoOriginal: ${err instanceof Error ? err.message : String(err)}`
+    );
   }
 
   const oldPaths = [photo.storage_path, photo.processed_path].filter(
@@ -921,10 +812,7 @@ export async function replaceListingPhotoOriginal(
   }
 
   if (oldPaths.length > 0) {
-    await supabase.storage
-      .from("listing-photos")
-      .remove(oldPaths)
-      .catch(() => undefined);
+    await removePhotoObjects(oldPaths);
   }
 
   return updated;

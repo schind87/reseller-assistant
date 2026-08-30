@@ -31,10 +31,15 @@ Skip:
 ## Cursor Cloud specific instructions
 
 Reseller Assistant is a single Next.js 16 app (App Router, Turbopack) backed by
-Supabase (Postgres + Storage). Everything server-side goes through the Supabase
-**service role** client, so a running Supabase instance is required for auth,
-listings, and photos. AI (OpenRouter/OpenAI) and email OTP (Resend) are optional
-and degrade gracefully when their keys are absent.
+Supabase (Postgres + Auth). Listing photos live in **Cloudflare R2** when
+`R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, and
+`R2_BUCKET_NAME` are set; otherwise they stay in the Supabase Storage bucket
+`listing-photos`. Reads try R2 first and fall back to Supabase so a copy
+(`npm run photos:migrate-r2`) can run after deploy. Everything else
+server-side goes through the Supabase **service role** client, so a running
+Supabase instance is required for auth and listings. AI (OpenRouter/OpenAI)
+and email OTP (Resend) are optional and degrade gracefully when their keys
+are absent.
 
 Standard scripts live in `package.json` (`dev`, `build`, `lint`). `npm run dev`
 first syncs `extension/` → `extension-live/` then runs `next dev` on port 3000.
@@ -59,6 +64,11 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=<ANON_KEY from `supabase start`/`supabase status`>
 SUPABASE_SERVICE_ROLE_KEY=<SERVICE_ROLE_KEY from `supabase start`/`supabase status`>
 SESSION_SECRET=<any long random string>
 NEXT_PUBLIC_APP_URL=http://localhost:3000
+# Optional. When set, listing photos go to Cloudflare R2 instead of local Supabase Storage.
+# R2_ACCOUNT_ID=
+# R2_ACCESS_KEY_ID=
+# R2_SECRET_ACCESS_KEY=
+# R2_BUCKET_NAME=listing-photos
 ```
 
 `SESSION_SECRET` is required in production. It signs seller session JWTs (`ra_session`) and QR join cookies. Keep it stable; do not fall back to the Supabase anon key in production. Local/preview may still run without it.
@@ -68,7 +78,8 @@ Non-obvious gotchas:
   or `listings.user_id` (they were created outside migrations on the hosted
   project). Migration `20260808205000_add_profiles_login_otps_user_id.sql` fills
   that gap idempotently. `supabase/seed.sql` additionally creates the private
-  `listing-photos` Storage bucket and grants DML on public tables to
+  `listing-photos` Storage bucket (used when R2 is unset) and grants DML on
+  public tables to
   `anon`/`authenticated`/`service_role` — a fresh local DB does not grant those,
   so without the seed every query fails with `permission denied`. If you change
   schema/seed, apply with `supabase db reset`.

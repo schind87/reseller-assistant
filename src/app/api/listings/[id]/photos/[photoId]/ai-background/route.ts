@@ -3,7 +3,11 @@ import sharp from "sharp";
 import { v4 as uuidv4 } from "uuid";
 import { BG_PIPELINE_TAG } from "@/lib/ai/background";
 import { authorizeListingAccess } from "@/lib/listing-access";
-import { createAdminClient } from "@/lib/supabase/admin";
+import {
+  downloadPhotoObject,
+  removePhotoObjects,
+  uploadPhotoObject,
+} from "@/lib/photo-storage";
 import {
   getBgLabResultById,
   listBgLabModelRatingStats,
@@ -118,7 +122,7 @@ export async function POST(request: Request, context: RouteContext) {
 
   if (body.restore === true) {
     try {
-      let updated = await updatePhoto(photoId, { replace_background: false });
+      const updated = await updatePhoto(photoId, { replace_background: false });
       if (
         photo.processed_path &&
         access.listing.cover_processed_path === photo.processed_path
@@ -168,28 +172,25 @@ export async function POST(request: Request, context: RouteContext) {
       );
     }
 
-    const supabase = createAdminClient();
-    const { data: downloaded, error: downloadError } = await supabase.storage
-      .from("listing-photos")
-      .download(result.storage_path);
-    if (downloadError || !downloaded) {
+    const rawDownloaded = await downloadPhotoObject(result.storage_path);
+    if (!rawDownloaded) {
       return NextResponse.json(
         { error: "Could not read AI result image" },
         { status: 500 }
       );
     }
 
-    const rawBytes = Buffer.from(await downloaded.arrayBuffer());
-    const listingReady = await ensureWhiteBackgroundPng(rawBytes);
+    const listingReady = await ensureWhiteBackgroundPng(rawDownloaded);
 
     const processedPath = `${id}/${photo.role}-${BG_PIPELINE_TAG}-${uuidv4()}.png`;
-    const { error: uploadError } = await supabase.storage
-      .from("listing-photos")
-      .upload(processedPath, listingReady, {
+    try {
+      await uploadPhotoObject({
+        path: processedPath,
+        bytes: listingReady,
         contentType: "image/png",
         upsert: true,
       });
-    if (uploadError) {
+    } catch {
       return NextResponse.json(
         { error: "Could not store processed photo" },
         { status: 500 }
@@ -197,10 +198,7 @@ export async function POST(request: Request, context: RouteContext) {
     }
 
     if (photo.processed_path && photo.processed_path !== processedPath) {
-      await supabase.storage
-        .from("listing-photos")
-        .remove([photo.processed_path])
-        .catch(() => undefined);
+      await removePhotoObjects([photo.processed_path]);
     }
 
     const updated = await updatePhoto(photoId, {

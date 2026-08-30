@@ -1,5 +1,9 @@
+import {
+  getSignedPhotoUrl,
+  getSignedPhotoUrls,
+  uploadPhotoObject,
+} from "@/lib/photo-storage";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { getSignedPhotoUrls } from "@/lib/supabase/queries";
 import { falDashboardUrl } from "@/lib/ai/fal-lab";
 
 export type BgLabResultRating = "up" | "down";
@@ -160,15 +164,19 @@ export async function uploadBgLabImage(params: {
   bytes: Buffer;
   contentType?: string;
 }): Promise<string> {
-  const supabase = createAdminClient();
   const path = `bg-lab/${params.runId}/${params.modelId}.png`;
-  const { error } = await supabase.storage
-    .from("listing-photos")
-    .upload(path, params.bytes, {
+  try {
+    await uploadPhotoObject({
+      path,
+      bytes: params.bytes,
       contentType: params.contentType ?? "image/png",
       upsert: true,
     });
-  if (error) throw new Error(`uploadBgLabImage: ${error.message}`);
+  } catch (err) {
+    throw new Error(
+      `uploadBgLabImage: ${err instanceof Error ? err.message : String(err)}`
+    );
+  }
   return path;
 }
 
@@ -177,25 +185,25 @@ export async function uploadBgLabOrientedSource(params: {
   runId: string;
   bytes: Buffer;
 }): Promise<{ storagePath: string; signedUrl: string }> {
-  const supabase = createAdminClient();
   const storagePath = `bg-lab/${params.runId}/_source.jpg`;
-  const { error } = await supabase.storage
-    .from("listing-photos")
-    .upload(storagePath, params.bytes, {
+  try {
+    await uploadPhotoObject({
+      path: storagePath,
+      bytes: params.bytes,
       contentType: "image/jpeg",
       upsert: true,
     });
-  if (error) throw new Error(`uploadBgLabOrientedSource: ${error.message}`);
-
-  const { data, error: signError } = await supabase.storage
-    .from("listing-photos")
-    .createSignedUrl(storagePath, 3600);
-  if (signError || !data?.signedUrl) {
+  } catch (err) {
     throw new Error(
-      `uploadBgLabOrientedSource sign: ${signError?.message ?? "no url"}`
+      `uploadBgLabOrientedSource: ${err instanceof Error ? err.message : String(err)}`
     );
   }
-  return { storagePath, signedUrl: data.signedUrl };
+
+  const signedUrl = await getSignedPhotoUrl(storagePath, 3600);
+  if (!signedUrl) {
+    throw new Error("uploadBgLabOrientedSource sign: no url");
+  }
+  return { storagePath, signedUrl };
 }
 
 export async function listBgLabRunsForPhoto(

@@ -9,7 +9,10 @@ import {
 } from "@/lib/ai/background";
 import { identifyFromPhotos } from "@/lib/ai/identify";
 import { PLATFORM_PHOTO_ASPECT } from "@/lib/platforms";
-import { createAdminClient } from "@/lib/supabase/admin";
+import {
+  removePhotoObjects,
+  uploadPhotoObject,
+} from "@/lib/photo-storage";
 import {
   getListingWithPhotos,
   getSignedPhotoUrls,
@@ -103,7 +106,6 @@ export async function POST(_request: Request, context: RouteContext) {
     let coverProcessedPath: string | null = result.listing.cover_processed_path;
 
     // Only replace backgrounds on photos the seller opted into.
-    const supabase = createAdminClient();
     const bgTargets = signedUrls.filter(
       (p) =>
         p.photo.replace_background && isPostingPhotoRole(p.photo.role)
@@ -133,15 +135,18 @@ export async function POST(_request: Request, context: RouteContext) {
       }
 
       const processedPath = `${id}/${entry.photo.role}-${BG_PIPELINE_TAG}-${uuidv4()}.png`;
-      const { error: uploadError } = await supabase.storage
-        .from("listing-photos")
-        .upload(processedPath, downloaded.bytes, {
+      try {
+        await uploadPhotoObject({
+          path: processedPath,
+          bytes: downloaded.bytes,
           contentType: downloaded.contentType,
           upsert: true,
         });
-
-      if (uploadError) {
-        console.error("processed upload failed:", uploadError.message);
+      } catch (err) {
+        console.error(
+          "processed upload failed:",
+          err instanceof Error ? err.message : err
+        );
         continue;
       }
 
@@ -149,10 +154,7 @@ export async function POST(_request: Request, context: RouteContext) {
         entry.photo.processed_path &&
         entry.photo.processed_path !== processedPath
       ) {
-        await supabase.storage
-          .from("listing-photos")
-          .remove([entry.photo.processed_path])
-          .catch(() => undefined);
+        await removePhotoObjects([entry.photo.processed_path]);
       }
 
       await updatePhoto(entry.photo.id, { processed_path: processedPath });

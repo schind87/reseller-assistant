@@ -9,7 +9,10 @@ import {
 import { getFalBgModel, type FalBgModelId } from "@/lib/ai/fal-bg-models";
 import { getAdminUser } from "@/lib/admin";
 import { PLATFORM_PHOTO_ASPECT } from "@/lib/platforms";
-import { createAdminClient } from "@/lib/supabase/admin";
+import {
+  removePhotoObjects,
+  uploadPhotoObject,
+} from "@/lib/photo-storage";
 import {
   createBgLabRun,
   insertBgLabResult,
@@ -155,16 +158,18 @@ export async function POST(request: Request, context: RouteContext) {
       }
 
       const processedPath = `${id}/${updated.role}-${BG_PIPELINE_TAG}-${uuidv4()}.png`;
-      const supabase = createAdminClient();
-      const { error: uploadError } = await supabase.storage
-        .from("listing-photos")
-        .upload(processedPath, processed.bytes, {
+      try {
+        await uploadPhotoObject({
+          path: processedPath,
+          bytes: processed.bytes,
           contentType: processed.contentType,
           upsert: true,
         });
-
-      if (uploadError) {
-        console.error("bg replace upload failed:", uploadError.message);
+      } catch (err) {
+        console.error(
+          "bg replace upload failed:",
+          err instanceof Error ? err.message : err
+        );
         return NextResponse.json(
           { error: "Could not store processed photo" },
           { status: 500 }
@@ -172,10 +177,7 @@ export async function POST(request: Request, context: RouteContext) {
       }
 
       if (updated.processed_path && updated.processed_path !== processedPath) {
-        await supabase.storage
-          .from("listing-photos")
-          .remove([updated.processed_path])
-          .catch(() => undefined);
+        await removePhotoObjects([updated.processed_path]);
       }
 
       updated = await updatePhoto(photoId, { processed_path: processedPath });
