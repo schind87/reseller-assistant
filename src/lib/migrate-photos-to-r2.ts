@@ -6,6 +6,7 @@ import {
 } from "@/lib/r2-copy";
 import {
   downloadFromSupabaseStorage,
+  downloadFromSupabaseStorageResult,
   getR2Object,
   isR2Configured,
   isThumbPath,
@@ -24,6 +25,7 @@ export type CopyPhotoObjectResult = {
   copied: boolean;
   skipped: boolean;
   thumb: boolean;
+  missing?: boolean;
   error?: string;
 };
 
@@ -177,15 +179,24 @@ export async function copySupabasePhotoToR2(
     if (exists) {
       skipped = true;
     } else {
-      body = await downloadFromSupabaseStorage(path);
-      if (!body) {
+      const downloaded = await downloadFromSupabaseStorageResult(path);
+      if ("missing" in downloaded) {
         return {
           copied: false,
           skipped: false,
           thumb: false,
-          error: "Could not read photo from Supabase",
+          missing: true,
         };
       }
+      if ("error" in downloaded) {
+        return {
+          copied: false,
+          skipped: false,
+          thumb: false,
+          error: downloaded.error,
+        };
+      }
+      body = downloaded.body;
       await putR2Object(path, body, guessContentType(path));
       copied = true;
       onR2 = true;
@@ -226,13 +237,23 @@ export async function copyPhotoObjectBatch(
     skipped: 0,
     thumbs: 0,
     failed: 0,
+    missing: 0,
     failedPaths: [],
+    missingPaths: [],
+    issues: [],
   };
   for (const path of paths) {
     const result = await copySupabasePhotoToR2(path);
+    if (result.missing) {
+      totals.missing += 1;
+      totals.missingPaths.push(path);
+      totals.issues.push({ path, reason: "not in storage" });
+      continue;
+    }
     if (result.error) {
       totals.failed += 1;
       totals.failedPaths.push(path);
+      totals.issues.push({ path, reason: result.error });
       continue;
     }
     if (result.copied) totals.copied += 1;

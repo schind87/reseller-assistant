@@ -212,11 +212,47 @@ async function supabaseUpload(
 }
 
 async function supabaseDownload(path: string): Promise<Buffer | null> {
+  const result = await downloadFromSupabaseStorageResult(path);
+  if ("body" in result) return result.body;
+  return null;
+}
+
+type StorageErrorLike = {
+  message?: string;
+  statusCode?: string | number;
+  status?: string | number;
+};
+
+export function isStorageNotFoundError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const err = error as StorageErrorLike;
+  const code = String(err.statusCode ?? err.status ?? "");
+  const msg = (err.message ?? "").toLowerCase();
+  return (
+    code === "404" ||
+    msg.includes("not found") ||
+    msg.includes("does not exist") ||
+    msg.includes("no such key")
+  );
+}
+
+export type SupabaseDownloadResult =
+  | { body: Buffer }
+  | { missing: true }
+  | { error: string };
+
+export async function downloadFromSupabaseStorageResult(
+  path: string
+): Promise<SupabaseDownloadResult> {
   const { data, error } = await createAdminClient()
     .storage.from(PHOTO_BUCKET)
     .download(path);
-  if (error || !data) return null;
-  return Buffer.from(await data.arrayBuffer());
+  if (error) {
+    if (isStorageNotFoundError(error)) return { missing: true };
+    return { error: error.message };
+  }
+  if (!data) return { missing: true };
+  return { body: Buffer.from(await data.arrayBuffer()) };
 }
 
 async function supabaseRemove(paths: string[]): Promise<void> {

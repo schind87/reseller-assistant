@@ -6,6 +6,7 @@ import {
   addR2CopyTotals,
   emptyR2CopyTotals,
   R2_COPY_BATCH_SIZE,
+  type R2CopyIssue,
   type R2CopyTotals,
 } from "@/lib/r2-copy";
 
@@ -17,7 +18,7 @@ type ListResponse = {
 };
 
 function formatDone(done: R2CopyTotals): string {
-  if (done.copied + done.skipped + done.failed === 0) {
+  if (done.copied + done.skipped + done.failed + done.missing === 0) {
     return "No listing photos to copy.";
   }
   const parts: string[] = [];
@@ -29,8 +30,29 @@ function formatDone(done: R2CopyTotals): string {
         : `already on R2 ${done.skipped}`
     );
   }
+  if (done.missing > 0) {
+    parts.push(
+      parts.length === 0
+        ? `Not in storage ${done.missing}`
+        : `not in storage ${done.missing}`
+    );
+  }
   if (done.failed > 0) parts.push(`could not copy ${done.failed}`);
   return parts.join(" · ");
+}
+
+function issuesFromTotals(done: R2CopyTotals): R2CopyIssue[] {
+  if (done.issues?.length) return done.issues;
+  return [
+    ...(done.missingPaths ?? []).map((path) => ({
+      path,
+      reason: "not in storage",
+    })),
+    ...(done.failedPaths ?? []).map((path) => ({
+      path,
+      reason: "could not copy",
+    })),
+  ];
 }
 
 export function AdminPhotoR2Copy() {
@@ -79,12 +101,18 @@ export function AdminPhotoR2Copy() {
         if (!copyRes.ok) {
           throw new Error(copyJson.error ?? "Could not copy listing photos");
         }
-        totals = addR2CopyTotals(totals, copyJson as R2CopyTotals);
+        totals = addR2CopyTotals(totals, {
+          ...emptyR2CopyTotals(),
+          ...(copyJson as R2CopyTotals),
+        });
         setDone(totals);
       }
       setProgress(null);
     } catch (err) {
-      if (totals.copied + totals.skipped + totals.failed > 0) {
+      if (
+        totals.copied + totals.skipped + totals.failed + totals.missing >
+        0
+      ) {
         setDone(totals);
       }
       setError(
@@ -95,6 +123,8 @@ export function AdminPhotoR2Copy() {
       setBusy(false);
     }
   }
+
+  const issues = done ? issuesFromTotals(done) : [];
 
   return (
     <section className="flex flex-col items-start gap-3" aria-busy={busy}>
@@ -115,11 +145,13 @@ export function AdminPhotoR2Copy() {
           {formatDone(done)}
         </p>
       ) : null}
-      {done && done.failedPaths.length > 0 ? (
+      {issues.length > 0 ? (
         <ul className="max-w-full list-disc pl-5 text-sm text-[var(--muted)]">
-          {done.failedPaths.map((path) => (
-            <li key={path} className="break-all font-mono">
-              {path}
+          {issues.map((issue) => (
+            <li key={issue.path} className="break-all">
+              <span className="font-mono">{issue.path}</span>
+              {" · "}
+              {issue.reason}
             </li>
           ))}
         </ul>
