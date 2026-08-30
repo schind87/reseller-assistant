@@ -35,7 +35,7 @@ Supabase (Postgres + Auth). Listing photos live in **Cloudflare R2** when
 `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, and
 `R2_BUCKET_NAME` are set; otherwise they stay in the Supabase Storage bucket
 `listing-photos`. Reads try R2 first and fall back to Supabase so a copy
-(`npm run photos:migrate-r2`) can run after deploy. Everything else
+(`npm run photos:migrate-r2`, or Admin → Users → Copy listing photos to R2) can run after deploy. Everything else
 server-side goes through the Supabase **service role** client, so a running
 Supabase instance is required for auth and listings. AI (OpenRouter/OpenAI)
 and email OTP (Resend) are optional and degrade gracefully when their keys

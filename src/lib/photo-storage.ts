@@ -104,6 +104,28 @@ function isNotFound(err: unknown): boolean {
   );
 }
 
+export async function r2ObjectExists(key: string): Promise<boolean> {
+  return r2Head(key);
+}
+
+export async function putR2Object(
+  key: string,
+  body: Buffer,
+  contentType: string
+): Promise<void> {
+  await r2Put(key, body, contentType);
+}
+
+export async function getR2Object(key: string): Promise<Buffer | null> {
+  return r2Get(key);
+}
+
+export async function downloadFromSupabaseStorage(
+  path: string
+): Promise<Buffer | null> {
+  return supabaseDownload(path);
+}
+
 async function r2Head(key: string): Promise<boolean> {
   if (r2KnownKeys.has(key)) return true;
   try {

@@ -15,6 +15,7 @@ import {
   type AdminUserFilters,
   type AdminUserRow,
 } from "@/lib/admin-users";
+import { AdminPhotoR2Copy } from "@/components/AdminPhotoR2Copy";
 import { listingJobStepLabel } from "@/lib/listing-job";
 import { PLATFORM_LABELS } from "@/lib/platforms";
 
@@ -200,6 +201,8 @@ export function AdminUsersConsole({
           {formatAdminUserSummary(summary)}
         </p>
       </header>
+
+      <AdminPhotoR2Copy />
 
       {error ? (
         <p
