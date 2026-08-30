@@ -111,8 +111,9 @@ const supabase = createClient(supabaseUrl, supabaseKey, {
 });
 
 const s3 = new S3Client({
-  region: "auto",
+  region: process.env.R2_REGION || "auto",
   endpoint,
+  forcePathStyle: process.env.R2_FORCE_PATH_STYLE === "1",
   credentials: { accessKeyId, secretAccessKey },
   requestChecksumCalculation: "WHEN_REQUIRED",
   responseChecksumValidation: "WHEN_REQUIRED",

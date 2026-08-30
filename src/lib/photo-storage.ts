@@ -70,8 +70,9 @@ function getS3(): S3Client {
     process.env.R2_ENDPOINT ||
     `https://${accountId}.r2.cloudflarestorage.com`;
   s3Client = new S3Client({
-    region: "auto",
+    region: process.env.R2_REGION || "auto",
     endpoint,
+    forcePathStyle: process.env.R2_FORCE_PATH_STYLE === "1",
     credentials: { accessKeyId, secretAccessKey },
     // AWS SDK v3 flexible checksums break R2 PutObject.
     requestChecksumCalculation: "WHEN_REQUIRED",
