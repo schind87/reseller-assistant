@@ -37,7 +37,7 @@ Do not invent a second word for a listed concept. Code identifiers may differ (e
 | Join code / QR | Phone or extension pairing. QrPanel “Scan with your phone”, “Code:”. |
 | Phone Companion | Guided camera on the phone (`photos?phone=1`). Not “the app” on the phone. |
 | Closet | Public Mercari/Poshmark shop. Profile: “Linked closets”. |
-| Chrome helper / Chrome extension | Optional. “Reseller Assistant side panel”. Download “Chrome extension”. Check listings uses it to read the seller’s closet. |
+| Chrome helper / Chrome extension | Optional. “Reseller Assistant side panel”. Install from the Chrome Web Store when listed; zip remains for Load unpacked. Check listings uses it to read the seller’s closet. |
 | AI Photo Lab | Admin only. |
 | Workspace | Data model (`workspace_id`); **not** currently a user-facing navigation term. Do not add “workspace switcher” copy without a product decision. |
 

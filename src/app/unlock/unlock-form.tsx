@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useState, useSyncExternalStore, type FormEvent } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { BigButton } from "@/components/BigButton";
 import {
@@ -311,6 +312,11 @@ export function UnlockForm() {
           </BigButton>
         )}
       </form>
+      <p className="text-center text-sm text-[var(--muted)]">
+        <Link href="/privacy" className="text-[var(--accent)] hover:underline">
+          Privacy
+        </Link>
+      </p>
     </main>
   );
 }

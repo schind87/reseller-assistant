@@ -51,6 +51,15 @@ var RA_DETAIL_FIELDS = [
 /** On-page listing helper width. Sell-page content is shifted left by this many pixels. */
 var RA_PAGE_SIDEBAR_WIDTH = 340;
 
+/** chrome.tabs.query url filters — marketplace pages only, not every tab. */
+var RA_MARKETPLACE_TAB_URLS = [
+  "https://*.mercari.com/*",
+  "https://www.mercari.com/*",
+  "https://poshmark.com/*",
+  "https://www.poshmark.com/*",
+  "https://*.poshmark.com/*",
+];
+
 /** Fields that must be chosen from the site’s autocomplete (not pasted in). */
 var RA_AUTOCOMPLETE_FIELDS = {
   poshmark: ["brand", "styleTags"],
@@ -184,10 +193,11 @@ function raListingPhotoMeta(listing) {
   var normalized = photos
     .map(function (item, index) {
       if (typeof item === "string") {
-        return { url: item, role: "detail", sortOrder: index };
+        return { id: "", url: item, role: "detail", sortOrder: index };
       }
       if (item && typeof item === "object") {
         return {
+          id: item.id || "",
           url:
             item.url ||
             item.src ||
@@ -206,7 +216,7 @@ function raListingPhotoMeta(listing) {
       return null;
     })
     .filter(function (item) {
-      return item && item.url;
+      return item && (item.id || item.url);
     });
 
   normalized.sort(function (a, b) {

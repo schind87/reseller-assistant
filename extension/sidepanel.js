@@ -1,4 +1,4 @@
-/* global RA_COACH_STEPS, raListingCacheForId */
+/* global RA_COACH_STEPS, RA_MARKETPLACE_TAB_URLS, raListingCacheForId */
 
 const DEFAULT_APP_URL = "https://reseller.mvfeed.us";
 const APP_URL_CANDIDATES = [
@@ -364,7 +364,7 @@ function scheduleAutoPairFromJoinField() {
 async function handleSyncSchema() {
   try {
     setStatus(els.actionStatus, "Reading sell form…");
-    const tabs = await chrome.tabs.query({});
+    const tabs = await chrome.tabs.query({ url: RA_MARKETPLACE_TAB_URLS });
     const market = tabs.find((tab) =>
       /mercari|poshmark/i.test(tab.url || "")
     );
@@ -410,33 +410,10 @@ async function handleSyncSchema() {
 }
 
 async function handleCopyPhotos() {
-  const stored = await chrome.storage.local.get(["listingCache"]);
-  const photos =
-    stored.listingCache?.photos ||
-    stored.listingCache?.images ||
-    listing?.photos ||
-    [];
-  const links = (Array.isArray(photos) ? photos : [])
-    .map((item) =>
-      typeof item === "string"
-        ? item
-        : item?.url || item?.downloadUrl || item?.processedUrl || ""
-    )
-    .filter(Boolean);
-  if (!links.length) {
-    setStatus(els.actionStatus, "No photo links on this listing.", "error");
-    return;
-  }
-  try {
-    await navigator.clipboard.writeText(links.join("\n"));
-    setStatus(
-      els.actionStatus,
-      `Copied ${links.length} photo link${links.length === 1 ? "" : "s"}.`,
-      "ok"
-    );
-  } catch {
-    setStatus(els.actionStatus, "Could not copy to clipboard.", "error");
-  }
+  setStatus(
+    els.actionStatus,
+    "Use Add my photos on the sell page. Photos stay in Reseller Assistant."
+  );
 }
 
 els.pairBtn.addEventListener("click", () => void handlePair());

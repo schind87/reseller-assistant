@@ -85,7 +85,7 @@ Stable Vercel production aliases (`reseller-assistant.vercel.app` and the projec
 
 ## Chrome extension
 
-See [`extension/README.md`](extension/README.md).
+See [`extension/README.md`](extension/README.md). Sellers install from the Chrome Web Store when that listing is live (`npm run extension:pack` builds `dist/reseller-assistant-chrome.zip`). Privacy policy: `/privacy`.
 
 ## Main flows
 

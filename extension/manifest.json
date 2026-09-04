@@ -1,18 +1,22 @@
 {
   "manifest_version": 3,
   "name": "Reseller Assistant",
-  "version": "0.6.1",
-  "description": "Autofill Mercari and Poshmark listing pages from Reseller Assistant.",
-  "permissions": ["storage", "activeTab", "sidePanel", "tabs", "scripting"],
+  "version": "0.7.0",
+  "description": "Fill Mercari and Poshmark sell forms from Reseller Assistant. You still press Publish.",
+  "homepage_url": "https://reseller.mvfeed.us",
+  "minimum_chrome_version": "116",
+  "icons": {
+    "16": "icons/icon-16.png",
+    "32": "icons/icon-32.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  },
+  "permissions": ["storage", "sidePanel", "scripting"],
   "host_permissions": [
     "http://localhost/*",
-    "http://localhost:3000/*",
     "http://127.0.0.1/*",
-    "http://127.0.0.1:3000/*",
     "https://reseller.mvfeed.us/*",
     "https://reseller-assistant.vercel.app/*",
-    "https://*.vercel.app/*",
-    "https://*.supabase.co/*",
     "https://*.mercari.com/*",
     "https://www.mercari.com/*",
     "https://poshmark.com/*",
@@ -23,7 +27,13 @@
     "service_worker": "background.js"
   },
   "action": {
-    "default_title": "Reseller Assistant"
+    "default_title": "Reseller Assistant",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "32": "icons/icon-32.png",
+      "48": "icons/icon-48.png",
+      "128": "icons/icon-128.png"
+    }
   },
   "side_panel": {
     "default_path": "sidepanel.html"
@@ -32,12 +42,9 @@
     {
       "matches": [
         "http://localhost/*",
-        "http://localhost:3000/*",
         "http://127.0.0.1/*",
-        "http://127.0.0.1:3000/*",
         "https://reseller.mvfeed.us/*",
-        "https://reseller-assistant.vercel.app/*",
-        "https://*.vercel.app/*"
+        "https://reseller-assistant.vercel.app/*"
       ],
       "js": ["bridge.js"],
       "run_at": "document_start"

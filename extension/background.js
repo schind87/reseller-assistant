@@ -1,4 +1,5 @@
-/* global RA_COACH_STEPS, RA_DETAIL_FIELDS, raIsMarketplaceUrl, raPlatformFromUrl,
+/* global RA_COACH_STEPS, RA_DETAIL_FIELDS, RA_MARKETPLACE_TAB_URLS,
+   raIsMarketplaceUrl, raPlatformFromUrl,
    raFieldValueFromListing, raListingPhotoMeta, raPreviewForStep,
    raIsAutocompleteField, raAutocompleteValues, raAutocompleteTip,
    raAutocompleteLabel, raListingCacheForId, raIsListingEditUrl */
@@ -11,12 +12,32 @@ chrome.sidePanel
     console.error("Reseller Assistant: side panel setup failed", error)
   );
 
+function isAllowedAppUrl(appUrl) {
+  try {
+    const parsed = new URL(appUrl);
+    const host = parsed.hostname.toLowerCase();
+    if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
+      return false;
+    }
+    if (host === "localhost" || host === "127.0.0.1") {
+      return parsed.protocol === "http:";
+    }
+    if (parsed.protocol !== "https:") return false;
+    return host === "reseller.mvfeed.us" || host === "reseller-assistant.vercel.app";
+  } catch {
+    return false;
+  }
+}
+
 async function savePairing(payload) {
   const appUrl = String(payload.appUrl || "").replace(/\/+$/, "");
   const token = String(payload.token || "").trim();
   const listingId = String(payload.listingId || "").trim();
   if (!appUrl || !token || !listingId) {
     throw new Error("Missing appUrl, token, or listingId");
+  }
+  if (!isAllowedAppUrl(appUrl)) {
+    throw new Error("This helper only connects to Reseller Assistant.");
   }
 
   await chrome.storage.local.set({
@@ -194,7 +215,7 @@ async function setStepIndex(nextIndex) {
 }
 
 async function findMarketplaceTabs(preferredPlatform) {
-  const tabs = await chrome.tabs.query({});
+  const tabs = await chrome.tabs.query({ url: RA_MARKETPLACE_TAB_URLS });
   return tabs.filter((tab) => {
     if (!tab.id || !tab.url || !raIsMarketplaceUrl(tab.url)) return false;
     if (!preferredPlatform) return true;
@@ -252,7 +273,7 @@ async function extractClosetFromTab(tabId) {
 
 async function openClosetTab(url, options) {
   const active = !options || options.active !== false;
-  const tabs = await chrome.tabs.query({});
+  const tabs = await chrome.tabs.query({ url: RA_MARKETPLACE_TAB_URLS });
   const target = url.replace(/\/+$/, "");
   const reusable = tabs.find((tab) => {
     if (!tab.id || !tab.url) return false;
@@ -420,10 +441,20 @@ async function encodeListingPhotos(listing) {
     );
   }
 
+  const pairing = await getPairing();
   const encoded = [];
   for (let i = 0; i < photoMeta.length; i += 1) {
     const meta = photoMeta[i];
-    const res = await fetch(meta.url);
+    const headers = {};
+    let photoUrl = meta.url;
+    if (pairing && meta.id) {
+      photoUrl = `${pairing.appUrl}/api/listings/${pairing.listingId}/extension/photos/${meta.id}`;
+      headers.Authorization = `Bearer ${pairing.token}`;
+    }
+    if (!photoUrl) {
+      throw new Error(`Listing photo ${i + 1} is missing.`);
+    }
+    const res = await fetch(photoUrl, { headers });
     if (!res.ok) {
       throw new Error(`Could not download photo ${i + 1} (${res.status})`);
     }

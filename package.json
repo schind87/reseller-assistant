@@ -7,6 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "extension:live": "node scripts/sync-extension-live.mjs",
+    "extension:pack": "node scripts/pack-extension.mjs",
     "photos:migrate-r2": "node scripts/migrate-photos-to-r2.mjs"
   },
   "dependencies": {
