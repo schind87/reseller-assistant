@@ -9,19 +9,19 @@ Account, PIN, seller preferences after first run, or new account-level options.
 
 ## Canonical owner
 
-Profile mode in [AppHome.tsx](../../../../src/components/AppHome.tsx): eyebrow “Account”, title “Profile”, compact `SellerOnboarding`, `PinSetupCard`, Sign out. Admin tools are in the admin bar, not Profile.
+Profile mode in [AppHome.tsx](../../../../src/components/AppHome.tsx): eyebrow “Account”, title “Profile”, compact `SellerOnboarding`, [MarketplaceAccountsCard](../../../../src/components/MarketplaceAccountsCard.tsx), `PinSetupCard`, Sign out. Admin tools are in the admin bar, not Profile.
 
 ## Stable rules
 
 ### rule/settings-are-account-not-product-config
 
 - **Scope:** `/app` profile
-- **Rule:** Profile holds identity (email), closet defaults that flow into listings, PIN, and sign out. Do not put listing-photo tools or marketplace field editors here.
+- **Rule:** Profile holds identity (email), closet defaults that flow into listings, linked Mercari/Poshmark closets, PIN, and sign out. Do not put listing-photo tools or marketplace field editors here.
 - **Rationale:** Listing work lives on the hub. Profile is closet + account.
 - **Evidence:** AppHome profile sections.
 - **Exceptions:** None.
 - **Bad:** A settings page of feature flags and theme pickers.
-- **Good:** “Seller preferences” + “Your PIN” + “Sign out”.
+- **Good:** “Seller preferences” + “Linked closets” + “Your PIN” + “Sign out”.
 
 ### rule/admin-is-opt-in-chrome
 
@@ -35,7 +35,7 @@ Profile mode in [AppHome.tsx](../../../../src/components/AppHome.tsx): eyebrow �
 ## Good patterns
 
 - Sign out is `BigButton variant="ghost"` at the bottom — available, not tempting.
-- PIN setup is collapsed until Set/Change PIN.
+- Linked closets sit after seller preferences: Find my closet (Chrome helper + confirm), optional paste, Check listings, Open closet. Live marketplace listings are a Profile list, not a second home dashboard.
 
 ## Bad patterns
 

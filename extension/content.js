@@ -814,6 +814,62 @@ function handleMessage(message) {
 }
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  if (message?.type === "ping") {
+    sendResponse({ ok: true });
+    return;
+  }
+
+  if (message?.type === "extractCloset") {
+    const extract =
+      typeof raExtractClosetListings === "function"
+        ? raExtractClosetListings
+        : null;
+    if (!extract) {
+      sendResponse({
+        ok: false,
+        listings: [],
+        error: "Reload the Chrome helper to check closets.",
+      });
+      return true;
+    }
+    void extract()
+      .then((result) => sendResponse(result))
+      .catch((error) =>
+        sendResponse({
+          ok: false,
+          listings: [],
+          error: error instanceof Error ? error.message : "Could not read closet",
+        })
+      );
+    return true;
+  }
+
+  if (message?.type === "extractUsername") {
+    const extract =
+      typeof raExtractSignedInUsername === "function"
+        ? raExtractSignedInUsername
+        : null;
+    if (!extract) {
+      sendResponse({
+        ok: false,
+        error: "Reload the Chrome helper to find your closet.",
+      });
+      return true;
+    }
+    void extract()
+      .then((result) => sendResponse(result))
+      .catch((error) =>
+        sendResponse({
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : "Could not find closet name",
+        })
+      );
+    return true;
+  }
+
   if (message?.type === "attachPhotos") {
     void handleAttachPhotos(message)
       .then((result) => sendResponse(result))

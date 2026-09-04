@@ -12,7 +12,7 @@ export function ExtensionInstallCard() {
       </h2>
       <p className="text-base text-[var(--muted)]">
         Fills Mercari and Poshmark sell forms from your listing. You still press
-        Publish.
+        Publish. Check listings on Profile also uses it to read your closet.
       </p>
       <a
         href="/api/extension/download"

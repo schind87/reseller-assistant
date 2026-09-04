@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Reseller Assistant",
-  "version": "0.5.11",
+  "version": "0.6.1",
   "description": "Autofill Mercari and Poshmark listing pages from Reseller Assistant.",
   "permissions": ["storage", "activeTab", "sidePanel", "tabs", "scripting"],
   "host_permissions": [
@@ -50,7 +50,7 @@
         "https://www.poshmark.com/*",
         "https://*.poshmark.com/*"
       ],
-      "js": ["coach-shared.js", "content.js", "page-coach.js"],
+      "js": ["coach-shared.js", "closet-sync.js", "content.js", "page-coach.js"],
       "run_at": "document_idle"
     }
   ]

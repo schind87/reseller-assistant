@@ -211,9 +211,176 @@ async function ensureContentScript(tabId) {
   }
   await chrome.scripting.executeScript({
     target: { tabId },
-    files: ["coach-shared.js", "content.js", "page-coach.js"],
+    files: ["coach-shared.js", "closet-sync.js", "content.js", "page-coach.js"],
   });
   await chrome.tabs.sendMessage(tabId, { type: "ping" });
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function waitForTabComplete(tabId, timeoutMs = 16000) {
+  return new Promise((resolve) => {
+    let finished = false;
+    const finish = () => {
+      if (finished) return;
+      finished = true;
+      chrome.tabs.onUpdated.removeListener(onUpdated);
+      resolve();
+    };
+    function onUpdated(id, info) {
+      if (id === tabId && info.status === "complete") finish();
+    }
+    chrome.tabs.onUpdated.addListener(onUpdated);
+    chrome.tabs.get(tabId, (tab) => {
+      if (chrome.runtime.lastError) {
+        finish();
+        return;
+      }
+      if (tab?.status === "complete") finish();
+    });
+    setTimeout(finish, timeoutMs);
+  });
+}
+
+async function extractClosetFromTab(tabId) {
+  await ensureContentScript(tabId);
+  const result = await chrome.tabs.sendMessage(tabId, { type: "extractCloset" });
+  return result || { ok: false, listings: [], error: "No closet response" };
+}
+
+async function openClosetTab(url, options) {
+  const active = !options || options.active !== false;
+  const tabs = await chrome.tabs.query({});
+  const target = url.replace(/\/+$/, "");
+  const reusable = tabs.find((tab) => {
+    if (!tab.id || !tab.url) return false;
+    try {
+      return new URL(tab.url).href.replace(/\/+$/, "") === target;
+    } catch {
+      return false;
+    }
+  });
+  if (reusable?.id) {
+    await chrome.tabs.update(reusable.id, { active, url });
+    if (active && reusable.windowId != null) {
+      await chrome.windows.update(reusable.windowId, { focused: true }).catch(
+        () => undefined
+      );
+    }
+    return reusable.id;
+  }
+  const created = await chrome.tabs.create({ url, active });
+  if (!created?.id) throw new Error("Could not open the closet page");
+  return created.id;
+}
+
+function fallbackClosetUrl(platform, username) {
+  if (platform === "mercari") {
+    return "https://www.mercari.com/mypage/listings/active/";
+  }
+  if (platform === "poshmark" && username) {
+    return `https://poshmark.com/closet/${encodeURIComponent(username)}`;
+  }
+  return null;
+}
+
+async function checkCloset(message) {
+  const closetUrl = String(message.closetUrl || "").trim();
+  const platform = message.platform === "poshmark" ? "poshmark" : "mercari";
+  const username = String(message.username || "").trim();
+  if (!closetUrl) {
+    throw new Error("Missing closet URL");
+  }
+
+  const tabId = await openClosetTab(closetUrl);
+  await waitForTabComplete(tabId);
+  await sleep(1200);
+  let result = await extractClosetFromTab(tabId);
+
+  if (result?.loginRequired) return result;
+  if (result?.ok && Array.isArray(result.listings) && result.listings.length) {
+    return result;
+  }
+
+  const fallback = fallbackClosetUrl(platform, username);
+  if (fallback && fallback !== closetUrl) {
+    await chrome.tabs.update(tabId, { url: fallback });
+    await waitForTabComplete(tabId);
+    await sleep(1200);
+    result = await extractClosetFromTab(tabId);
+  }
+
+  return result || { ok: false, listings: [], error: "Could not read closet" };
+}
+
+function isAccountTab(url, platform) {
+  if (!url) return false;
+  try {
+    const path = new URL(url).pathname.toLowerCase();
+    if (platform === "poshmark") {
+      return path === "/closet" || path.startsWith("/closet/");
+    }
+    return path.includes("/mypage") || /\/u\//.test(path);
+  } catch {
+    return false;
+  }
+}
+
+function accountDetectUrl(platform) {
+  if (platform === "poshmark") return "https://poshmark.com/closet";
+  return "https://www.mercari.com/mypage/";
+}
+
+async function extractUsernameFromTab(tabId) {
+  await ensureContentScript(tabId);
+  const result = await chrome.tabs.sendMessage(tabId, {
+    type: "extractUsername",
+  });
+  return result || { ok: false, error: "No username response" };
+}
+
+async function detectClosetUsername(message) {
+  const platform = message.platform === "poshmark" ? "poshmark" : "mercari";
+  const existing = (await findMarketplaceTabs(platform)).filter(
+    (tab) => tab.id && isAccountTab(tab.url, platform)
+  );
+  let tabId = existing[0]?.id ?? null;
+  let openedDetectPage = false;
+
+  if (!tabId) {
+    tabId = await openClosetTab(accountDetectUrl(platform), { active: false });
+    openedDetectPage = true;
+    await waitForTabComplete(tabId);
+    await sleep(1200);
+  } else {
+    await ensureContentScript(tabId);
+  }
+
+  let result = await extractUsernameFromTab(tabId);
+  if (result?.ok && result.username) return result;
+
+  if (!openedDetectPage) {
+    tabId = await openClosetTab(accountDetectUrl(platform), { active: false });
+    await waitForTabComplete(tabId);
+    await sleep(1200);
+    result = await extractUsernameFromTab(tabId);
+  }
+
+  if (result?.loginRequired && tabId) {
+    await chrome.tabs.update(tabId, { active: true });
+    const tab = await chrome.tabs.get(tabId).catch(() => null);
+    if (tab?.windowId != null) {
+      await chrome.windows
+        .update(tab.windowId, { focused: true })
+        .catch(() => undefined);
+    }
+  }
+
+  return (
+    result || { ok: false, error: "Could not find your closet name." }
+  );
 }
 
 async function sendToMarketplaceTab(message, preferredPlatform, preferredTabId) {
@@ -569,6 +736,35 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         sendResponse({
           ok: false,
           error: error instanceof Error ? error.message : "Pair failed",
+        })
+      );
+    return true;
+  }
+
+  if (message.type === "checkCloset") {
+    void checkCloset(message)
+      .then((result) => sendResponse(result))
+      .catch((error) =>
+        sendResponse({
+          ok: false,
+          listings: [],
+          error:
+            error instanceof Error ? error.message : "Could not check closet",
+        })
+      );
+    return true;
+  }
+
+  if (message.type === "detectClosetUsername") {
+    void detectClosetUsername(message)
+      .then((result) => sendResponse(result))
+      .catch((error) =>
+        sendResponse({
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : "Could not find closet name",
         })
       );
     return true;

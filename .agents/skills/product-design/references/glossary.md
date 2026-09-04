@@ -36,7 +36,8 @@ Do not invent a second word for a listed concept. Code identifiers may differ (e
 | Email code | OTP. “Send me an email code”. |
 | Join code / QR | Phone or extension pairing. QrPanel “Scan with your phone”, “Code:”. |
 | Phone Companion | Guided camera on the phone (`photos?phone=1`). Not “the app” on the phone. |
-| Chrome helper / Chrome extension | Optional. “Reseller Assistant side panel”. Download “Chrome extension”. |
+| Closet | Public Mercari/Poshmark shop. Profile: “Linked closets”. |
+| Chrome helper / Chrome extension | Optional. “Reseller Assistant side panel”. Download “Chrome extension”. Check listings uses it to read the seller’s closet. |
 | AI Photo Lab | Admin only. |
 | Workspace | Data model (`workspace_id`); **not** currently a user-facing navigation term. Do not add “workspace switcher” copy without a product decision. |
 
@@ -62,6 +63,7 @@ Untitled home rows use `{Platform} draft` as the title and the job state alone a
 | --- | --- |
 | Sign in | Unlock eyebrow |
 | Profile / Account | Home profile mode |
+| Linked closets | Profile section |
 | ← All listings | Hub |
 | ← Back | Profile → home |
 | ← Back to listing hub | Desktop photos QR page |
@@ -75,7 +77,7 @@ Untitled home rows use `{Platform} draft` as the title and the job state alone a
 
 ## Actions (established)
 
-Create new listing; Sign in; Sign in with PIN; Send me an email code; Email me a code instead; Send again; Save seller profile; Save my PIN; Set PIN / Change PIN; Fill listing fields with AI; Write description with AI / Rewrite description with AI; Open {Mercari\|Poshmark}; Mark as posted; Clean background; Delete; Close; Done; Copy / Copied; Retry QR join; Retry pairing; Take {role} photo; Add photos on this computer instead.
+Create new listing; Sign in; Sign in with PIN; Send me an email code; Email me a code instead; Send again; Save seller profile; Save my PIN; Set PIN / Change PIN; Fill listing fields with AI; Write description with AI / Rewrite description with AI; Open {Mercari\|Poshmark}; Open closet; Find my {Mercari\|Poshmark} closet; Link {Mercari\|Poshmark} closet; Check listings; Unlink; Mark as posted; Clean background; Delete; Close; Done; Copy / Copied; Retry QR join; Retry pairing; Take {role} photo; Add photos on this computer instead.
 
 ## Photo aspect (shopper-facing)
 

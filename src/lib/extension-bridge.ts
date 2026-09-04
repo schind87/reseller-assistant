@@ -1,3 +1,8 @@
+import type {
+  MarketplaceClosetStatus,
+} from "@/lib/marketplace-profiles";
+import type { Platform } from "@/lib/types";
+
 export const EXTENSION_WEB_SOURCE = "reseller-assistant-web";
 export const EXTENSION_ACK_SOURCE = "reseller-assistant-extension";
 export const EXTENSION_PRESENT_KEY = "ra-extension-present";
@@ -148,4 +153,156 @@ export function detectExtensionPresent(
     pingExtensionBridge();
     const timer = window.setTimeout(() => finish(false), timeoutMs);
   });
+}
+
+export type ClosetCheckListing = {
+  externalId: string;
+  title: string | null;
+  price: number | null;
+  status: MarketplaceClosetStatus;
+  url: string;
+  thumbnailUrl: string | null;
+};
+
+export type ClosetCheckResult = {
+  ok: boolean;
+  listings: ClosetCheckListing[];
+  error?: string;
+  loginRequired?: boolean;
+};
+
+export type ClosetCheckPayload = {
+  platform: Platform;
+  username: string;
+  closetUrl: string;
+};
+
+export function requestClosetCheck(payload: ClosetCheckPayload): void {
+  if (typeof window === "undefined") return;
+  window.postMessage(
+    {
+      source: EXTENSION_WEB_SOURCE,
+      type: "check-closet",
+      platform: payload.platform,
+      username: payload.username,
+      closetUrl: payload.closetUrl,
+    },
+    window.location.origin
+  );
+}
+
+export function waitForClosetCheckResult(
+  timeoutMs = 28000
+): Promise<ClosetCheckResult> {
+  if (typeof window === "undefined") {
+    return Promise.resolve({
+      ok: false,
+      listings: [],
+      error: "No window",
+    });
+  }
+
+  return new Promise((resolve) => {
+    const timer = window.setTimeout(() => {
+      window.removeEventListener("message", onMessage);
+      resolve({
+        ok: false,
+        listings: [],
+        error: "Timed out waiting for the closet page. Reload the Chrome helper, then try again.",
+      });
+    }, timeoutMs);
+
+    function onMessage(event: MessageEvent) {
+      if (event.origin !== window.location.origin) return;
+      const data = event.data;
+      if (!data || data.source !== EXTENSION_ACK_SOURCE) return;
+      if (data.type !== "closet-check-result") return;
+      window.clearTimeout(timer);
+      window.removeEventListener("message", onMessage);
+      rememberExtensionPresent(true);
+      resolve({
+        ok: Boolean(data.ok),
+        listings: Array.isArray(data.listings) ? data.listings : [],
+        error: typeof data.error === "string" ? data.error : undefined,
+        loginRequired: Boolean(data.loginRequired),
+      });
+    }
+
+    window.addEventListener("message", onMessage);
+  });
+}
+
+export async function checkClosetWithExtension(
+  payload: ClosetCheckPayload,
+  timeoutMs = 28000
+): Promise<ClosetCheckResult> {
+  const pending = waitForClosetCheckResult(timeoutMs);
+  requestClosetCheck(payload);
+  return pending;
+}
+
+export type ClosetUsernameResult = {
+  ok: boolean;
+  username?: string;
+  error?: string;
+  loginRequired?: boolean;
+};
+
+export function requestClosetUsername(platform: Platform): void {
+  if (typeof window === "undefined") return;
+  window.postMessage(
+    {
+      source: EXTENSION_WEB_SOURCE,
+      type: "detect-closet-username",
+      platform,
+    },
+    window.location.origin
+  );
+}
+
+export function waitForClosetUsernameResult(
+  timeoutMs = 22000
+): Promise<ClosetUsernameResult> {
+  if (typeof window === "undefined") {
+    return Promise.resolve({ ok: false, error: "No window" });
+  }
+
+  return new Promise((resolve) => {
+    const timer = window.setTimeout(() => {
+      window.removeEventListener("message", onMessage);
+      resolve({
+        ok: false,
+        error:
+          "Timed out looking for your closet. Reload the Chrome helper, then try again.",
+      });
+    }, timeoutMs);
+
+    function onMessage(event: MessageEvent) {
+      if (event.origin !== window.location.origin) return;
+      const data = event.data;
+      if (!data || data.source !== EXTENSION_ACK_SOURCE) return;
+      if (data.type !== "closet-username-result") return;
+      window.clearTimeout(timer);
+      window.removeEventListener("message", onMessage);
+      rememberExtensionPresent(true);
+      resolve({
+        ok: Boolean(data.ok),
+        username:
+          typeof data.username === "string" ? data.username : undefined,
+        error: typeof data.error === "string" ? data.error : undefined,
+        loginRequired: Boolean(data.loginRequired),
+      });
+    }
+
+    window.addEventListener("message", onMessage);
+  });
+}
+
+export async function detectClosetUsernameWithExtension(
+  platform: Platform,
+  timeoutMs = 22000
+): Promise<ClosetUsernameResult> {
+  const pending = waitForClosetUsernameResult(timeoutMs);
+  requestClosetUsername(platform);
+  return pending;
 }

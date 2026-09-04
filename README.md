@@ -96,6 +96,7 @@ See [`extension/README.md`](extension/README.md).
 5. **Write listing with AI** on the hub
 6. **Review** editable title/description/fields
 7. **Post** checklist + extension pair → mark as posted
+8. **Profile → Linked closets** — **Find my closet** (Chrome helper reads the signed-in store, then you confirm) or paste a username, then **Check listings**
 
 ## Scripts
 

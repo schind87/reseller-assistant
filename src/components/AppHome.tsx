@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { BigButton } from "@/components/BigButton";
 import { ExtensionInstallCard } from "@/components/ExtensionInstallCard";
+import { MarketplaceAccountsCard } from "@/components/MarketplaceAccountsCard";
 import { PinSetupCard } from "@/components/PinSetupCard";
 import { SellerOnboarding } from "@/components/SellerOnboarding";
 import {
@@ -15,6 +16,10 @@ import { PLATFORM_LABELS, PLATFORM_PHOTO_ASPECT } from "@/lib/platforms";
 import {
   type ListingPreferences,
 } from "@/lib/seller-preferences";
+import type {
+  MarketplaceAccount,
+  MarketplaceClosetItem,
+} from "@/lib/marketplace-profiles";
 import type { Listing, Platform } from "@/lib/types";
 import type { ListingWithThumb } from "@/lib/supabase/queries";
 
@@ -29,6 +34,8 @@ type AppHomeProps = {
   preferencesCompleted: boolean;
   initialPreferences: ListingPreferences | null;
   userEmail?: string | null;
+  initialMarketplaceAccounts?: MarketplaceAccount[];
+  initialMarketplaceListings?: MarketplaceClosetItem[];
 };
 
 export function AppHome({
@@ -36,6 +43,8 @@ export function AppHome({
   preferencesCompleted,
   initialPreferences,
   userEmail = null,
+  initialMarketplaceAccounts = [],
+  initialMarketplaceListings = [],
 }: AppHomeProps) {
   const router = useRouter();
   const [listings, setListings] = useState<ListingWithThumb[]>(initialListings);
@@ -179,6 +188,11 @@ export function AppHome({
             }}
           />
         </section>
+
+        <MarketplaceAccountsCard
+          initialAccounts={initialMarketplaceAccounts}
+          initialListings={initialMarketplaceListings}
+        />
 
         <PinSetupCard />
 

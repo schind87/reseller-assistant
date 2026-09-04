@@ -1,6 +1,6 @@
 # Reseller Assistant Chrome Extension
 
-Manifest V3 helper that autofills **Mercari** and **Poshmark** listing pages from Reseller Assistant.
+Manifest V3 helper that autofills **Mercari** and **Poshmark** listing pages from Reseller Assistant, finds your closet name from **Find my closet**, and reads listings from **Check listings**.
 
 ## Install (unpacked)
 
@@ -46,10 +46,11 @@ Stored in `chrome.storage.local` as `{ appUrl, token, listingId, listingCache, s
 | --- | --- |
 | `manifest.json` | MV3 manifest |
 | `coach-shared.js` | Shared step definitions |
-| `background.js` | Pairing, listing cache, coach actions |
-| `bridge.js` | Web app → extension pairing |
+| `closet-sync.js` | Reads listing cards on closet / my listings pages |
+| `background.js` | Pairing, listing cache, coach actions, closet check |
+| `bridge.js` | Web app → extension pairing and closet check |
 | `page-coach.js` | On-page listing sidebar (shadow DOM) |
-| `content.js` | Field fill + photo attach |
+| `content.js` | Field fill + photo attach + closet extract |
 | `sidepanel.*` | Pairing + mirror of coach |
 
 Source of truth is `extension/`. Load Chrome from **`extension-live/`**.
