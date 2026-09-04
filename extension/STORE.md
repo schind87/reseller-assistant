@@ -56,6 +56,14 @@ Host permissions:
 
 Data types: Personal communications (email sign-in); User activity is only the listings you save in the app; Website content from Mercari/Poshmark only after an explicit action.
 
-## Screenshots
+## Images (upload these in the dashboard)
 
-CWS needs at least one 1280×800 or 640×400 image of the actual helper UI (side panel or on-page coach), not a marketing mock.
+Regenerate with `npm run extension:store-images`. Files live in [`extension/store-assets/`](store-assets/) and are **not** inside the zip.
+
+| Dashboard field | File | Size |
+| --- | --- | --- |
+| Store icon (also shipped in the zip as `icons/icon-128.png`) | `store-icon-128.png` | 128×128 PNG, 16px transparent padding |
+| Screenshots (at least one) | `screenshot-1280x800.png` | 1280×800, square corners, no padding |
+| Small promotional tile (required) | `promo-440x280.png` | 440×280 |
+
+Do not upload `screenshot.html`. That file is only the capture source.

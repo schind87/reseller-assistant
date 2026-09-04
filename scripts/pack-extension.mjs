@@ -9,6 +9,7 @@ const outDir = path.join(root, "dist");
 const outFile = path.join(outDir, "reseller-assistant-chrome.zip");
 
 const SKIP = new Set([".DS_Store", "Thumbs.db", "README.md", "STORE.md"]);
+const SKIP_DIRS = new Set(["store-assets"]);
 const LOCAL_APP_MATCHES = new Set([
   "http://localhost/*",
   "http://localhost:3000/*",
@@ -38,6 +39,7 @@ async function addDir(zip, dirPath, zipPrefix) {
     const full = path.join(dirPath, entry.name);
     const zipPath = zipPrefix ? `${zipPrefix}/${entry.name}` : entry.name;
     if (entry.isDirectory()) {
+      if (SKIP_DIRS.has(entry.name)) continue;
       await addDir(zip, full, zipPath);
       continue;
     }

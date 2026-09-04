@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Reseller Assistant — store screenshot</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        width: 1280px;
+        height: 800px;
+        overflow: hidden;
+        background: #ece8e1;
+        font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+        color: #1a1a1a;
+      }
+      .frame {
+        display: flex;
+        width: 1280px;
+        height: 800px;
+        background: #fff;
+      }
+      .sell {
+        flex: 1;
+        min-width: 0;
+        padding: 28px 36px 32px;
+        background: #faf8f5;
+        border-right: 1px solid #d4cfc6;
+      }
+      .sell h1 {
+        margin: 0 0 6px;
+        font-size: 28px;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+      }
+      .sell .lede {
+        margin: 0 0 22px;
+        color: #4a4a4a;
+        font-size: 15px;
+      }
+      .photos {
+        display: flex;
+        gap: 10px;
+        margin-bottom: 22px;
+      }
+      .photo {
+        width: 96px;
+        height: 96px;
+        border-radius: 10px;
+        border: 2px dashed #d4cfc6;
+        background: #fff;
+      }
+      .photo.filled {
+        border-style: solid;
+        background:
+          linear-gradient(160deg, #c5d4cc 0%, #8fa89c 55%, #6d8b7c 100%);
+      }
+      label {
+        display: block;
+        font-size: 13px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: #4a4a4a;
+        margin: 0 0 6px;
+      }
+      .field {
+        margin-bottom: 16px;
+      }
+      input,
+      textarea {
+        width: 100%;
+        box-sizing: border-box;
+        font: inherit;
+        font-size: 16px;
+        padding: 12px 14px;
+        border: 2px solid #d4cfc6;
+        border-radius: 10px;
+        background: #fff;
+      }
+      textarea {
+        min-height: 120px;
+        resize: none;
+      }
+      .row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+      }
+      .publish {
+        margin-top: 18px;
+        padding: 14px 22px;
+        border: 0;
+        border-radius: 10px;
+        background: #c8c4bc;
+        color: #5c5a55;
+        font: inherit;
+        font-size: 16px;
+        font-weight: 700;
+      }
+      .helper {
+        width: 340px;
+        flex-shrink: 0;
+        height: 800px;
+      }
+      .panel {
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+        background: #f7f4ef;
+        color: #1a1a1a;
+        border-left: 2px solid #1f5c4a;
+      }
+      .head {
+        display: flex;
+        align-items: center;
+        background: #1f5c4a;
+        color: #fff;
+        padding: 14px 16px;
+        flex-shrink: 0;
+      }
+      .head strong {
+        font-size: 16px;
+      }
+      .body {
+        padding: 16px;
+        display: grid;
+        gap: 10px;
+        align-content: start;
+        flex: 1;
+        overflow: hidden;
+      }
+      .step {
+        font-size: 13px;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: #1f5c4a;
+      }
+      .title {
+        font-size: 22px;
+        font-weight: 750;
+        line-height: 1.2;
+        margin: 0;
+      }
+      .help {
+        margin: 0;
+        font-size: 15px;
+        color: #4a4a4a;
+        line-height: 1.4;
+      }
+      .preview {
+        background: #fff;
+        border-radius: 10px;
+        padding: 10px 12px;
+        font-size: 14px;
+        color: #224433;
+      }
+      .bar {
+        height: 8px;
+        background: #e6f0ec;
+        border-radius: 999px;
+        overflow: hidden;
+      }
+      .bar > span {
+        display: block;
+        height: 100%;
+        width: 40%;
+        background: #1f5c4a;
+      }
+      .actions {
+        display: grid;
+        gap: 8px;
+      }
+      .btn {
+        border: 0;
+        border-radius: 12px;
+        padding: 14px 16px;
+        font-size: 17px;
+        font-weight: 750;
+      }
+      .btn-primary {
+        background: #1f5c4a;
+        color: #fff;
+      }
+      .btn-secondary {
+        background: #fff;
+        color: #1f5c4a;
+        border: 2px solid #1f5c4a;
+      }
+      .actions-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+      }
+      .btn-link {
+        background: transparent;
+        color: #1f5c4a;
+        border: 0;
+        padding: 4px 0;
+        font-size: 14px;
+        font-weight: 700;
+        text-decoration: underline;
+        text-align: left;
+      }
+      .status {
+        margin: 0;
+        font-size: 14px;
+        color: #1f5c4a;
+        font-weight: 650;
+      }
+      .note {
+        font-size: 12px;
+        color: #666;
+        margin: 0;
+      }
+      .foot {
+        flex-shrink: 0;
+        padding: 8px 16px 10px;
+        background: #f7f4ef;
+      }
+      .build-label {
+        margin: 0;
+        color: #9a948a;
+        font-size: 11px;
+        font-weight: 500;
+        letter-spacing: 0.02em;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="frame">
+      <main class="sell">
+        <h1>List an item</h1>
+        <p class="lede">Review the form, then press List yourself.</p>
+        <div class="photos" aria-hidden="true">
+          <div class="photo filled"></div>
+          <div class="photo filled"></div>
+          <div class="photo filled"></div>
+          <div class="photo"></div>
+        </div>
+        <div class="field">
+          <label for="title">Title</label>
+          <input id="title" value="" placeholder="Title" />
+        </div>
+        <div class="field">
+          <label for="description">Description</label>
+          <textarea id="description" placeholder="Description"></textarea>
+        </div>
+        <div class="row">
+          <div class="field">
+            <label for="brand">Brand</label>
+            <input id="brand" value="Patagonia" />
+          </div>
+          <div class="field">
+            <label for="size">Size</label>
+            <input id="size" value="M" />
+          </div>
+        </div>
+        <button class="publish" type="button">List</button>
+      </main>
+      <aside class="helper" aria-label="Reseller Assistant listing helper">
+        <div class="panel">
+          <div class="head">
+            <strong>Reseller Assistant</strong>
+          </div>
+          <div class="body">
+            <div class="step">Step 2 of 5 · Title</div>
+            <div class="bar"><span></span></div>
+            <h2 class="title">Patagonia Better Sweater</h2>
+            <p class="help">Fill the title shoppers see first.</p>
+            <div class="preview">Patagonia Better Sweater Fleece Jacket · Women’s M</div>
+            <div class="actions">
+              <button class="btn btn-primary" type="button">Fill title</button>
+              <button class="btn-link" type="button">Tweak listing fields…</button>
+              <div class="actions-row">
+                <button class="btn btn-secondary" type="button">Back</button>
+                <button class="btn btn-secondary" type="button">Next step</button>
+              </div>
+            </div>
+            <p class="status">Ready to fill this field.</p>
+            <p class="note">This helper never presses List or Publish for you.</p>
+          </div>
+          <div class="foot">
+            <p class="build-label">0.7.0 · 2</p>
+          </div>
+        </div>
+      </aside>
+    </div>
+  </body>
+</html>
