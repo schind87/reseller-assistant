@@ -23,6 +23,8 @@ html,
 body {
   margin: 0;
   padding: 0;
+  height: 100%;
+  overflow: hidden;
   background: var(--bg);
   color: var(--ink);
   font-family: var(--font);
@@ -31,8 +33,18 @@ body {
 }
 
 body {
-  padding: 16px;
+  display: flex;
+  flex-direction: column;
   min-width: 320px;
+  min-height: 100%;
+  padding: 16px 16px 0;
+}
+
+.panel-main {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding-bottom: 8px;
 }
 
 .header {
@@ -353,15 +365,30 @@ textarea:focus {
 }
 
 .footer {
-  margin-top: 16px;
-  padding-top: 0;
-  border-top: none;
+  flex: 0 0 auto;
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  margin: 0;
+  padding: 8px 0 10px;
+  background: var(--bg);
 }
 
 .footer-discreet {
   display: flex;
-  justify-content: flex-end;
+  justify-content: space-between;
   align-items: center;
+  gap: 8px;
+}
+
+.build-label {
+  margin: 0;
+  color: #9a948a;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  line-height: 1.2;
+  user-select: all;
 }
 
 .btn-reload-quiet {

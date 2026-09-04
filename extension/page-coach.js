@@ -1,4 +1,5 @@
-/* global RA_COACH_STEPS, RA_PAGE_SIDEBAR_WIDTH, raIsListingEditUrl */
+/* global RA_COACH_STEPS, RA_PAGE_SIDEBAR_WIDTH, raIsListingEditUrl,
+   raFillExtensionBuildLabel */
 
 (function initPageCoach() {
   const HOST_ID = "reseller-assistant-page-coach";
@@ -187,6 +188,20 @@
         color: #666;
         margin: 0;
       }
+      .foot {
+        flex-shrink: 0;
+        padding: 8px 16px 10px;
+        background: #f7f4ef;
+      }
+      .build-label {
+        margin: 0;
+        color: #9a948a;
+        font-size: 11px;
+        font-weight: 500;
+        letter-spacing: 0.02em;
+        line-height: 1.2;
+        user-select: all;
+      }
     </style>
     <div class="panel" id="panel">
       <div class="head">
@@ -209,6 +224,9 @@
         <p class="status" id="status" role="status"></p>
         <p class="note">This helper never presses List or Publish for you.</p>
       </div>
+      <div class="foot">
+        <p class="build-label" id="build-label"></p>
+      </div>
     </div>
   `;
 
@@ -224,6 +242,10 @@
     next: shadow.getElementById("next"),
     status: shadow.getElementById("status"),
   };
+
+  if (typeof raFillExtensionBuildLabel === "function") {
+    raFillExtensionBuildLabel(shadow.getElementById("build-label"));
+  }
 
   function setBusy(next) {
     busy = next;

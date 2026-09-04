@@ -60,6 +60,43 @@ var RA_MARKETPLACE_TAB_URLS = [
   "https://*.poshmark.com/*",
 ];
 
+/** Manifest `version` is N.N.N or N.N.N.BUILD. Last integer is the build. */
+function raManifestVersionParts(manifest) {
+  var raw = String((manifest && manifest.version) || "").trim();
+  var parts = raw.split(".").filter(Boolean);
+  var build = "0";
+  if (parts.length >= 4) {
+    build = parts.pop();
+  }
+  return {
+    version: parts.join(".") || raw || "0",
+    build: build,
+  };
+}
+
+function raFillExtensionBuildLabel(el) {
+  if (!el) return;
+  try {
+    var parts = raManifestVersionParts(chrome.runtime.getManifest());
+    el.textContent = parts.version + " · " + parts.build;
+    el.setAttribute(
+      "aria-label",
+      "Version " + parts.version + ", build " + parts.build
+    );
+  } catch {
+    el.textContent = "";
+  }
+}
+
+/** Unpacked Load unpacked has no Chrome Web Store update_url. */
+function raIsUnpackedExtension() {
+  try {
+    return !chrome.runtime.getManifest().update_url;
+  } catch {
+    return false;
+  }
+}
+
 /** Fields that must be chosen from the site’s autocomplete (not pasted in). */
 var RA_AUTOCOMPLETE_FIELDS = {
   poshmark: ["brand", "styleTags"],

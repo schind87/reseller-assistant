@@ -1,4 +1,5 @@
-/* global RA_COACH_STEPS, RA_MARKETPLACE_TAB_URLS, raListingCacheForId */
+/* global RA_COACH_STEPS, RA_MARKETPLACE_TAB_URLS, raListingCacheForId,
+   raFillExtensionBuildLabel, raIsUnpackedExtension */
 
 const DEFAULT_APP_URL = "https://reseller.mvfeed.us";
 const APP_URL_CANDIDATES = [
@@ -430,7 +431,12 @@ els.refreshBtn.addEventListener("click", () =>
 );
 els.syncSchemaBtn.addEventListener("click", () => void handleSyncSchema());
 els.copyPhotosBtn.addEventListener("click", () => void handleCopyPhotos());
-els.reloadExtensionBtn.addEventListener("click", () => chrome.runtime.reload());
+if (els.reloadExtensionBtn && raIsUnpackedExtension()) {
+  els.reloadExtensionBtn.hidden = false;
+  els.reloadExtensionBtn.addEventListener("click", () =>
+    chrome.runtime.reload()
+  );
+}
 
 els.joinCode.addEventListener("input", () => {
   const value = els.joinCode.value.trim();
@@ -475,3 +481,4 @@ async function boot() {
 }
 
 void boot();
+raFillExtensionBuildLabel(document.getElementById("build-label"));

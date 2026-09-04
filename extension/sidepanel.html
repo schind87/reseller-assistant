@@ -7,6 +7,7 @@
     <link rel="stylesheet" href="sidepanel.css" />
   </head>
   <body>
+    <div class="panel-main">
     <header class="header">
       <h1>Reseller Assistant</h1>
       <p id="connection-status" class="connection" role="status" aria-live="polite">
@@ -118,13 +119,16 @@
         </div>
       </details>
     </section>
+    </div>
 
     <footer class="footer footer-discreet">
+      <p id="build-label" class="build-label"></p>
       <button
         id="reload-extension-btn"
         class="btn-reload-quiet"
         type="button"
-        title="Reload extension from repo"
+        hidden
+        title="Reload unpacked helper"
       >
         Reload
       </button>
