@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Reseller Assistant",
-  "version": "0.7.0.2",
+  "version": "0.7.0.3",
   "description": "Fill Mercari and Poshmark sell forms from Reseller Assistant. You still press Publish.",
   "homepage_url": "https://reseller.mvfeed.us",
   "minimum_chrome_version": "116",
