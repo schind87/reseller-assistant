@@ -3,6 +3,38 @@ import type { PhotoAspectGuide } from "@/lib/platforms";
 /** Max long-edge pixels for cropped listing JPEGs (matches CameraCapture). */
 export const PHOTO_ASPECT_MAX_LONG_EDGE = 1600;
 
+/** Shrink a camera or library image so phone uploads stay under the server body limit. */
+export async function jpegBlobForUpload(
+  source: Blob,
+  maxLongEdge = PHOTO_ASPECT_MAX_LONG_EDGE,
+  quality = 0.88
+): Promise<Blob> {
+  if (typeof createImageBitmap !== "function") return source;
+  try {
+    const bitmap = await createImageBitmap(source);
+    const longEdge = Math.max(bitmap.width, bitmap.height);
+    const scale = longEdge > maxLongEdge ? maxLongEdge / longEdge : 1;
+    const width = Math.max(1, Math.round(bitmap.width * scale));
+    const height = Math.max(1, Math.round(bitmap.height * scale));
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) {
+      bitmap.close();
+      return source;
+    }
+    ctx.drawImage(bitmap, 0, 0, width, height);
+    bitmap.close();
+    const blob = await new Promise<Blob | null>((resolve) => {
+      canvas.toBlob((next) => resolve(next), "image/jpeg", quality);
+    });
+    return blob && blob.size > 0 ? blob : source;
+  } catch {
+    return source;
+  }
+}
+
 /** Relative tolerance when deciding a photo already matches the platform frame. */
 export const PHOTO_ASPECT_NEAR_TOLERANCE = 0.02;
 

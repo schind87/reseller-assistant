@@ -5,8 +5,8 @@ import {
   shouldRedirectToCanonicalHost,
 } from "@/lib/canonical-host";
 import {
+  getJoinSessionFromRequest,
   getSessionFromRequest,
-  isUnlocked,
   isUserSession,
 } from "@/lib/session";
 
@@ -59,17 +59,28 @@ export async function proxy(request: NextRequest) {
   }
 
   const session = await getSessionFromRequest(request);
+  const joinSession = await getJoinSessionFromRequest(request);
   const signedIn = isUserSession(session);
-  const joinOk = isUnlocked(session) && session?.kind === "join";
+  const joinOk = Boolean(joinSession);
 
   // Phone QR sessions may only use the Phone Companion + its APIs (not the laptop hub).
-  if (joinOk && !signedIn) {
-    const photosPage = pathname.match(/^\/app\/listings\/([^/]+)\/photos\/?$/);
+  // A leftover seller login on the phone must not hide the join cookie.
+  if (joinOk) {
+    const photosPage = pathname.match(/^\/app\/listings\/[^/]+\/photos\/?$/);
     const listingApi = pathname.match(
-      /^\/api\/listings\/([^/]+)(\/photos)?\/?$/
+      /^\/api\/listings\/[^/]+(?:\/photos(?:\/.*)?)?\/?$/
     );
     if (photosPage || listingApi) {
       return NextResponse.next();
+    }
+
+    const joinListingId = joinSession?.listingId;
+    if (joinListingId && pathname.startsWith("/app")) {
+      const photosUrl = new URL(
+        `/app/listings/${joinListingId}/photos?phone=1`,
+        request.url
+      );
+      return NextResponse.redirect(photosUrl);
     }
 
     const listingApp = pathname.match(/^\/app\/listings\/([^/]+)(\/.*)?$/);

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { BigButton } from "@/components/BigButton";
@@ -47,7 +47,18 @@ export function AppHome({
   initialMarketplaceListings = [],
 }: AppHomeProps) {
   const router = useRouter();
-  const [listings, setListings] = useState<ListingWithThumb[]>(initialListings);
+  const [createdListings, setCreatedListings] = useState<ListingWithThumb[]>(
+    []
+  );
+  const [deletedIds, setDeletedIds] = useState<string[]>([]);
+  const listings = [
+    ...createdListings.filter(
+      (row) =>
+        !deletedIds.includes(row.id) &&
+        !initialListings.some((listing) => listing.id === row.id)
+    ),
+    ...initialListings.filter((listing) => !deletedIds.includes(listing.id)),
+  ];
   const [prefsDone, setPrefsDone] = useState(preferencesCompleted);
   const [preferences, setPreferences] = useState(initialPreferences);
   const [editingPrefs, setEditingPrefs] = useState(!preferencesCompleted);
@@ -56,6 +67,20 @@ export function AppHome({
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [choosing, setChoosing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    function refreshList() {
+      if (document.visibilityState === "visible") {
+        router.refresh();
+      }
+    }
+    document.addEventListener("visibilitychange", refreshList);
+    window.addEventListener("pageshow", refreshList);
+    return () => {
+      document.removeEventListener("visibilitychange", refreshList);
+      window.removeEventListener("pageshow", refreshList);
+    };
+  }, [router]);
 
   async function startListing(platform: Platform) {
     setBusy(true);
@@ -69,7 +94,7 @@ export function AppHome({
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "Could not create listing");
       const created = json.listing as Listing;
-      setListings((prev) => [
+      setCreatedListings((prev) => [
         { ...created, thumbUrl: null, hasListingPhoto: false },
         ...prev,
       ]);
@@ -103,7 +128,9 @@ export function AppHome({
           typeof json.error === "string" ? json.error : "Could not delete listing"
         );
       }
-      setListings((prev) => prev.filter((listing) => listing.id !== listingId));
+      setDeletedIds((prev) =>
+        prev.includes(listingId) ? prev : [...prev, listingId]
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not delete listing");
     } finally {

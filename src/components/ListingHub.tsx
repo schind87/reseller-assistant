@@ -531,7 +531,7 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
       if (cancelled) return;
       if (document.visibilityState !== "visible") return;
       void load({ syncDraft: false });
-    }, 8000);
+    }, 2500);
 
     function onVisible() {
       if (cancelled) return;
@@ -2457,6 +2457,8 @@ function PhotoTile({
     onReorder(draggedId, place);
   }
 
+  const thumbSrc = photoThumbUrl(photo);
+
   return (
     <li
       data-photo-tile={photo.id}
@@ -2528,21 +2530,27 @@ function PhotoTile({
           aspectRatio: `${photoAspect.width} / ${photoAspect.height}`,
         }}
       >
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={photoThumbUrl(photo)}
-          alt={photoRoleLabel(photo.role)}
-          loading="lazy"
-          decoding="async"
-          className="pointer-events-none h-full w-full object-contain"
-          draggable={false}
-          onError={(e) => {
-            const full = photoFullUrl(photo);
-            if (full && e.currentTarget.src !== full) {
-              e.currentTarget.src = full;
-            }
-          }}
-        />
+        {thumbSrc ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={thumbSrc}
+            alt={photoRoleLabel(photo.role)}
+            loading="lazy"
+            decoding="async"
+            className="pointer-events-none h-full w-full object-contain"
+            draggable={false}
+            onError={(e) => {
+              const full = photoFullUrl(photo);
+              if (full && e.currentTarget.src !== full) {
+                e.currentTarget.src = full;
+              }
+            }}
+          />
+        ) : (
+          <div className="flex h-full items-center justify-center text-[10px] font-semibold uppercase tracking-wide text-[var(--muted)]">
+            Photo
+          </div>
+        )}
       </div>
       {cleaningBg ? (
         <div

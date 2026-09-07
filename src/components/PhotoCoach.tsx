@@ -11,6 +11,7 @@ import {
   PLATFORM_PHOTO_ASPECT,
   photoRoleLabel,
 } from "@/lib/platforms";
+import { jpegBlobForUpload } from "@/lib/photo-aspect";
 import {
   isIdentifyPhotoRole,
   type Listing,
@@ -83,10 +84,11 @@ export function PhotoCoach({ listing, initialPhotos }: PhotoCoachProps) {
     setBusy(true);
     setError(null);
     try {
+      const prepared = await jpegBlobForUpload(blob);
       const body = new FormData();
       body.append(
         "photo",
-        new File([blob], `${role}.jpg`, { type: blob.type || "image/jpeg" })
+        new File([prepared], `${role}.jpg`, { type: "image/jpeg" })
       );
       body.append("role", role);
 
@@ -94,13 +96,24 @@ export function PhotoCoach({ listing, initialPhotos }: PhotoCoachProps) {
         method: "POST",
         body,
       });
-      const data = await res.json();
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        photo?: ListingPhotoWithUrl;
+      };
       if (!res.ok) {
-        throw new Error(data.error ?? "Couldn’t upload photo. Try again.");
+        throw new Error(
+          res.status === 413
+            ? "That photo is too large. Try taking it in the app instead of picking from the library."
+            : (data.error ?? "Couldn’t upload photo. Try again.")
+        );
       }
+      if (!data.photo) {
+        throw new Error("Couldn’t upload photo. Try again.");
+      }
+      const uploaded = data.photo;
 
-      setPhotos((prev) => [...prev, data.photo]);
-      setPreview(data.photo.signedUrl ?? URL.createObjectURL(blob));
+      setPhotos((prev) => [...prev, uploaded]);
+      setPreview(uploaded.signedUrl ?? URL.createObjectURL(blob));
       setPendingDeleteId(null);
       setCameraOpen(false);
     } catch (err) {

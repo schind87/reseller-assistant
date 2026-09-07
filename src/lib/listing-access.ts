@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { isAdminEmail } from "@/lib/admin";
 import { getAuthUser } from "@/lib/api-auth";
-import { getSessionFromCookies, isUnlocked } from "@/lib/session";
+import { getJoinSessionFromCookies } from "@/lib/session";
 import { getListing } from "@/lib/supabase/queries";
 import type { Listing } from "@/lib/types";
 
@@ -52,12 +52,8 @@ export async function authorizeListingAccess(
     };
   }
 
-  const join = await getSessionFromCookies();
-  if (
-    join?.kind === "join" &&
-    isUnlocked(join) &&
-    (!join.listingId || join.listingId === listingId)
-  ) {
+  const join = await getJoinSessionFromCookies();
+  if (join && (!join.listingId || join.listingId === listingId)) {
     return { listing, userId: user?.id ?? null, isAdmin: false };
   }
 

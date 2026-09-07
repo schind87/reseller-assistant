@@ -152,6 +152,14 @@ export async function clearSessionCookie(): Promise<void> {
   }
 }
 
+export async function getJoinSessionFromCookies(): Promise<JoinSessionPayload | null> {
+  const cookieStore = await cookies();
+  const joinToken = cookieStore.get(JOIN_COOKIE)?.value;
+  if (!joinToken) return null;
+  const session = await verifySessionToken(joinToken);
+  return session?.kind === "join" ? session : null;
+}
+
 export async function getSessionFromCookies(): Promise<SessionPayload | null> {
   const cookieStore = await cookies();
   const userToken = cookieStore.get(SESSION_COOKIE)?.value;
@@ -159,9 +167,16 @@ export async function getSessionFromCookies(): Promise<SessionPayload | null> {
     const session = await verifySessionToken(userToken);
     if (session) return session;
   }
-  const joinToken = cookieStore.get(JOIN_COOKIE)?.value;
-  if (joinToken) return verifySessionToken(joinToken);
-  return null;
+  return getJoinSessionFromCookies();
+}
+
+export async function getJoinSessionFromRequest(
+  request: NextRequest
+): Promise<JoinSessionPayload | null> {
+  const joinToken = request.cookies.get(JOIN_COOKIE)?.value;
+  if (!joinToken) return null;
+  const session = await verifySessionToken(joinToken);
+  return session?.kind === "join" ? session : null;
 }
 
 export async function getSessionFromRequest(
@@ -172,9 +187,7 @@ export async function getSessionFromRequest(
     const session = await verifySessionToken(userToken);
     if (session) return session;
   }
-  const joinToken = request.cookies.get(JOIN_COOKIE)?.value;
-  if (joinToken) return verifySessionToken(joinToken);
-  return null;
+  return getJoinSessionFromRequest(request);
 }
 
 export function isUserSession(

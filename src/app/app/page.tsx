@@ -12,6 +12,8 @@ import type {
   MarketplaceClosetItem,
 } from "@/lib/marketplace-profiles";
 
+export const dynamic = "force-dynamic";
+
 export default async function AppHomePage() {
   const user = await getAuthUser();
   if (!user) {

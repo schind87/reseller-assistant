@@ -1,27 +1,30 @@
 import { NextResponse } from "next/server";
 import { isAdminEmail } from "@/lib/admin";
 import { getAuthUser } from "@/lib/api-auth";
-import { getSessionFromCookies, isUnlocked } from "@/lib/session";
+import { getJoinSessionFromCookies } from "@/lib/session";
 
 export async function GET() {
   try {
-    const user = await getAuthUser();
+    const [user, join] = await Promise.all([
+      getAuthUser(),
+      getJoinSessionFromCookies(),
+    ]);
+    const hasJoin = join?.kind === "join";
     if (user) {
       return NextResponse.json({
         unlocked: true,
         signedIn: true,
         isAdmin: isAdminEmail(user.email),
         user,
+        joinOnly: hasJoin,
       });
     }
 
-    const join = await getSessionFromCookies();
-    const joinOnly = isUnlocked(join) && join?.kind === "join";
     return NextResponse.json({
-      unlocked: isUnlocked(join),
+      unlocked: hasJoin,
       signedIn: false,
       isAdmin: false,
-      joinOnly,
+      joinOnly: hasJoin,
     });
   } catch (err) {
     console.error("auth status error:", err);

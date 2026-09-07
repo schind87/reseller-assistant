@@ -125,6 +125,13 @@ export async function listListings(userId: string): Promise<ListingWithThumb[]> 
     resize: "contain",
     quality: 72,
   });
+  const missingThumbs = pathsToSign.filter((path) => !signed.get(path));
+  if (missingThumbs.length > 0) {
+    const fallback = await getSignedPhotoUrls(missingThumbs, 3600);
+    for (const path of missingThumbs) {
+      signed.set(path, fallback.get(path) ?? null);
+    }
+  }
   return listings.map((listing) => {
     const path = pathByListing.get(listing.id) ?? null;
     const listingPhotos = photosByListing.get(listing.id) ?? [];
