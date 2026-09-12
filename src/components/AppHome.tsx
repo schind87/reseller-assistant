@@ -65,24 +65,24 @@ export function AppHome({
   const [showProfile, setShowProfile] = useState(false);
   const [busy, setBusy] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [armedDeleteId, setArmedDeleteId] = useState<string | null>(null);
   const [choosing, setChoosing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!openMenuId) return;
+    if (!armedDeleteId) return;
     function onPointerDown(event: PointerEvent) {
       const target = event.target;
       if (!(target instanceof Node)) return;
       const root = document.querySelector(
-        `[data-listing-menu="${openMenuId}"]`
+        `[data-listing-menu="${armedDeleteId}"]`
       );
       if (root && !root.contains(target)) {
-        setOpenMenuId(null);
+        setArmedDeleteId(null);
       }
     }
     function onKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") setOpenMenuId(null);
+      if (event.key === "Escape") setArmedDeleteId(null);
     }
     document.addEventListener("pointerdown", onPointerDown);
     document.addEventListener("keydown", onKeyDown);
@@ -90,7 +90,7 @@ export function AppHome({
       document.removeEventListener("pointerdown", onPointerDown);
       document.removeEventListener("keydown", onKeyDown);
     };
-  }, [openMenuId]);
+  }, [armedDeleteId]);
 
   useEffect(() => {
     function refreshList() {
@@ -155,7 +155,7 @@ export function AppHome({
       setDeletedIds((prev) =>
         prev.includes(listingId) ? prev : [...prev, listingId]
       );
-      setOpenMenuId(null);
+      setArmedDeleteId(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not delete listing");
     } finally {
@@ -330,12 +330,13 @@ export function AppHome({
                 listing.title ||
                 `${PLATFORM_LABELS[listing.platform]} draft`;
               const aspect = PLATFORM_PHOTO_ASPECT[listing.platform];
-              const menuOpen = openMenuId === listing.id;
+              const deleteArmed = armedDeleteId === listing.id;
+              const deleting = deletingId === listing.id;
               return (
                 <li
                   key={listing.id}
                   data-listing-menu={listing.id}
-                  className="flex flex-col rounded-2xl border border-[var(--border)] bg-white"
+                  className="overflow-hidden rounded-2xl border border-[var(--border)] bg-white"
                 >
                   <div className="flex items-stretch gap-2">
                     <Link
@@ -382,33 +383,30 @@ export function AppHome({
                     </Link>
                     <button
                       type="button"
-                      aria-expanded={menuOpen}
-                      aria-controls={`listing-more-${listing.id}`}
-                      aria-label={`More actions for ${label}`}
-                      onClick={() =>
-                        setOpenMenuId(menuOpen ? null : listing.id)
+                      disabled={deleting}
+                      aria-label={
+                        deleteArmed
+                          ? `Delete ${label}`
+                          : `More actions for ${label}`
                       }
-                      className="touch-target flex shrink-0 items-center px-4 text-base font-semibold text-[var(--muted)] hover:bg-[var(--surface-muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+                      onClick={() => {
+                        if (deleteArmed) {
+                          void deleteListing(listing.id, label);
+                          return;
+                        }
+                        setArmedDeleteId(listing.id);
+                      }}
+                      className={[
+                        "touch-target flex shrink-0 items-center self-stretch px-4 text-base font-semibold",
+                        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]",
+                        deleteArmed
+                          ? "bg-[var(--danger)] text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                          : "text-[var(--muted)] hover:bg-[var(--surface-muted)]",
+                      ].join(" ")}
                     >
-                      More
+                      {deleting ? "…" : deleteArmed ? "Delete" : "More"}
                     </button>
                   </div>
-                  {menuOpen ? (
-                    <div
-                      id={`listing-more-${listing.id}`}
-                      className="border-t border-[var(--border)] p-1"
-                    >
-                      <button
-                        type="button"
-                        disabled={deletingId === listing.id}
-                        onClick={() => void deleteListing(listing.id, label)}
-                        className="w-full rounded-lg px-3 py-2 text-left text-base font-semibold text-[var(--danger)] hover:bg-red-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] disabled:opacity-50"
-                        aria-label={`Delete ${label}`}
-                      >
-                        {deletingId === listing.id ? "…" : "Delete"}
-                      </button>
-                    </div>
-                  ) : null}
                 </li>
               );
             })}
