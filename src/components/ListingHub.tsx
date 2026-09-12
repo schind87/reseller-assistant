@@ -1854,28 +1854,26 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
           </section>
         </div>
 
-        <aside className="order-first flex flex-col gap-3 lg:order-none">
-          <div className="sticky top-0 z-10 flex flex-col gap-3 bg-[var(--background)] py-1">
-            <Link
-              href="/app"
-              className="touch-target inline-flex items-center justify-center self-stretch rounded-xl border border-[var(--border)] bg-white px-4 text-base font-semibold text-[var(--foreground)] hover:bg-[var(--surface-muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
-            >
-              ← All listings
-            </Link>
-            {joinUrl ? (
-              <QrPanel
-                compact
-                value={joinUrl}
-                title="Phone Companion"
-                hint="Scan with your phone"
-                code={listing.join_code}
-              />
-            ) : (
-              <div className="rounded-xl border border-[var(--border)] bg-white p-3 text-center text-sm text-[var(--muted)]">
-                Preparing QR…
-              </div>
-            )}
-          </div>
+        <aside className="order-first sticky top-0 z-10 flex flex-col gap-3 bg-[var(--background)] py-1 lg:order-none">
+          <Link
+            href="/app"
+            className="touch-target inline-flex items-center justify-center self-stretch rounded-xl border border-[var(--border)] bg-white px-4 text-base font-semibold text-[var(--foreground)] hover:bg-[var(--surface-muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+          >
+            ← All listings
+          </Link>
+          {joinUrl ? (
+            <QrPanel
+              compact
+              value={joinUrl}
+              title="Phone Companion"
+              hint="Scan with your phone"
+              code={listing.join_code}
+            />
+          ) : (
+            <div className="rounded-xl border border-[var(--border)] bg-white p-3 text-center text-sm text-[var(--muted)]">
+              Preparing QR…
+            </div>
+          )}
           {coverPhoto && coverThumbSrc ? (
             <button
               type="button"
