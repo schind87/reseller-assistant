@@ -119,6 +119,19 @@ export function normalizePoshmarkStyleTags(
   return normalized;
 }
 
+/** Poshmark listing and original prices are whole dollars — no cents. */
+export function roundPoshmarkDollars(
+  value: number | string | null | undefined
+): number | null {
+  if (value == null || value === "") return null;
+  const numeric =
+    typeof value === "number"
+      ? value
+      : Number(String(value).replace(/[^0-9.-]/g, ""));
+  if (!Number.isFinite(numeric) || numeric < 0) return null;
+  return Math.round(numeric);
+}
+
 /** Coerce draft/identify structured fields into Poshmark-accepted formats. */
 export function normalizePoshmarkStructuredFields(
   fields: StructuredFields
@@ -135,6 +148,7 @@ export function normalizePoshmarkStructuredFields(
     color: color ?? fields.color,
     colorSecondary: colorSecondary ?? fields.colorSecondary,
     styleTags: normalizePoshmarkStyleTags(fields.styleTags),
+    originalPrice: roundPoshmarkDollars(fields.originalPrice),
   };
 }
 

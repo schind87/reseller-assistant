@@ -63,6 +63,7 @@ import {
   isIdentifyPhotoRole,
   isPostingPhotoRole,
 } from "@/lib/types";
+import { roundPoshmarkDollars } from "@/lib/poshmark-formats";
 
 type ListingHubProps = {
   listingId: string;
@@ -246,14 +247,22 @@ function imageFilesFromDataTransfer(dt: DataTransfer | null): File[] {
 }
 
 function applyListingToDraft(listing: Listing) {
+  const fields = {
+    ...emptyStructuredFields(),
+    ...listing.structured_fields,
+  } as StructuredFields;
+  const priceValue =
+    listing.platform === "poshmark"
+      ? roundPoshmarkDollars(listing.price)
+      : listing.price;
+  if (listing.platform === "poshmark") {
+    fields.originalPrice = roundPoshmarkDollars(fields.originalPrice);
+  }
   return {
     title: listing.title ?? "",
     description: listing.description ?? "",
-    price: listing.price != null ? String(listing.price) : "",
-    fields: {
-      ...emptyStructuredFields(),
-      ...listing.structured_fields,
-    } as StructuredFields,
+    price: priceValue != null ? String(priceValue) : "",
+    fields,
   };
 }
 
@@ -838,8 +847,19 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
         body: JSON.stringify({
           title,
           description,
-          price: price === "" ? null : Number(price),
-          structured_fields: fields,
+          price:
+            price === ""
+              ? null
+              : data.listing.platform === "poshmark"
+                ? roundPoshmarkDollars(price)
+                : Number(price),
+          structured_fields:
+            data.listing.platform === "poshmark"
+              ? {
+                  ...fields,
+                  originalPrice: roundPoshmarkDollars(fields.originalPrice),
+                }
+              : fields,
           status:
             data.listing.status === "posted" ||
             data.listing.status === "posting"
@@ -1395,43 +1415,37 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
         className="hidden"
         onChange={(e) => void onDesktopFilesSelected(e)}
       />
-      <header className="flex flex-col gap-4">
-        <Link
-          href="/app"
-          className="touch-target inline-flex items-center justify-center self-start rounded-xl border border-[var(--border)] bg-white px-4 text-base font-semibold text-[var(--foreground)] hover:bg-[var(--surface-muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
-        >
-          ← All listings
-        </Link>
-        <div className="flex flex-col gap-2">
-          <p className="text-sm font-semibold uppercase tracking-wide text-[var(--accent)]">
-            {PLATFORM_LABELS[platform]} · {listingJobStepLabel(jobStep)}
-          </p>
-          <h1 className="font-[family-name:var(--font-brand)] text-4xl text-[var(--foreground)]">
-            {pageTitle}
-          </h1>
-        </div>
-      </header>
-
-      {error ? (
-        <p
-          role="alert"
-          className="rounded-xl bg-red-50 px-4 py-3 text-base text-red-800"
-        >
-          {error}
-        </p>
-      ) : null}
-
-      {statusMessage ? (
-        <p
-          role="status"
-          className="rounded-xl bg-[var(--accent-soft)] px-4 py-3 text-base text-[var(--accent)]"
-        >
-          {statusMessage}
-        </p>
-      ) : null}
-
       <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_13.5rem]">
         <div className="flex min-w-0 flex-col gap-8">
+          <header className="flex flex-col gap-4">
+            <div className="flex flex-col gap-2">
+              <p className="text-sm font-semibold uppercase tracking-wide text-[var(--accent)]">
+                {PLATFORM_LABELS[platform]} · {listingJobStepLabel(jobStep)}
+              </p>
+              <h1 className="font-[family-name:var(--font-brand)] text-4xl text-[var(--foreground)]">
+                {pageTitle}
+              </h1>
+            </div>
+          </header>
+
+          {error ? (
+            <p
+              role="alert"
+              className="rounded-xl bg-red-50 px-4 py-3 text-base text-red-800"
+            >
+              {error}
+            </p>
+          ) : null}
+
+          {statusMessage ? (
+            <p
+              role="status"
+              className="rounded-xl bg-[var(--accent-soft)] px-4 py-3 text-base text-[var(--accent)]"
+            >
+              {statusMessage}
+            </p>
+          ) : null}
+
           {jobStep === "posted" ? (
             <p className="rounded-xl bg-[var(--accent-soft)] px-4 py-3 text-base text-[var(--accent)]">
               Marked as posted on {PLATFORM_LABELS[platform]}.
@@ -1840,20 +1854,28 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
           </section>
         </div>
 
-        <aside className="order-first flex flex-col gap-3 lg:sticky lg:top-0 lg:z-10 lg:order-none lg:bg-[var(--background)] lg:py-1">
-          {joinUrl ? (
-            <QrPanel
-              compact
-              value={joinUrl}
-              title="Phone Companion"
-              hint="Scan with your phone"
-              code={listing.join_code}
-            />
-          ) : (
-            <div className="rounded-xl border border-[var(--border)] bg-white p-3 text-center text-sm text-[var(--muted)]">
-              Preparing QR…
-            </div>
-          )}
+        <aside className="order-first flex flex-col gap-3 lg:order-none">
+          <div className="sticky top-0 z-10 flex flex-col gap-3 bg-[var(--background)] py-1">
+            <Link
+              href="/app"
+              className="touch-target inline-flex items-center justify-center self-stretch rounded-xl border border-[var(--border)] bg-white px-4 text-base font-semibold text-[var(--foreground)] hover:bg-[var(--surface-muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+            >
+              ← All listings
+            </Link>
+            {joinUrl ? (
+              <QrPanel
+                compact
+                value={joinUrl}
+                title="Phone Companion"
+                hint="Scan with your phone"
+                code={listing.join_code}
+              />
+            ) : (
+              <div className="rounded-xl border border-[var(--border)] bg-white p-3 text-center text-sm text-[var(--muted)]">
+                Preparing QR…
+              </div>
+            )}
+          </div>
           {coverPhoto && coverThumbSrc ? (
             <button
               type="button"

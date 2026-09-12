@@ -6,7 +6,10 @@ import {
   missingAiProviderMessage,
 } from "@/lib/ai/provider";
 import { FIELD_LIMITS, PLATFORM_LABELS } from "@/lib/platforms";
-import { normalizePoshmarkStructuredFields } from "@/lib/poshmark-formats";
+import {
+  normalizePoshmarkStructuredFields,
+  roundPoshmarkDollars,
+} from "@/lib/poshmark-formats";
 import {
   emptyStructuredFields,
   type IdentifiedAttrs,
@@ -125,6 +128,7 @@ Condition MUST be exactly one of: "New With Tags", "Like New", "Good", "Fair".
 Primary/secondary color MUST be from: Red, Pink, Orange, Yellow, Green, Blue, Purple, Gold, Silver, Black, Gray, White, Cream, Brown, Tan.
 Style tags: at most 3, chosen from Poshmark’s official style-tag list (examples: Casual, Bohemian, Vintage, Athleisure, Preppy, Streetwear, Y2K, Cottagecore, Business Casual, Athletic). Use exact canonical names.
 Original price is required on Poshmark when known — estimate retail if needed.
+Listing price and original price MUST be whole dollars (no cents), e.g. 28 not 27.99.
 Description should include flat measurements, fabric, and smoke/pet notes.`;
 
   try {
@@ -218,7 +222,10 @@ Keep title within ${limits.titleMax} characters and description within ${limits.
     return {
       title,
       description,
-      price: object.price,
+      price:
+        platform === "poshmark"
+          ? roundPoshmarkDollars(object.price)
+          : object.price,
       structured_fields: structured,
       degraded: false,
     };

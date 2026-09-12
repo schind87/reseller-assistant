@@ -15,6 +15,7 @@ import {
   getMarketplaceSubcategoryOptions,
 } from "@/lib/marketplace-categories";
 import type { StructuredFields } from "@/lib/types";
+import { roundPoshmarkDollars } from "@/lib/poshmark-formats";
 import { AiGlyph } from "@/components/AiPhotoBackgroundPicker";
 import { BigButton } from "@/components/BigButton";
 
@@ -177,6 +178,8 @@ export function ListingSchemaForm({
     );
   }
 
+  const wholeDollarPrices = schema.platform === "poshmark";
+
   function renderPriceField(field: ListingFieldDef) {
     return (
       <Field
@@ -187,9 +190,17 @@ export function ListingSchemaForm({
         <input
           type="number"
           min={0}
-          step="0.01"
+          step={wholeDollarPrices ? "1" : "0.01"}
+          inputMode={wholeDollarPrices ? "numeric" : "decimal"}
           value={price}
           onChange={(e) => onPriceChange(e.target.value)}
+          onBlur={() => {
+            if (!wholeDollarPrices || price === "") return;
+            const rounded = roundPoshmarkDollars(price);
+            if (rounded == null) return;
+            const next = String(rounded);
+            if (next !== price) onPriceChange(next);
+          }}
           className={controlClass}
         />
       </Field>
@@ -355,10 +366,40 @@ export function ListingSchemaForm({
       );
     }
 
+    if (field.input === "number") {
+      return (
+        <Field key={field.id} label={label} hint={field.hint}>
+          <input
+            type="number"
+            min={0}
+            step={wholeDollarPrices ? "1" : "0.01"}
+            inputMode={wholeDollarPrices ? "numeric" : "decimal"}
+            value={value}
+            onChange={(e) =>
+              onFieldsChange(
+                writeStructured(fields, key, e.target.value, field.input)
+              )
+            }
+            onBlur={() => {
+              if (!wholeDollarPrices || value === "") return;
+              const rounded = roundPoshmarkDollars(value);
+              if (rounded == null) return;
+              const next = String(rounded);
+              if (next !== value) {
+                onFieldsChange(writeStructured(fields, key, next, field.input));
+              }
+            }}
+            placeholder={field.placeholder}
+            className={controlClass}
+          />
+        </Field>
+      );
+    }
+
     return (
       <Field key={field.id} label={label} hint={field.hint}>
         <input
-          type={field.input === "number" ? "number" : "text"}
+          type="text"
           value={value}
           maxLength={field.maxLength}
           onChange={(e) =>

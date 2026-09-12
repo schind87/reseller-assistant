@@ -299,7 +299,17 @@ function scoreElement(el, fieldKey) {
   if (fieldKey === "price") {
     const type = (el.getAttribute("type") || "").toLowerCase();
     if (type === "number" || type === "tel" || type === "text") score += 2;
+    if (/listing price|asking price|ask price|set a price/.test(haystack)) {
+      score += 10;
+    }
     if (/price|amount|cost/.test(haystack)) score += 4;
+    if (/original|retail|msrp/.test(haystack)) score -= 14;
+  }
+  if (fieldKey === "originalPrice") {
+    if (/original|retail|msrp/.test(haystack)) score += 10;
+    if (/listing price|asking price|ask price/.test(haystack) && !/original|retail/.test(haystack)) {
+      score -= 14;
+    }
   }
 
   // Prefer visible fields.
@@ -352,7 +362,98 @@ function setNativeValue(el, value) {
 function dispatchInputEvents(el) {
   el.dispatchEvent(new Event("input", { bubbles: true }));
   el.dispatchEvent(new Event("change", { bubbles: true }));
-  el.dispatchEvent(new InputEvent("input", { bubbles: true, data: String(el.value ?? ""), inputType: "insertText" }));
+  el.dispatchEvent(
+    new InputEvent("input", {
+      bubbles: true,
+      data: String(el.value ?? ""),
+      inputType: "insertText",
+    })
+  );
+}
+
+function isPoshmarkHost() {
+  return /poshmark/i.test(location.hostname);
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function waitFor(predicate, timeoutMs = 1600, intervalMs = 50) {
+  return new Promise((resolve) => {
+    const start = Date.now();
+    function tick() {
+      const value = predicate();
+      if (value) {
+        resolve(value);
+        return;
+      }
+      if (Date.now() - start >= timeoutMs) {
+        resolve(null);
+        return;
+      }
+      setTimeout(tick, intervalMs);
+    }
+    tick();
+  });
+}
+
+function clickElement(el) {
+  if (!(el instanceof HTMLElement)) return false;
+  try {
+    el.scrollIntoView({ block: "center", inline: "nearest" });
+  } catch {
+    /* ignore */
+  }
+  el.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+  el.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+  el.dispatchEvent(new PointerEvent("pointerup", { bubbles: true }));
+  el.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+  el.click();
+  return true;
+}
+
+function formatFillValue(fieldKey, value) {
+  if (
+    isPoshmarkHost() &&
+    (fieldKey === "price" || fieldKey === "originalPrice")
+  ) {
+    const numeric = Number(String(value).replace(/[^0-9.]/g, ""));
+    if (Number.isFinite(numeric) && numeric >= 0) {
+      return String(Math.round(numeric));
+    }
+  }
+  return String(value);
+}
+
+function fillInputLikeUser(el, value) {
+  el.focus();
+  if (typeof el.select === "function") {
+    try {
+      el.select();
+    } catch {
+      /* ignore */
+    }
+  }
+  setNativeValue(el, "");
+  el.dispatchEvent(
+    new InputEvent("input", { bubbles: true, inputType: "deleteContentBackward" })
+  );
+
+  let inserted = false;
+  try {
+    inserted = document.execCommand("insertText", false, value);
+  } catch {
+    inserted = false;
+  }
+  if (!inserted || String(el.value || "") !== value) {
+    setNativeValue(el, value);
+  }
+  dispatchInputEvents(el);
+  el.dispatchEvent(new KeyboardEvent("keyup", { bubbles: true, key: "0" }));
+  el.blur();
+  el.dispatchEvent(new FocusEvent("blur", { bubbles: true }));
+  el.dispatchEvent(new Event("focusout", { bubbles: true }));
 }
 
 function fillElement(el, value) {
@@ -377,8 +478,7 @@ function fillElement(el, value) {
     return true;
   }
 
-  setNativeValue(el, value);
-  dispatchInputEvents(el);
+  fillInputLikeUser(el, value);
   return true;
 }
 
@@ -443,10 +543,218 @@ function highlightElement(el) {
   el.scrollIntoView({ behavior: "smooth", block: "center" });
 }
 
-function handleFillField(payload) {
+function findOpenPickerRoots() {
+  const selectors = [
+    '[role="dialog"]',
+    '[role="listbox"]',
+    '[role="menu"]',
+    '[aria-modal="true"]',
+    '[class*="dropdown" i]',
+    '[class*="picker" i]',
+    '[class*="modal" i]',
+    '[class*="overlay" i]',
+    '[class*="popover" i]',
+  ];
+  const found = [];
+  for (const sel of selectors) {
+    document.querySelectorAll(sel).forEach((node) => {
+      if (!(node instanceof HTMLElement) || isOurUi(node)) return;
+      if (!isVisuallyOnPage(node)) return;
+      found.push(node);
+    });
+  }
+  return found;
+}
+
+function findCategoryTrigger() {
+  const field = findField("category", null);
+  if (field) return field;
+
+  const nodes = Array.from(
+    document.querySelectorAll(
+      'button, [role="button"], [aria-haspopup], [aria-expanded], input, div, span, a'
+    )
+  );
+  let best = null;
+  let bestScore = 0;
+  for (const node of nodes) {
+    if (!(node instanceof HTMLElement) || isOurUi(node)) continue;
+    if (!isVisuallyOnPage(node)) continue;
+    const text = normalizeText(node.textContent || "");
+    const hay = `${text} ${metaTextFor(node)}`.slice(0, 180);
+    if (!/categor/.test(hay) && !/select a categor/.test(hay)) continue;
+    if (text.length > 140) continue;
+    let score = 0;
+    if (/select a category|choose a category|select category/.test(hay)) score += 22;
+    if (/^category$/.test(text) || text.startsWith("category ")) score += 14;
+    if (node.getAttribute("aria-haspopup") || node.getAttribute("aria-expanded") != null) {
+      score += 8;
+    }
+    if (node.tagName === "BUTTON" || node.getAttribute("role") === "button") score += 4;
+    if (score > bestScore) {
+      best = node;
+      bestScore = score;
+    }
+  }
+  return bestScore >= 8 ? best : null;
+}
+
+function findPickerSearch(roots) {
+  const scopes = roots.length ? roots : [document.body];
+  let best = null;
+  let bestScore = 0;
+  for (const root of scopes) {
+    const inputs = root.querySelectorAll("input, [contenteditable='true']");
+    for (const el of inputs) {
+      if (!(el instanceof HTMLElement) || isOurUi(el)) continue;
+      if (!isFillable(el) || !isVisuallyOnPage(el)) continue;
+      const hay = `${labelTextFor(el)} ${metaTextFor(el)}`.toLowerCase();
+      let score = 0;
+      if (/search/.test(hay)) score += 14;
+      if (/categor/.test(hay)) score += 8;
+      if (/filter/.test(hay)) score += 6;
+      if (score > bestScore) {
+        best = el;
+        bestScore = score;
+      }
+    }
+  }
+  if (bestScore >= 6) return best;
+  for (const root of roots) {
+    const input = Array.from(root.querySelectorAll("input")).find(
+      (el) => isFillable(el) && isVisuallyOnPage(el) && !isOurUi(el)
+    );
+    if (input) return input;
+  }
+  return null;
+}
+
+function clickOptionInRoots(roots, value) {
+  const normalized = normalizeText(value);
+  if (!normalized) return false;
+  const scopes = roots.length ? roots : [document.body];
+  const matches = [];
+  for (const root of scopes) {
+    root
+      .querySelectorAll(
+        'li, button, [role="option"], [role="menuitem"], [role="treeitem"], a, span, div, label'
+      )
+      .forEach((node) => {
+        if (!(node instanceof HTMLElement) || isOurUi(node)) return;
+        if (!isVisuallyOnPage(node)) return;
+        const text = normalizeText(node.textContent || "");
+        if (!text || text.length > 90) return;
+        if (
+          text === normalized ||
+          text.endsWith(normalized) ||
+          text.startsWith(normalized) ||
+          text.includes(`> ${normalized}`) ||
+          text.includes(`/${normalized}`)
+        ) {
+          matches.push(node);
+        }
+      });
+  }
+  matches.sort(
+    (a, b) =>
+      (a.textContent || "").trim().length - (b.textContent || "").trim().length
+  );
+  if (!matches[0]) return false;
+  clickElement(matches[0]);
+  highlightElement(matches[0]);
+  return true;
+}
+
+function triggerShowsCategory(trigger, department, subcategory) {
+  if (!(trigger instanceof HTMLElement)) return false;
+  const text = normalizeText(trigger.textContent || readElementValue(trigger) || "");
+  if (!text || /select a category|choose a category|^category$/.test(text)) {
+    return false;
+  }
+  const want = [subcategory, department]
+    .filter(Boolean)
+    .map((part) => normalizeText(part));
+  return want.some((part) => text.includes(part));
+}
+
+async function fillPoshmarkCategory(department, subcategory) {
+  const trigger = findCategoryTrigger();
+  if (trigger) {
+    clickElement(trigger);
+    await sleep(280);
+  }
+
+  let roots = await waitFor(() => {
+    const next = findOpenPickerRoots();
+    return next.length ? next : null;
+  }, 1200);
+  if (!roots) roots = findOpenPickerRoots();
+
+  const search = findPickerSearch(roots);
+  const query = [department, subcategory].filter(Boolean).join(" ");
+  if (search && query) {
+    fillElement(search, query);
+    await sleep(350);
+    roots = findOpenPickerRoots();
+  }
+
+  if (department) {
+    clickOptionInRoots(roots, department);
+    await sleep(280);
+    roots = findOpenPickerRoots();
+  }
+
+  if (subcategory) {
+    let clicked = clickOptionInRoots(roots, subcategory);
+    if (!clicked && search) {
+      fillElement(search, subcategory);
+      await sleep(300);
+      roots = findOpenPickerRoots();
+      clicked = clickOptionInRoots(roots, subcategory);
+    }
+    if (!clicked) {
+      fillByClickingOption(subcategory);
+    }
+  }
+
+  await sleep(220);
+  const liveTrigger = findCategoryTrigger() || trigger;
+  if (triggerShowsCategory(liveTrigger, department, subcategory)) {
+    if (liveTrigger) highlightElement(liveTrigger);
+    return { ok: true, filled: true };
+  }
+
+  const field = findField("category", null);
+  const shown = field ? normalizeText(readElementValue(field)) : "";
+  const want = normalizeText(subcategory || department);
+  if (want && shown && (shown.includes(want) || want.includes(shown))) {
+    if (field) highlightElement(field);
+    return { ok: true, filled: true };
+  }
+
+  return {
+    ok: false,
+    filled: false,
+    error: "Could not select category",
+  };
+}
+
+async function handleFillField(payload) {
   const fieldKey = payload?.fieldKey || "title";
-  const value = payload?.value == null ? "" : String(payload.value);
   const selector = payload?.selector || null;
+  const rawValue = payload?.value == null ? "" : String(payload.value);
+  const value = formatFillValue(fieldKey, rawValue);
+
+  if (isPoshmarkHost() && (fieldKey === "category" || fieldKey === "subcategory")) {
+    const department = String(payload?.department || (fieldKey === "category" ? rawValue : "") || "");
+    const subcategory = String(
+      payload?.subcategory || (fieldKey === "subcategory" ? rawValue : "") || ""
+    );
+    if (!department && !subcategory) {
+      return { ok: false, filled: false, error: "Empty value" };
+    }
+    return fillPoshmarkCategory(department, subcategory);
+  }
 
   if (!value) {
     return { ok: false, filled: false, error: "Empty value" };
@@ -518,8 +826,8 @@ function handleVerifyField(payload) {
     };
   }
 
-  const expectedNorm = normalizeText(expected);
-  const actualNorm = normalizeText(actual);
+  const expectedNorm = normalizeText(expected).replace(/[$,]/g, "");
+  const actualNorm = normalizeText(actual).replace(/[$,]/g, "");
   const verified =
     actualNorm === expectedNorm ||
     actualNorm.includes(expectedNorm) ||
@@ -865,6 +1173,19 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
             error instanceof Error
               ? error.message
               : "Could not find closet name",
+        })
+      );
+    return true;
+  }
+
+  if (message?.type === "fillField") {
+    void Promise.resolve(handleFillField(message))
+      .then((result) => sendResponse(result))
+      .catch((error) =>
+        sendResponse({
+          ok: false,
+          filled: false,
+          error: error instanceof Error ? error.message : "Fill failed",
         })
       );
     return true;

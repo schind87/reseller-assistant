@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { authorizeListingAccess } from "@/lib/listing-access";
+import { roundPoshmarkDollars } from "@/lib/poshmark-formats";
 import {
   deleteListing,
   getListingWithPhotos,
@@ -106,10 +107,25 @@ export async function PATCH(request: Request, context: RouteContext) {
       }
     }
 
+    const patch = { ...parsed.data };
+    if (access.listing.platform === "poshmark") {
+      if (patch.price !== undefined) {
+        patch.price = roundPoshmarkDollars(patch.price);
+      }
+      if (patch.structured_fields) {
+        patch.structured_fields = {
+          ...patch.structured_fields,
+          originalPrice: roundPoshmarkDollars(
+            patch.structured_fields.originalPrice
+          ),
+        };
+      }
+    }
+
     const listing =
-      parsed.data.status === "posted"
+      patch.status === "posted"
         ? await markPosted(id)
-        : await updateListing(id, parsed.data);
+        : await updateListing(id, patch);
     return NextResponse.json({ listing });
   } catch (err) {
     console.error("patch listing error:", err);

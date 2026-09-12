@@ -481,8 +481,31 @@ async function fillFieldsOnPage(listing, fieldKeys, preferredPlatform, preferred
   const assisted = [];
   const platform =
     preferredPlatform || listing.platform || null;
+  let filledPoshmarkCategory = false;
 
   for (const key of fieldKeys) {
+    if (platform === "poshmark" && (key === "category" || key === "subcategory")) {
+      if (filledPoshmarkCategory) continue;
+      filledPoshmarkCategory = true;
+      const department = raFieldValueFromListing(listing, "category");
+      const subcategory = raFieldValueFromListing(listing, "subcategory");
+      if (!department && !subcategory) continue;
+      const result = await sendToMarketplaceTab(
+        {
+          type: "fillField",
+          fieldKey: "category",
+          value: subcategory || department,
+          department,
+          subcategory,
+        },
+        preferredPlatform,
+        preferredTabId
+      );
+      if (result?.ok && result.filled) filled += 1;
+      else missing.push("category");
+      continue;
+    }
+
     const value = raFieldValueFromListing(listing, key);
     if (!value) continue;
 

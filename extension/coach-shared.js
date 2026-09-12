@@ -194,9 +194,19 @@ function raListingCacheForId(cached, listingId) {
   return String(cached.id || "") === id ? cached : null;
 }
 
+function raWholeDollarString(value) {
+  if (value == null || value === "") return "";
+  var n = typeof value === "number" ? value : Number(String(value).replace(/[^0-9.]/g, ""));
+  if (!isFinite(n) || n < 0) return "";
+  return String(Math.round(n));
+}
+
 function raFieldValueFromListing(listing, fieldKey) {
   if (!listing) return "";
   var structured = listing.structured_fields || listing.structuredFields || {};
+  var platform = listing.platform || null;
+  var priceRaw = listing.price != null ? listing.price : listing.listPrice;
+  var originalRaw = structured.originalPrice;
   var map = {
     title: listing.title || listing.name,
     description: listing.description,
@@ -207,8 +217,12 @@ function raFieldValueFromListing(listing, fieldKey) {
     color: listing.color || structured.color,
     colorSecondary: structured.colorSecondary,
     condition: listing.condition || structured.condition,
-    price: listing.price != null ? listing.price : listing.listPrice,
-    originalPrice: structured.originalPrice,
+    price:
+      platform === "poshmark" ? raWholeDollarString(priceRaw) : priceRaw,
+    originalPrice:
+      platform === "poshmark"
+        ? raWholeDollarString(originalRaw)
+        : originalRaw,
     styleTags: Array.isArray(structured.styleTags)
       ? structured.styleTags.join(", ")
       : structured.styleTags,
