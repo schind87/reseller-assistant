@@ -706,34 +706,178 @@ function clickOptionInRoots(roots, value, opts) {
   return true;
 }
 
-function triggerShowsCategory(trigger, department, subcategory) {
-  if (!(trigger instanceof HTMLElement)) return false;
-  const text = normalizeText(trigger.textContent || readElementValue(trigger) || "");
-  if (!text || /select a category|choose a category|^category$/.test(text)) {
-    return false;
-  }
-  const want = [subcategory, department]
-    .filter(Boolean)
-    .map((part) => normalizeText(part));
-  return want.some((part) => text.includes(part));
+function poshmarkCategorySelector() {
+  return document.querySelector(
+    ".listing-editor__category-container .dropdown__selector"
+  );
+}
+
+function poshmarkSubcategorySelector() {
+  return document.querySelector(
+    ".listing-editor__subcategory-container .dropdown__selector"
+  );
 }
 
 function categorySelectorText() {
-  const cat = document.querySelector(
-    ".listing-editor__category-container .dropdown__selector"
+  return normalizeText(
+    `${poshmarkCategorySelector()?.textContent || ""} ${
+      poshmarkSubcategorySelector()?.textContent || ""
+    }`
   );
-  const sub = document.querySelector(
-    ".listing-editor__subcategory-container .dropdown__selector"
+}
+
+function poshmarkCategoryValue() {
+  return normalizeText(poshmarkCategorySelector()?.textContent || "");
+}
+
+function poshmarkSubcategoryValue() {
+  return normalizeText(poshmarkSubcategorySelector()?.textContent || "");
+}
+
+function poshmarkCategoryIsPlaceholder(text) {
+  return /select a category|select category|choose a category|^category$/.test(
+    text
   );
-  return normalizeText(`${cat?.textContent || ""} ${sub?.textContent || ""}`);
 }
 
 function poshmarkCategoryMenu() {
   return document.querySelector(".listing-editor__category-container .dropdown__menu");
 }
 
-async function fillPoshmarkCategory(department, subcategory) {
+function poshmarkSubcategoryMenu() {
+  return document.querySelector(
+    ".listing-editor__subcategory-container .dropdown__menu--expanded, .listing-editor__subcategory-container .dropdown__menu"
+  );
+}
+
+function poshmarkEtChoiceLabel(el) {
+  return normalizeText(
+    el.getAttribute("data-et-prop-content") ||
+      el.getAttribute("data-et-name") ||
+      el.textContent ||
+      ""
+  );
+}
+
+function clickPoshmarkEtChoice(root, etOnName, label) {
+  const want = normalizeText(label);
+  if (!want) return false;
+  const scope = root instanceof HTMLElement ? root : document;
+  const matches = Array.from(
+    scope.querySelectorAll(`[data-et-on-name="${etOnName}"]`)
+  ).filter(
+    (el) => el instanceof HTMLElement && poshmarkEtChoiceLabel(el) === want
+  );
+  const exact = matches.length ? matches[matches.length - 1] : null;
+  if (exact instanceof HTMLElement) {
+    clickElement(exact);
+    return true;
+  }
+  return false;
+}
+
+function clickPoshmarkFilteredCategoryItem(menu, label) {
+  const want = normalizeText(label);
+  if (!menu || !want) return false;
+  const items = Array.from(menu.querySelectorAll("li")).filter((el) => {
+    if (!(el instanceof HTMLElement)) return false;
+    if (el.querySelector('[data-et-on-name="category_selection"]')) return false;
+    return normalizeText(el.textContent || "") === want;
+  });
+  const li = items[0];
+  if (!(li instanceof HTMLElement)) return false;
+  const inner = li.querySelector("div") || li;
+  clickElement(inner instanceof HTMLElement ? inner : li);
+  return true;
+}
+
+function inferPoshmarkLeafSubcategory(subcategory, hintText, optionLabels) {
+  const options = optionLabels.map((label) => normalizeText(label));
+  const has = (label) => options.includes(normalizeText(label));
+  const wantSub = normalizeText(subcategory);
+  if (wantSub && wantSub !== "none" && has(wantSub)) {
+    return optionLabels.find((label) => normalizeText(label) === wantSub) || "";
+  }
+
+  const hay = normalizeText(`${hintText} ${subcategory}`);
+  const rules = [
+    [/long\s*sleeve/, "Tees - Long Sleeve"],
+    [/tank/, "Tank Tops"],
+    [/crop/, "Crop Tops"],
+    [/hoodie|sweatshirt/, "Sweatshirts & Hoodies"],
+    [/blouse/, "Blouses"],
+    [/bodysuit/, "Bodysuits"],
+    [/jersey/, "Jerseys"],
+    [/cami/, "Camisoles"],
+    [/tunic/, "Tunics"],
+    [/button\s*down|button-down/, "Button Down Shirts"],
+    [/muscle/, "Muscle Tees"],
+    [/\btee\b|t-?shirts?|\bt shirt\b/, "Tees - Short Sleeve"],
+  ];
+  for (const [pattern, label] of rules) {
+    if (pattern.test(hay) && has(label)) return label;
+  }
+  return has("None") ? "None" : "";
+}
+
+function poshmarkTitleHint() {
+  const el = poshmarkNamedInput("title");
+  return el ? String(el.value || "").trim() : "";
+}
+
+function poshmarkCategoryConfirmed(department, subcategory) {
+  const shown = poshmarkCategoryValue();
+  if (!shown || poshmarkCategoryIsPlaceholder(shown)) return false;
+  const want = [subcategory, department]
+    .filter(Boolean)
+    .map((part) => normalizeText(part));
+  return want.some((part) => shown.includes(part));
+}
+
+async function confirmPoshmarkLeafSubcategory(subcategory, hintText) {
+  const menu = await waitFor(() => {
+    const next = poshmarkSubcategoryMenu();
+    if (!(next instanceof HTMLElement) || !isVisuallyOnPage(next)) return null;
+    const options = next.querySelectorAll(
+      '[data-et-on-name="sub_category_selection"]'
+    );
+    return options.length ? next : null;
+  }, 1600);
+  if (!menu) return "";
+
+  const optionEls = Array.from(
+    menu.querySelectorAll('[data-et-on-name="sub_category_selection"]')
+  ).filter((el) => el instanceof HTMLElement);
+  const labels = optionEls.map((el) =>
+    String(el.getAttribute("data-et-prop-content") || el.textContent || "").trim()
+  );
+  const leaf = inferPoshmarkLeafSubcategory(subcategory, hintText, labels);
+  if (!leaf) return "";
+
+  if (!clickPoshmarkEtChoice(menu, "sub_category_selection", leaf)) {
+    clickOptionInRoots([menu], leaf, { exact: true });
+  }
+
+  const confirmed = await waitFor(() => {
+    const value = poshmarkSubcategoryValue();
+    if (!value || /select subcategory|optional/.test(value)) {
+      return leaf === "None" && !isVisuallyOnPage(menu) ? leaf : null;
+    }
+    return value.includes(normalizeText(leaf)) ? leaf : null;
+  }, 1600);
+  return confirmed || "";
+}
+
+async function fillPoshmarkCategory(department, subcategory, hintText) {
   const container = document.querySelector(".listing-editor__category-container");
+  if (container instanceof HTMLElement) {
+    try {
+      container.scrollIntoView({ block: "center", inline: "nearest" });
+    } catch {
+      /* ignore */
+    }
+  }
+
   const trigger =
     (container && container.querySelector(".dropdown__selector")) ||
     findCategoryTrigger();
@@ -751,69 +895,60 @@ async function fillPoshmarkCategory(department, subcategory) {
   const search = menu ? findPickerSearch([menu]) : null;
   const query = [department, subcategory].filter(Boolean).join(" ");
   if (search && query && menu instanceof HTMLElement && menu.contains(search)) {
-    fillElement(search, query);
+    fillTypeaheadInput(search, query);
     await sleep(350);
     menu = poshmarkCategoryMenu() || menu;
   }
 
   if (department && menu) {
-    clickOptionInRoots([menu], department, { exact: true });
-    await sleep(400);
-    if (subcategory) {
-      menu =
-        (await waitFor(() => {
-          const next = poshmarkCategoryMenu();
-          if (!(next instanceof HTMLElement)) return null;
-          const ready = Array.from(next.querySelectorAll("li")).some(
-            (node) => normalizeText(node.textContent || "") === normalizeText(subcategory)
-          );
-          return ready ? next : null;
-        }, 2200)) ||
-        poshmarkCategoryMenu() ||
-        menu;
-    } else {
-      menu = poshmarkCategoryMenu() || menu;
+    if (!clickPoshmarkEtChoice(menu, "category_selection", department)) {
+      clickOptionInRoots([menu], department, { exact: true });
     }
+    menu =
+      (await waitFor(() => {
+        const next = poshmarkCategoryMenu();
+        if (!(next instanceof HTMLElement)) return null;
+        const ready = Array.from(next.querySelectorAll("li")).some((node) => {
+          if (node.querySelector('[data-et-on-name="category_selection"]')) {
+            return false;
+          }
+          const text = normalizeText(node.textContent || "");
+          return subcategory
+            ? text === normalizeText(subcategory)
+            : Boolean(text);
+        });
+        return ready ? next : null;
+      }, 2200)) ||
+      poshmarkCategoryMenu() ||
+      menu;
   }
 
   if (subcategory && menu) {
-    let clicked = clickOptionInRoots([menu], subcategory, { exact: true });
-    if (!clicked) {
-      const subContainer = document.querySelector(
-        ".listing-editor__subcategory-container"
-      );
-      const subTrigger = subContainer?.querySelector(".dropdown__selector");
-      if (subTrigger instanceof HTMLElement) {
-        clickElement(subTrigger);
-        await sleep(350);
-        const subMenu = subContainer.querySelector(".dropdown__menu");
-        if (subMenu) {
-          clicked = clickOptionInRoots([subMenu], subcategory, { exact: true });
-        }
+    if (!clickPoshmarkFilteredCategoryItem(menu, subcategory)) {
+      if (!clickPoshmarkEtChoice(menu, "category_selection", subcategory)) {
+        clickOptionInRoots([menu], subcategory, { exact: true });
       }
     }
   }
 
-  await sleep(280);
-  const shown = categorySelectorText();
-  const want = [subcategory, department]
-    .filter(Boolean)
-    .map((part) => normalizeText(part));
-  const stillPlaceholder = /select a category|select category|choose a category|^category$/.test(
-    shown
+  const confirmed = await waitFor(
+    () => (poshmarkCategoryConfirmed(department, subcategory) ? true : null),
+    2200
   );
-  if (!stillPlaceholder && want.some((part) => shown.includes(part))) {
-    const liveTrigger =
-      container?.querySelector(".dropdown__selector") || findCategoryTrigger();
-    if (liveTrigger instanceof HTMLElement) highlightElement(liveTrigger);
-    return { ok: true, filled: true };
+  if (!confirmed) {
+    return {
+      ok: false,
+      filled: false,
+      error: "Could not select category",
+    };
   }
 
-  return {
-    ok: false,
-    filled: false,
-    error: "Could not select category",
-  };
+  const hint = String(hintText || poshmarkTitleHint() || "");
+  await confirmPoshmarkLeafSubcategory(subcategory, hint);
+
+  const liveTrigger = poshmarkCategorySelector() || findCategoryTrigger();
+  if (liveTrigger instanceof HTMLElement) highlightElement(liveTrigger);
+  return { ok: true, filled: true, category: poshmarkCategoryValue() };
 }
 
 function parseStyleTagValues(payload, rawValue) {
@@ -978,7 +1113,11 @@ async function handleFillField(payload) {
     if (!department && !subcategory) {
       return { ok: false, filled: false, error: "Empty value" };
     }
-    return fillPoshmarkCategory(department, subcategory);
+    return fillPoshmarkCategory(
+      department,
+      subcategory,
+      payload?.title || payload?.hint || poshmarkTitleHint()
+    );
   }
 
   if (isPoshmarkHost() && fieldKey === "styleTags") {
@@ -1047,6 +1186,25 @@ function readElementValue(el) {
 function handleVerifyField(payload) {
   const fieldKey = payload?.fieldKey || "title";
   const expected = payload?.value == null ? "" : String(payload.value).trim();
+
+  if (isPoshmarkHost() && (fieldKey === "category" || fieldKey === "subcategory")) {
+    const department = String(
+      payload?.department || (fieldKey === "category" ? expected : "") || ""
+    );
+    const subcategory = String(
+      payload?.subcategory || (fieldKey === "subcategory" ? expected : "") || ""
+    );
+    const actual = categorySelectorText();
+    const want = [subcategory, department, expected]
+      .filter(Boolean)
+      .map((part) => normalizeText(part));
+    const verified =
+      !poshmarkCategoryIsPlaceholder(poshmarkCategoryValue()) &&
+      (want.length
+        ? want.some((part) => actual.includes(part))
+        : Boolean(poshmarkCategoryValue()));
+    return { ok: true, verified, actual, expected };
+  }
 
   if (isPoshmarkHost() && fieldKey === "styleTags") {
     const actualTags = selectedPoshmarkStyleTags();

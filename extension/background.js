@@ -497,6 +497,7 @@ async function fillFieldsOnPage(listing, fieldKeys, preferredPlatform, preferred
           value: subcategory || department,
           department,
           subcategory,
+          title: raFieldValueFromListing(listing, "title"),
         },
         preferredPlatform,
         preferredTabId
