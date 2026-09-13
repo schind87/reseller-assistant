@@ -116,8 +116,20 @@ async function fetchStatus(creds, token) {
   return requestJson(url, { method: "GET", headers: authHeaders(token) });
 }
 
+const UPLOAD_OK = new Set([
+  "",
+  "SUCCESS",
+  "SUCCEEDED",
+  "UPLOAD_SUCCESS",
+  "UPLOAD_SUCCEEDED",
+]);
+
 function uploadState(resource) {
   return resource.uploadState ?? resource.lastAsyncUploadState ?? "";
+}
+
+function isUploadOk(state) {
+  return UPLOAD_OK.has(state);
 }
 
 async function waitForUpload(creds, token, initial, startedAt) {
@@ -130,9 +142,9 @@ async function waitForUpload(creds, token, initial, startedAt) {
     resource = await fetchStatus(creds, token);
   }
   const state = uploadState(resource);
-  if (state && state !== "UPLOAD_SUCCESS" && state !== "SUCCESS") {
+  if (!isUploadOk(state)) {
     throw new Error(
-      `Chrome Web Store upload did not succeed (${state}). Bump extension/manifest.json version if this zip was already submitted.`
+      `Chrome Web Store upload did not succeed (${state || "empty"}). Bump extension/manifest.json version if this zip was already submitted.`
     );
   }
   return resource;
