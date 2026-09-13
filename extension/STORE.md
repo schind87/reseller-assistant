@@ -1,7 +1,46 @@
 # Chrome Web Store listing
 
-Paste these into https://chrome.google.com/webstore/devconsole after uploading
-`dist/reseller-assistant-chrome.zip`.
+## Publish from CI
+
+Release path: push helper changes to `main` (bump `manifest.json` `version` first) → GitHub Actions packs `dist/reseller-assistant-chrome.zip` → if secrets are set, the zip is uploaded and submitted for review.
+
+| Automatic | Still you / Google |
+| --- | --- |
+| Pack the production zip (no localhost hosts) | Create the listing **once** in the [developer console](https://chrome.google.com/webstore/devconsole) (this copy, screenshots, privacy practices) |
+| Upload a new version and submit it for review | Google review and approval before sellers see the update |
+| Attach the zip as a GitHub Actions artifact | 2-step verification on the publisher Google account |
+| Skip the upload (do not fail the job) until secrets exist | Paste the secrets below into GitHub once |
+
+App deploy stays on Vercel. Store credentials stay in GitHub Actions secrets — never Vercel, never the repo.
+
+### GitHub Actions secrets (add once)
+
+Repo **Settings → Secrets and variables → Actions**:
+
+| Secret | What it is |
+| --- | --- |
+| `CHROME_WEB_STORE_CLIENT_ID` | OAuth client ID from Google Cloud |
+| `CHROME_WEB_STORE_CLIENT_SECRET` | OAuth client secret |
+| `CHROME_WEB_STORE_REFRESH_TOKEN` | Offline refresh token for the publisher account |
+| `CHROME_WEB_STORE_EXTENSION_ID` | Store item id (also set `NEXT_PUBLIC_CHROME_WEB_STORE_ID` on Vercel so Profile can link **Add from the Chrome Web Store**) |
+| `CHROME_WEB_STORE_PUBLISHER_ID` | Publisher id from Developer Dashboard → Publisher → Settings |
+
+Local publish reads the same names from the environment (`npm run extension:publish`). Use `--no-publish` to upload a draft only, `--require` to fail if a secret is missing.
+
+### One-time OAuth (publisher Google account)
+
+1. [Chrome Web Store API](https://console.cloud.google.com/apis/library/chromewebstore.googleapis.com) — enable it on a Google Cloud project.
+2. OAuth consent screen: External, add the publisher Gmail as a test user.
+3. Credentials → OAuth client ID → **Web application**. Authorized redirect URI: `https://developers.google.com/oauthplayground`.
+4. [OAuth Playground](https://developers.google.com/oauthplayground) → gear → **Use your own OAuth credentials** → scope `https://www.googleapis.com/auth/chromewebstore` → authorize as the CWS publisher → **Exchange authorization code for tokens**. Copy the refresh token into `CHROME_WEB_STORE_REFRESH_TOKEN`.
+5. After the first listing exists in the console, copy the item id and publisher id into the secrets above.
+
+Until those five secrets are set, CI still packs the zip; download it from the workflow artifact and upload it in the console if you need a release today.
+
+## Listing copy (console)
+
+Paste these into https://chrome.google.com/webstore/devconsole after the first zip
+upload (later versions are uploaded by CI).
 
 Privacy policy URL (must be live before review):
 https://reseller.mvfeed.us/privacy

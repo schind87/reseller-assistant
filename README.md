@@ -81,7 +81,11 @@ Stable Vercel production aliases (`reseller-assistant.vercel.app` and the projec
 
 ## Chrome extension
 
-See [`extension/README.md`](extension/README.md). Sellers install from the Chrome Web Store when that listing is live (`npm run extension:pack` builds `dist/reseller-assistant-chrome.zip`). Privacy policy: `/privacy`.
+See [`extension/README.md`](extension/README.md). Sellers install from the Chrome Web Store when that listing is live. Privacy policy: `/privacy`.
+
+**Release:** a push to `main` deploys the app on Vercel. If the helper source changed, GitHub Actions also runs `npm run extension:pack` (`dist/reseller-assistant-chrome.zip`) and, when the Chrome Web Store secrets are set, uploads that zip and submits it for Google review. Google still has to approve the listing (and the first listing is created once in the [developer console](https://chrome.google.com/webstore/devconsole)). Secret names and the one-time OAuth setup are in [`extension/STORE.md`](extension/STORE.md).
+
+Bump `extension/manifest.json` `version` before shipping helper changes, or the store upload is rejected.
 
 ## Main flows
 
@@ -101,3 +105,5 @@ See [`extension/README.md`](extension/README.md). Sellers install from the Chrom
 - `npm run start` — serve production build
 - `npm run lint` — ESLint
 - `npm run photos:migrate-r2` — copy Supabase `listing-photos` objects to R2 (`--dry-run`, `--skip-thumbs`, `--delete-source`)
+- `npm run extension:pack` — production Chrome helper zip (`dist/reseller-assistant-chrome.zip`)
+- `npm run extension:publish` — pack, then upload/submit to the Chrome Web Store (skips upload if GitHub/CI secrets are missing; `--require` fails instead)

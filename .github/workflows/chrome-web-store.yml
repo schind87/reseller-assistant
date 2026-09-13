@@ -1,0 +1,61 @@
+# Packs dist/reseller-assistant-chrome.zip on helper changes.
+# Uploads and submits for Google review when Chrome Web Store secrets are set.
+# Missing secrets skip the upload so this workflow can run before credentials exist.
+name: Chrome helper store
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "extension/**"
+      - "!extension/README.md"
+      - "!extension/STORE.md"
+      - "!extension/store-assets/**"
+      - "scripts/pack-extension.mjs"
+      - "scripts/publish-extension.mjs"
+      - ".github/workflows/chrome-web-store.yml"
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: Submit the uploaded zip for Chrome Web Store review after upload
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  pack-and-upload:
+    name: Pack and upload Chrome helper
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - run: npm ci
+
+      - name: Pack store zip
+        run: npm run extension:pack
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: reseller-assistant-chrome
+          path: dist/reseller-assistant-chrome.zip
+          if-no-files-found: error
+
+      - name: Upload to Chrome Web Store
+        env:
+          CHROME_WEB_STORE_CLIENT_ID: ${{ secrets.CHROME_WEB_STORE_CLIENT_ID }}
+          CHROME_WEB_STORE_CLIENT_SECRET: ${{ secrets.CHROME_WEB_STORE_CLIENT_SECRET }}
+          CHROME_WEB_STORE_REFRESH_TOKEN: ${{ secrets.CHROME_WEB_STORE_REFRESH_TOKEN }}
+          CHROME_WEB_STORE_EXTENSION_ID: ${{ secrets.CHROME_WEB_STORE_EXTENSION_ID }}
+          CHROME_WEB_STORE_PUBLISHER_ID: ${{ secrets.CHROME_WEB_STORE_PUBLISHER_ID }}
+          CHROME_WEB_STORE_PUBLISH: ${{ github.event_name != 'workflow_dispatch' && 'true' || (inputs.publish && 'true' || 'false') }}
+          CHROME_WEB_STORE_REQUIRE: ${{ github.event_name == 'workflow_dispatch' && 'true' || github.event_name == 'release' && 'true' || 'false' }}
+        run: npm run extension:publish -- --skip-pack

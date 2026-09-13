@@ -20,6 +20,14 @@ npm run extension:pack
 
 Output: `dist/reseller-assistant-chrome.zip`
 
+That pack is part of release. A push to `main` that changes helper source runs [`.github/workflows/chrome-web-store.yml`](../.github/workflows/chrome-web-store.yml): it packs the zip (Actions artifact) and, when the Chrome Web Store secrets are set, uploads it and submits it for Google review. You can also run **Chrome helper store** from the Actions tab, or:
+
+```bash
+npm run extension:publish
+```
+
+Bump `manifest.json` `version` before a store release. Google still reviews the listing; the API cannot skip that. First-time listing copy, screenshots, and privacy answers stay in [`STORE.md`](STORE.md).
+
 ## Install (unpacked, local)
 
 1. From the repo root: `npm run extension:live`
