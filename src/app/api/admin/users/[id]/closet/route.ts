@@ -1,9 +1,16 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireAdmin } from "@/lib/admin";
+import type { AdminUserShopLink } from "@/lib/admin-users";
+import {
+  applyMarketplaceClosetCheck,
+  marketplaceClosetCheckBodySchema,
+  marketplacePlatformSchema,
+} from "@/lib/marketplace-closet-check";
 import {
   closetUsernameParseError,
   parseMarketplaceUsername,
+  type MarketplaceAccount,
 } from "@/lib/marketplace-profiles";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
@@ -11,14 +18,11 @@ import {
   listMarketplaceAccounts,
   upsertMarketplaceAccount,
 } from "@/lib/supabase/marketplace-closet";
-import type { Platform } from "@/lib/types";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
-const platformSchema = z.enum(["mercari", "poshmark"]);
-
 const linkBody = z.object({
-  platform: platformSchema,
+  platform: marketplacePlatformSchema,
   username: z.string().min(1).max(120),
 });
 
@@ -34,11 +38,13 @@ async function profileExists(userId: string): Promise<boolean> {
 }
 
 function shopLinksPayload(
-  accounts: { platform: Platform; username: string }[]
-) {
+  accounts: MarketplaceAccount[]
+): AdminUserShopLink[] {
   return accounts.map((account) => ({
     platform: account.platform,
     username: account.username,
+    lastCheckedAt: account.lastCheckedAt,
+    lastCheckError: account.lastCheckError,
   }));
 }
 
@@ -104,7 +110,7 @@ export async function DELETE(request: Request, context: RouteContext) {
     return NextResponse.json({ error: "User not found" }, { status: 404 });
   }
 
-  const platform = platformSchema.safeParse(
+  const platform = marketplacePlatformSchema.safeParse(
     new URL(request.url).searchParams.get("platform")
   );
   if (!platform.success) {
@@ -126,6 +132,54 @@ export async function DELETE(request: Request, context: RouteContext) {
     console.error("admin unlink closet error:", err);
     return NextResponse.json(
       { error: "Could not unlink closet" },
+      { status: 500 }
+    );
+  }
+}
+
+export async function POST(request: Request, context: RouteContext) {
+  const auth = await requireAdmin();
+  if (auth.error) return auth.error;
+
+  const { id } = await context.params;
+  if (!id) {
+    return NextResponse.json({ error: "User not found" }, { status: 404 });
+  }
+
+  try {
+    if (!(await profileExists(id))) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
+
+    const json = await request.json();
+    const parsed = marketplaceClosetCheckBodySchema.safeParse(json);
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: "Could not save closet listings" },
+        { status: 400 }
+      );
+    }
+
+    const linked = await listMarketplaceAccounts(id);
+    const hasPlatform = linked.some(
+      (account) => account.platform === parsed.data.platform
+    );
+    if (!hasPlatform) {
+      return NextResponse.json(
+        { error: "Link this closet first" },
+        { status: 400 }
+      );
+    }
+
+    const result = await applyMarketplaceClosetCheck(id, parsed.data);
+    return NextResponse.json({
+      ...result,
+      shopLinks: shopLinksPayload(result.accounts),
+    });
+  } catch (err) {
+    console.error("admin check closet error:", err);
+    return NextResponse.json(
+      { error: "Could not save closet listings" },
       { status: 500 }
     );
   }

@@ -3,6 +3,11 @@
 import { useState, type FormEvent } from "react";
 import type { AdminUserShopLink } from "@/lib/admin-users";
 import {
+  checkClosetWithExtension,
+  detectExtensionPresent,
+} from "@/lib/extension-bridge";
+import {
+  closetCheckHint,
   closetUsernameParseError,
   marketplaceClosetUrl,
   parseMarketplaceUsername,
@@ -15,6 +20,18 @@ type ClosetResponse = {
   shopLinks?: AdminUserShopLink[];
   error?: string;
 };
+
+function emptyLink(
+  platform: Platform,
+  username: string
+): AdminUserShopLink {
+  return {
+    platform,
+    username,
+    lastCheckedAt: null,
+    lastCheckError: null,
+  };
+}
 
 type AdminUserShopLinksProps = {
   userId: string;
@@ -43,6 +60,7 @@ export function AdminUserShopLinks({
   const [error, setError] = useState<string | null>(null);
   const [linking, setLinking] = useState<Platform | null>(null);
   const [unlinking, setUnlinking] = useState<Platform | null>(null);
+  const [checking, setChecking] = useState<Platform | null>(null);
 
   async function handleLink(platform: Platform, event: FormEvent) {
     event.preventDefault();
@@ -66,7 +84,7 @@ export function AdminUserShopLinks({
       }
       const next = json.shopLinks ?? [
         ...shopLinks.filter((link) => link.platform !== platform),
-        { platform, username },
+        emptyLink(platform, username),
       ];
       onShopLinksChange(next);
       setDrafts((prev) => ({ ...prev, [platform]: username }));
@@ -108,6 +126,66 @@ export function AdminUserShopLinks({
     }
   }
 
+  async function handleCheckListings(platform: Platform) {
+    const account = linkFor(shopLinks, platform);
+    if (!account) return;
+
+    setChecking(platform);
+    setError(null);
+    try {
+      const present = await detectExtensionPresent();
+      if (!present) {
+        throw new Error(
+          "Install the Chrome helper on this computer, then try Check listings."
+        );
+      }
+
+      const result = await checkClosetWithExtension({
+        platform,
+        username: account.username,
+        closetUrl: marketplaceClosetUrl(platform, account.username),
+      });
+
+      if (!result.ok) {
+        const message =
+          result.error ||
+          (result.loginRequired
+            ? closetCheckHint(platform)
+            : `Could not read ${PLATFORM_LABELS[platform]} listings`);
+        await fetch(`/api/admin/users/${userId}/closet`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            platform,
+            listings: [],
+            error: message,
+          }),
+        }).catch(() => null);
+        throw new Error(message);
+      }
+
+      const res = await fetch(`/api/admin/users/${userId}/closet`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          platform,
+          listings: result.listings,
+        }),
+      });
+      const json = (await res.json().catch(() => ({}))) as ClosetResponse;
+      if (!res.ok) {
+        throw new Error(json.error ?? "Could not save closet listings");
+      }
+      if (json.shopLinks) onShopLinksChange(json.shopLinks);
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Could not check listings"
+      );
+    } finally {
+      setChecking(null);
+    }
+  }
+
   return (
     <section className="flex flex-col gap-3">
       <h2 className="text-sm font-semibold text-[var(--foreground)]">
@@ -124,7 +202,10 @@ export function AdminUserShopLinks({
       {SUPPORTED_SELLING_WEBSITES.map((platform) => {
         const account = linkFor(shopLinks, platform);
         const inputId = `admin-user-${userId}-${platform}-closet`;
-        const busy = linking === platform || unlinking === platform;
+        const busy =
+          linking === platform ||
+          unlinking === platform ||
+          checking === platform;
         return (
           <div key={platform} className="flex flex-col gap-2">
             <p className="text-base font-semibold text-[var(--foreground)]">
@@ -135,8 +216,32 @@ export function AdminUserShopLinks({
                 <p className="text-base text-[var(--foreground)]">
                   Linked as{" "}
                   <span className="font-semibold">@{account.username}</span>
+                  {account.lastCheckedAt ? (
+                    <span
+                      className="text-[var(--muted)]"
+                      suppressHydrationWarning
+                    >
+                      {" "}
+                      · Checked{" "}
+                      {new Date(account.lastCheckedAt).toLocaleString()}
+                    </span>
+                  ) : null}
                 </p>
+                {account.lastCheckError ? (
+                  <p className="text-sm text-[var(--danger)]">
+                    {account.lastCheckError}
+                  </p>
+                ) : null}
                 <div className="flex flex-wrap gap-x-4 gap-y-1">
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => void handleCheckListings(platform)}
+                    className="text-sm font-semibold text-[var(--accent)] hover:underline disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
+                    aria-label={`Check ${PLATFORM_LABELS[platform]} listings for ${userLabel}`}
+                  >
+                    {checking === platform ? "Checking…" : "Check listings"}
+                  </button>
                   <a
                     href={marketplaceClosetUrl(platform, account.username)}
                     target="_blank"

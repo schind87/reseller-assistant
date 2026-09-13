@@ -18,6 +18,8 @@ export type AdminUserListing = {
 export type AdminUserShopLink = {
   platform: Platform;
   username: string;
+  lastCheckedAt: string | null;
+  lastCheckError: string | null;
 };
 
 export type AdminUserRow = {

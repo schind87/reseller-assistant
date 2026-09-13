@@ -171,11 +171,20 @@ export async function listAdminUsers(): Promise<AdminUserRow[]> {
 }
 
 function shopLinksForUser(
-  accounts: { platform: Platform; username: string }[] | undefined
+  accounts:
+    | {
+        platform: Platform;
+        username: string;
+        lastCheckedAt: string | null;
+        lastCheckError: string | null;
+      }[]
+    | undefined
 ): AdminUserShopLink[] {
   return (accounts ?? []).map((account) => ({
     platform: account.platform,
     username: account.username,
+    lastCheckedAt: account.lastCheckedAt,
+    lastCheckError: account.lastCheckError,
   }));
 }
 
