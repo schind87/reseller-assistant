@@ -276,6 +276,7 @@ function metaTextFor(el) {
       el.getAttribute("name"),
       el.getAttribute("id"),
       el.getAttribute("data-testid"),
+      el.getAttribute("data-vv-name"),
       el.getAttribute("autocomplete"),
     ]
       .filter(Boolean)
@@ -296,9 +297,12 @@ function scoreElement(el, fieldKey) {
 
   if (fieldKey === "description" && el.tagName === "TEXTAREA") score += 6;
   if (fieldKey === "title" && el.tagName === "INPUT") score += 3;
+  const vvName = (el.getAttribute("data-vv-name") || "").toLowerCase();
   if (fieldKey === "price") {
     const type = (el.getAttribute("type") || "").toLowerCase();
     if (type === "number" || type === "tel" || type === "text") score += 2;
+    if (vvName === "listingprice") score += 24;
+    if (vvName === "originalprice") score -= 24;
     if (/listing price|asking price|ask price|set a price/.test(haystack)) {
       score += 10;
     }
@@ -306,23 +310,45 @@ function scoreElement(el, fieldKey) {
     if (/original|retail|msrp/.test(haystack)) score -= 14;
   }
   if (fieldKey === "originalPrice") {
+    if (vvName === "originalprice") score += 24;
+    if (vvName === "listingprice") score -= 24;
     if (/original|retail|msrp/.test(haystack)) score += 10;
     if (/listing price|asking price|ask price/.test(haystack) && !/original|retail/.test(haystack)) {
       score -= 14;
     }
   }
+  if (/listing-price-suggestion-modal/.test(String(el.className || ""))) {
+    score -= 40;
+  }
 
-  // Prefer visible fields.
+  // Prefer visible fields. Hidden Smart Sell / modal clones should lose.
   const rect = el.getBoundingClientRect();
   if (rect.width > 0 && rect.height > 0) score += 2;
+  else score -= 12;
 
   return score;
+}
+
+function poshmarkNamedInput(vvName) {
+  const el = document.querySelector(`input[data-vv-name="${CSS.escape(vvName)}"]`);
+  return el && isFillable(el) ? el : null;
 }
 
 function findField(fieldKey, selector) {
   if (selector) {
     const direct = document.querySelector(selector);
     if (direct && isFillable(direct)) return direct;
+  }
+
+  if (isPoshmarkHost()) {
+    if (fieldKey === "price") {
+      const named = poshmarkNamedInput("listingPrice");
+      if (named) return named;
+    }
+    if (fieldKey === "originalPrice") {
+      const named = poshmarkNamedInput("originalPrice");
+      if (named) return named;
+    }
   }
 
   let best = null;
@@ -567,6 +593,13 @@ function findOpenPickerRoots() {
 }
 
 function findCategoryTrigger() {
+  if (isPoshmarkHost()) {
+    const selector = document.querySelector(
+      ".listing-editor__category-container .dropdown__selector"
+    );
+    if (selector instanceof HTMLElement) return selector;
+  }
+
   const field = findField("category", null);
   if (field) return field;
 
@@ -620,18 +653,13 @@ function findPickerSearch(roots) {
     }
   }
   if (bestScore >= 6) return best;
-  for (const root of roots) {
-    const input = Array.from(root.querySelectorAll("input")).find(
-      (el) => isFillable(el) && isVisuallyOnPage(el) && !isOurUi(el)
-    );
-    if (input) return input;
-  }
   return null;
 }
 
-function clickOptionInRoots(roots, value) {
+function clickOptionInRoots(roots, value, opts) {
   const normalized = normalizeText(value);
   if (!normalized) return false;
+  const exact = Boolean(opts && opts.exact);
   const scopes = roots.length ? roots : [document.body];
   const matches = [];
   for (const root of scopes) {
@@ -644,21 +672,26 @@ function clickOptionInRoots(roots, value) {
         if (!isVisuallyOnPage(node)) return;
         const text = normalizeText(node.textContent || "");
         if (!text || text.length > 90) return;
-        if (
-          text === normalized ||
-          text.endsWith(normalized) ||
-          text.startsWith(normalized) ||
-          text.includes(`> ${normalized}`) ||
-          text.includes(`/${normalized}`)
-        ) {
-          matches.push(node);
-        }
+        const isMatch = exact
+          ? text === normalized
+          : text === normalized ||
+            text.endsWith(normalized) ||
+            text.startsWith(normalized) ||
+            text.includes(`> ${normalized}`) ||
+            text.includes(`/${normalized}`);
+        if (isMatch) matches.push(node);
       });
   }
-  matches.sort(
-    (a, b) =>
-      (a.textContent || "").trim().length - (b.textContent || "").trim().length
-  );
+  matches.sort((a, b) => {
+    const rank = (el) => {
+      if (el.matches("li.dropdown__menu__item, a.dropdown__menu__item")) return 0;
+      if (el.closest("li.dropdown__menu__item, a.dropdown__menu__item")) return 1;
+      return 2;
+    };
+    const byRole = rank(a) - rank(b);
+    if (byRole !== 0) return byRole;
+    return (a.textContent || "").trim().length - (b.textContent || "").trim().length;
+  });
   if (!matches[0]) return false;
   clickElement(matches[0]);
   highlightElement(matches[0]);
@@ -677,58 +710,94 @@ function triggerShowsCategory(trigger, department, subcategory) {
   return want.some((part) => text.includes(part));
 }
 
+function categorySelectorText() {
+  const cat = document.querySelector(
+    ".listing-editor__category-container .dropdown__selector"
+  );
+  const sub = document.querySelector(
+    ".listing-editor__subcategory-container .dropdown__selector"
+  );
+  return normalizeText(`${cat?.textContent || ""} ${sub?.textContent || ""}`);
+}
+
+function poshmarkCategoryMenu() {
+  return document.querySelector(".listing-editor__category-container .dropdown__menu");
+}
+
 async function fillPoshmarkCategory(department, subcategory) {
-  const trigger = findCategoryTrigger();
-  if (trigger) {
+  const container = document.querySelector(".listing-editor__category-container");
+  const trigger =
+    (container && container.querySelector(".dropdown__selector")) ||
+    findCategoryTrigger();
+  if (trigger instanceof HTMLElement) {
     clickElement(trigger);
-    await sleep(280);
+    await sleep(350);
   }
 
-  let roots = await waitFor(() => {
-    const next = findOpenPickerRoots();
-    return next.length ? next : null;
-  }, 1200);
-  if (!roots) roots = findOpenPickerRoots();
+  let menu = await waitFor(() => {
+    const next = poshmarkCategoryMenu();
+    return next instanceof HTMLElement && isVisuallyOnPage(next) ? next : null;
+  }, 1800);
+  if (!menu) menu = poshmarkCategoryMenu();
 
-  const search = findPickerSearch(roots);
+  const search = menu ? findPickerSearch([menu]) : null;
   const query = [department, subcategory].filter(Boolean).join(" ");
-  if (search && query) {
+  if (search && query && menu instanceof HTMLElement && menu.contains(search)) {
     fillElement(search, query);
     await sleep(350);
-    roots = findOpenPickerRoots();
+    menu = poshmarkCategoryMenu() || menu;
   }
 
-  if (department) {
-    clickOptionInRoots(roots, department);
-    await sleep(280);
-    roots = findOpenPickerRoots();
-  }
-
-  if (subcategory) {
-    let clicked = clickOptionInRoots(roots, subcategory);
-    if (!clicked && search) {
-      fillElement(search, subcategory);
-      await sleep(300);
-      roots = findOpenPickerRoots();
-      clicked = clickOptionInRoots(roots, subcategory);
+  if (department && menu) {
+    clickOptionInRoots([menu], department, { exact: true });
+    await sleep(400);
+    if (subcategory) {
+      menu =
+        (await waitFor(() => {
+          const next = poshmarkCategoryMenu();
+          if (!(next instanceof HTMLElement)) return null;
+          const ready = Array.from(next.querySelectorAll("li")).some(
+            (node) => normalizeText(node.textContent || "") === normalizeText(subcategory)
+          );
+          return ready ? next : null;
+        }, 2200)) ||
+        poshmarkCategoryMenu() ||
+        menu;
+    } else {
+      menu = poshmarkCategoryMenu() || menu;
     }
+  }
+
+  if (subcategory && menu) {
+    let clicked = clickOptionInRoots([menu], subcategory, { exact: true });
     if (!clicked) {
-      fillByClickingOption(subcategory);
+      const subContainer = document.querySelector(
+        ".listing-editor__subcategory-container"
+      );
+      const subTrigger = subContainer?.querySelector(".dropdown__selector");
+      if (subTrigger instanceof HTMLElement) {
+        clickElement(subTrigger);
+        await sleep(350);
+        const subMenu = subContainer.querySelector(".dropdown__menu");
+        if (subMenu) {
+          clicked = clickOptionInRoots([subMenu], subcategory, { exact: true });
+        }
+      }
     }
   }
 
-  await sleep(220);
-  const liveTrigger = findCategoryTrigger() || trigger;
-  if (triggerShowsCategory(liveTrigger, department, subcategory)) {
-    if (liveTrigger) highlightElement(liveTrigger);
-    return { ok: true, filled: true };
-  }
-
-  const field = findField("category", null);
-  const shown = field ? normalizeText(readElementValue(field)) : "";
-  const want = normalizeText(subcategory || department);
-  if (want && shown && (shown.includes(want) || want.includes(shown))) {
-    if (field) highlightElement(field);
+  await sleep(280);
+  const shown = categorySelectorText();
+  const want = [subcategory, department]
+    .filter(Boolean)
+    .map((part) => normalizeText(part));
+  const stillPlaceholder = /select a category|select category|choose a category|^category$/.test(
+    shown
+  );
+  if (!stillPlaceholder && want.some((part) => shown.includes(part))) {
+    const liveTrigger =
+      container?.querySelector(".dropdown__selector") || findCategoryTrigger();
+    if (liveTrigger instanceof HTMLElement) highlightElement(liveTrigger);
     return { ok: true, filled: true };
   }
 
@@ -737,6 +806,40 @@ async function fillPoshmarkCategory(department, subcategory) {
     filled: false,
     error: "Could not select category",
   };
+}
+
+async function confirmPoshmarkPriceModal(listingPrice, originalPrice) {
+  const modal = await waitFor(() => {
+    const node = document.querySelector(
+      ".listing-price-suggestion-modal, [class*='listing-price-suggestion-modal']"
+    );
+    return node instanceof HTMLElement && isVisuallyOnPage(node) ? node : null;
+  }, 900);
+  if (!modal) return;
+
+  const listingInput = Array.from(modal.querySelectorAll("input")).find((input) => {
+    const aria = (input.getAttribute("aria-label") || "").toLowerCase();
+    return aria === "listing price" && isFillable(input) && isVisuallyOnPage(input);
+  });
+  if (listingInput && listingPrice) {
+    fillElement(listingInput, listingPrice);
+  }
+
+  const originalInput = Array.from(modal.querySelectorAll("input")).find((input) => {
+    const hay = `${input.className} ${input.getAttribute("aria-label") || ""} ${
+      input.placeholder || ""
+    }`.toLowerCase();
+    return /original/.test(hay) && isFillable(input) && isVisuallyOnPage(input);
+  });
+  if (originalInput && originalPrice) {
+    fillElement(originalInput, originalPrice);
+  }
+
+  const done = Array.from(modal.querySelectorAll("button")).find((button) =>
+    /^done$/i.test((button.textContent || "").trim())
+  );
+  if (done instanceof HTMLElement) clickElement(done);
+  await sleep(250);
 }
 
 async function handleFillField(payload) {
@@ -765,6 +868,13 @@ async function handleFillField(payload) {
     const filled = fillElement(el, value);
     if (filled) {
       highlightElement(el);
+      if (isPoshmarkHost() && fieldKey === "price") {
+        const original = poshmarkNamedInput("originalPrice");
+        await confirmPoshmarkPriceModal(
+          value,
+          original ? formatFillValue("originalPrice", original.value) : ""
+        );
+      }
       return { ok: true, filled: true };
     }
   }
