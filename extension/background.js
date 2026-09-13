@@ -506,6 +506,24 @@ async function fillFieldsOnPage(listing, fieldKeys, preferredPlatform, preferred
       continue;
     }
 
+    if (platform === "poshmark" && key === "styleTags") {
+      const tags = raAutocompleteValues(listing, "styleTags");
+      if (!tags.length) continue;
+      const result = await sendToMarketplaceTab(
+        {
+          type: "fillField",
+          fieldKey: "styleTags",
+          value: tags.join(", "),
+          values: tags,
+        },
+        preferredPlatform,
+        preferredTabId
+      );
+      if (result?.ok && result.filled) filled += 1;
+      else missing.push("styleTags");
+      continue;
+    }
+
     const value = raFieldValueFromListing(listing, key);
     if (!value) continue;
 

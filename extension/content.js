@@ -349,6 +349,10 @@ function findField(fieldKey, selector) {
       const named = poshmarkNamedInput("originalPrice");
       if (named) return named;
     }
+    if (fieldKey === "styleTags") {
+      const named = poshmarkNamedInput("style-tag-input");
+      if (named) return named;
+    }
   }
 
   let best = null;
@@ -452,7 +456,7 @@ function formatFillValue(fieldKey, value) {
   return String(value);
 }
 
-function fillInputLikeUser(el, value) {
+function fillTypeaheadInput(el, value) {
   el.focus();
   if (typeof el.select === "function") {
     try {
@@ -476,6 +480,10 @@ function fillInputLikeUser(el, value) {
     setNativeValue(el, value);
   }
   dispatchInputEvents(el);
+}
+
+function fillInputLikeUser(el, value) {
+  fillTypeaheadInput(el, value);
   el.dispatchEvent(new KeyboardEvent("keyup", { bubbles: true, key: "0" }));
   el.blur();
   el.dispatchEvent(new FocusEvent("blur", { bubbles: true }));
@@ -808,6 +816,120 @@ async function fillPoshmarkCategory(department, subcategory) {
   };
 }
 
+function parseStyleTagValues(payload, rawValue) {
+  if (Array.isArray(payload?.values)) {
+    return payload.values.map((tag) => String(tag || "").trim()).filter(Boolean);
+  }
+  return String(rawValue || "")
+    .split(",")
+    .map((tag) => tag.trim())
+    .filter(Boolean);
+}
+
+function selectedPoshmarkStyleTags() {
+  return Array.from(document.querySelectorAll(".listing-editor__tag__div")).map((el) =>
+    normalizeText(el.textContent || "")
+  );
+}
+
+function poshmarkStyleTagInput() {
+  return poshmarkNamedInput("style-tag-input") || findField("styleTags", null);
+}
+
+function clickPoshmarkStyleTagSuggestion(list, tag) {
+  const want = normalizeText(tag);
+  const matches = Array.from(
+    list.querySelectorAll('[data-et-on-name="style_tag"]')
+  ).filter(
+    (el) =>
+      el instanceof HTMLElement &&
+      normalizeText(el.getAttribute("data-et-name") || "") === want
+  );
+  // Innermost node last in tree order — Poshmark confirms on the inner
+  // [data-et-name] div, not the wrapping <li>.
+  const exact = matches.length ? matches[matches.length - 1] : null;
+  if (exact instanceof HTMLElement) {
+    clickElement(exact);
+    return true;
+  }
+  return clickOptionInRoots([list], tag, { exact: true });
+}
+
+async function fillPoshmarkStyleTags(tags) {
+  const unique = [];
+  const seen = new Set();
+  for (const raw of tags) {
+    const tag = String(raw || "").trim();
+    const key = normalizeText(tag);
+    if (!tag || seen.has(key)) continue;
+    seen.add(key);
+    unique.push(tag);
+    if (unique.length >= 3) break;
+  }
+  if (!unique.length) {
+    return { ok: false, filled: false, error: "Empty value" };
+  }
+
+  const input = poshmarkStyleTagInput();
+  if (!input) {
+    return { ok: false, filled: false, error: "No field matched for styleTags" };
+  }
+
+  const container = document.querySelector(".listing-editor__tags__container");
+  if (container instanceof HTMLElement) {
+    try {
+      container.scrollIntoView({ block: "center", inline: "nearest" });
+    } catch {
+      /* ignore */
+    }
+  }
+
+  const selected = [];
+  for (const tag of unique) {
+    if (selectedPoshmarkStyleTags().includes(normalizeText(tag))) {
+      selected.push(tag);
+      continue;
+    }
+
+    clickElement(input);
+    fillTypeaheadInput(input, tag);
+    input.dispatchEvent(new KeyboardEvent("keyup", { bubbles: true, key: tag.slice(-1) || "a" }));
+    // Keep focus — blurring closes the typeahead before a suggestion can be clicked.
+    const list = await waitFor(() => {
+      const menu = document.querySelector(
+        ".listing-editor__suggestions-list, ul.type-ahead__list.dropdown__menu--expanded"
+      );
+      if (!(menu instanceof HTMLElement) || !isVisuallyOnPage(menu)) return null;
+      const hasMatch = Array.from(
+        menu.querySelectorAll("li, [data-et-on-name='style_tag']")
+      ).some(
+        (node) =>
+          normalizeText(node.getAttribute("data-et-name") || node.textContent || "") ===
+          normalizeText(tag)
+      );
+      return hasMatch ? menu : null;
+    }, 2500);
+
+    if (list) clickPoshmarkStyleTagSuggestion(list, tag);
+    const added = await waitFor(
+      () => (selectedPoshmarkStyleTags().includes(normalizeText(tag)) ? true : null),
+      1600
+    );
+
+    if (added) selected.push(tag);
+  }
+
+  if (selected.length) {
+    highlightElement(input);
+    return { ok: true, filled: true, tags: selected };
+  }
+  return {
+    ok: false,
+    filled: false,
+    error: "Could not select style tags",
+  };
+}
+
 async function confirmPoshmarkPriceModal(listingPrice, originalPrice) {
   const modal = await waitFor(() => {
     const node = document.querySelector(
@@ -857,6 +979,14 @@ async function handleFillField(payload) {
       return { ok: false, filled: false, error: "Empty value" };
     }
     return fillPoshmarkCategory(department, subcategory);
+  }
+
+  if (isPoshmarkHost() && fieldKey === "styleTags") {
+    const tags = parseStyleTagValues(payload, rawValue);
+    if (!tags.length) {
+      return { ok: false, filled: false, error: "Empty value" };
+    }
+    return fillPoshmarkStyleTags(tags);
   }
 
   if (!value) {
@@ -917,6 +1047,25 @@ function readElementValue(el) {
 function handleVerifyField(payload) {
   const fieldKey = payload?.fieldKey || "title";
   const expected = payload?.value == null ? "" : String(payload.value).trim();
+
+  if (isPoshmarkHost() && fieldKey === "styleTags") {
+    const actualTags = selectedPoshmarkStyleTags();
+    const expectedTags = parseStyleTagValues(payload, expected).map((tag) =>
+      normalizeText(tag)
+    );
+    const actual = actualTags.join(", ");
+    if (!expectedTags.length) {
+      return {
+        ok: true,
+        verified: actualTags.length > 0,
+        actual,
+        expected,
+      };
+    }
+    const verified = expectedTags.every((tag) => actualTags.includes(tag));
+    return { ok: true, verified, actual, expected };
+  }
+
   const el = findField(fieldKey, payload?.selector || null);
   if (!el) {
     return {

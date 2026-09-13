@@ -22,7 +22,7 @@ var RA_COACH_STEPS = [
   {
     key: "details",
     label: "Other details",
-    help: "Fill size, color, condition, and prices. For brand and style tags, type then pick a suggestion.",
+    help: "Fill size, color, condition, prices, and style tags. For brand, type then pick a suggestion.",
     actionLabel: "Fill the rest",
   },
   {
@@ -99,7 +99,7 @@ function raIsUnpackedExtension() {
 
 /** Fields that must be chosen from the site’s autocomplete (not pasted in). */
 var RA_AUTOCOMPLETE_FIELDS = {
-  poshmark: ["brand", "styleTags"],
+  poshmark: ["brand"],
   mercari: [],
 };
 
