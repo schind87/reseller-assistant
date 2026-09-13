@@ -74,6 +74,29 @@ export async function listMarketplaceAccounts(
   return (data as AccountRow[] | null)?.map(mapAccount) ?? [];
 }
 
+/** All linked closets, grouped by profile id. Used by Admin → Users. */
+export async function listMarketplaceAccountsByUserId(): Promise<
+  Map<string, MarketplaceAccount[]>
+> {
+  const supabase = createAdminClient();
+  const { data, error } = await supabase
+    .from("marketplace_accounts")
+    .select(
+      "user_id, platform, username, linked_at, last_checked_at, last_check_error"
+    )
+    .order("platform", { ascending: true });
+  if (error) {
+    throw new Error(`listMarketplaceAccountsByUserId: ${error.message}`);
+  }
+  const byUser = new Map<string, MarketplaceAccount[]>();
+  for (const row of (data as AccountRow[] | null) ?? []) {
+    const list = byUser.get(row.user_id) ?? [];
+    list.push(mapAccount(row));
+    byUser.set(row.user_id, list);
+  }
+  return byUser;
+}
+
 export async function listMarketplaceClosetItems(
   userId: string
 ): Promise<MarketplaceClosetItem[]> {

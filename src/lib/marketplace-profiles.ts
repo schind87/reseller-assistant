@@ -78,6 +78,19 @@ export function marketplaceAccountDetectUrl(platform: Platform): string {
   }
 }
 
+export function closetUsernameParseError(platform: Platform): string {
+  switch (platform) {
+    case "poshmark":
+      return "Use the Poshmark closet name, or paste the closet URL";
+    case "mercari":
+      return "Use the Mercari username, or paste the profile URL";
+    default: {
+      const _exhaustive: never = platform;
+      return _exhaustive;
+    }
+  }
+}
+
 export function parseMarketplaceUsername(
   platform: Platform,
   raw: string

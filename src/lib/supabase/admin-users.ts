@@ -4,8 +4,13 @@ import {
 } from "@/lib/seller-preferences";
 import { deleteListing } from "@/lib/supabase/queries";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { listMarketplaceAccountsByUserId } from "@/lib/supabase/marketplace-closet";
 import { isPostingPhotoRole, type ListingStatus, type PhotoRole, type Platform } from "@/lib/types";
-import type { AdminUserListing, AdminUserRow } from "@/lib/admin-users";
+import type {
+  AdminUserListing,
+  AdminUserRow,
+  AdminUserShopLink,
+} from "@/lib/admin-users";
 
 const PAGE_SIZE = 1000;
 
@@ -54,7 +59,7 @@ function defaultStore(preferences: unknown): Platform | null {
 export async function listAdminUsers(): Promise<AdminUserRow[]> {
   const supabase = createAdminClient();
 
-  const [profiles, listings, photos] = await Promise.all([
+  const [profiles, listings, photos, accountsByUser] = await Promise.all([
     selectAll<ProfileRow>(async (from, to) => {
       const { data, error } = await supabase
         .from("profiles")
@@ -83,6 +88,7 @@ export async function listAdminUsers(): Promise<AdminUserRow[]> {
       if (error) throw new Error(`listAdminUsers photos: ${error.message}`);
       return (data ?? []) as PhotoRow[];
     }),
+    listMarketplaceAccountsByUserId(),
   ]);
 
   const photoCountByListing = new Map<string, number>();
@@ -124,6 +130,7 @@ export async function listAdminUsers(): Promise<AdminUserRow[]> {
       prefsCompleted: Boolean(profile.listing_prefs_completed_at),
       defaultStore: defaultStore(profile.listing_preferences),
       listings: owned,
+      shopLinks: shopLinksForUser(accountsByUser.get(profile.id)),
     });
   });
 
@@ -138,6 +145,7 @@ export async function listAdminUsers(): Promise<AdminUserRow[]> {
         prefsCompleted: false,
         defaultStore: null,
         listings: unowned,
+        shopLinks: [],
       })
     );
   }
@@ -154,11 +162,21 @@ export async function listAdminUsers(): Promise<AdminUserRow[]> {
         prefsCompleted: false,
         defaultStore: null,
         listings: orphanListings,
+        shopLinks: shopLinksForUser(accountsByUser.get(userId)),
       })
     );
   }
 
   return users;
+}
+
+function shopLinksForUser(
+  accounts: { platform: Platform; username: string }[] | undefined
+): AdminUserShopLink[] {
+  return (accounts ?? []).map((account) => ({
+    platform: account.platform,
+    username: account.username,
+  }));
 }
 
 function toUserRow(input: {
@@ -169,6 +187,7 @@ function toUserRow(input: {
   prefsCompleted: boolean;
   defaultStore: Platform | null;
   listings: AdminUserListing[];
+  shopLinks: AdminUserShopLink[];
 }): AdminUserRow {
   const listings = input.listings.toSorted((a, b) =>
     b.updatedAt.localeCompare(a.updatedAt)
@@ -195,6 +214,7 @@ function toUserRow(input: {
     photoCount,
     lastListingAt,
     listings,
+    shopLinks: input.shopLinks,
   };
 }
 

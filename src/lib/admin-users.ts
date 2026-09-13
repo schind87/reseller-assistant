@@ -15,6 +15,11 @@ export type AdminUserListing = {
   hasListingPhoto: boolean;
 };
 
+export type AdminUserShopLink = {
+  platform: Platform;
+  username: string;
+};
+
 export type AdminUserRow = {
   /** `null` is the bucket for listings with no owner. */
   id: string | null;
@@ -28,6 +33,7 @@ export type AdminUserRow = {
   photoCount: number;
   lastListingAt: string | null;
   listings: AdminUserListing[];
+  shopLinks: AdminUserShopLink[];
 };
 
 export type AdminUserFilters = {
@@ -111,7 +117,11 @@ export function filterAdminUsers(
   const q = filters.q.trim().toLowerCase();
   return users.filter((user) => {
     if (q) {
-      const hay = [user.id ?? "unowned", user.email ?? ""]
+      const hay = [
+        user.id ?? "unowned",
+        user.email ?? "",
+        ...user.shopLinks.map((link) => `@${link.username} ${link.username}`),
+      ]
         .join(" ")
         .toLowerCase();
       if (!hay.includes(q)) return false;

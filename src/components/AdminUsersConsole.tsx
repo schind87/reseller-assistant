@@ -15,7 +15,7 @@ import {
   type AdminUserFilters,
   type AdminUserRow,
 } from "@/lib/admin-users";
-import { AdminPhotoR2Copy } from "@/components/AdminPhotoR2Copy";
+import { AdminUserShopLinks } from "@/components/AdminUserShopLinks";
 import { listingJobStepLabel } from "@/lib/listing-job";
 import { PLATFORM_LABELS } from "@/lib/platforms";
 
@@ -53,6 +53,13 @@ function userMeta(user: AdminUserRow): string {
   ];
   if (user.lastListingAt) {
     bits.push(`Last listing ${formatWhen(user.lastListingAt)}`);
+  }
+  if (user.shopLinks.length > 0) {
+    bits.push(
+      user.shopLinks
+        .map((link) => `${PLATFORM_LABELS[link.platform]} @${link.username}`)
+        .join(" · ")
+    );
   }
   return bits.join(" · ");
 }
@@ -201,8 +208,6 @@ export function AdminUsersConsole({
           {formatAdminUserSummary(summary)}
         </p>
       </header>
-
-      <AdminPhotoR2Copy />
 
       {error ? (
         <p
@@ -365,6 +370,20 @@ export function AdminUsersConsole({
                     </span>
                   </summary>
                   <div className="flex flex-col gap-3 border-t border-[var(--border)] px-4 py-3">
+                    {user.id && user.createdAt ? (
+                      <AdminUserShopLinks
+                        userId={user.id}
+                        userLabel={label}
+                        shopLinks={user.shopLinks}
+                        onShopLinksChange={(shopLinks) =>
+                          setUsers((prev) =>
+                            prev.map((row) =>
+                              row.id === user.id ? { ...row, shopLinks } : row
+                            )
+                          )
+                        }
+                      />
+                    ) : null}
                     {visibleListings.length === 0 ? (
                       <p className="text-base text-[var(--muted)]">
                         No listings.

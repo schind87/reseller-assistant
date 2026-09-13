@@ -60,16 +60,12 @@ Open [http://localhost:3000](http://localhost:3000) → email code sign-in (or e
 
 \*Photos stay on the Supabase `listing-photos` bucket until all four `R2_ACCOUNT_ID` / `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` / `R2_BUCKET_NAME` (or `R2_BUCKET`) values are set. After they are set, new uploads go to R2 and reads try R2 first, then Supabase.
 
-Copy existing production objects from **Users** (`/app/admin/users`): **Copy listing photos to R2**. That runs on Vercel with the production `R2_*` vars and does not delete Supabase originals.
-
-Or run locally:
+Copy existing production objects with `npm run photos:migrate-r2`. That needs the production `R2_*` vars plus `NEXT_PUBLIC_SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`, and does not delete Supabase originals unless you pass `--delete-source`.
 
 ```bash
 npm run photos:migrate-r2 -- --dry-run
 npm run photos:migrate-r2
 ```
-
-The script needs the same `R2_*` vars plus `NEXT_PUBLIC_SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`. It does not delete Supabase originals unless you pass `--delete-source`.
 
 ## Domain
 
