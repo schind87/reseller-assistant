@@ -43,7 +43,7 @@ jobs:
       - name: Pack store zip
         run: npm run extension:pack
 
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@v6
         with:
           name: reseller-assistant-chrome
           path: dist/reseller-assistant-chrome.zip
