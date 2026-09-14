@@ -3,7 +3,8 @@ Update What’s new for this ship.
 Read `.agents/skills/whats-new/SKILL.md` and `src/content/whats-new.ts`.
 
 If this push already added a matching item to `src/content/whats-new.ts`, or
-the diff is only notes / docs / CI / tests, stop. Do not open a pull request.
+the diff is only notes / docs / CI / tests / `src/content/chrome-store-status.json`,
+stop. Do not open a pull request.
 
 If sellers can see a website or Chrome helper change and it is not on
 `/whats-new` yet:

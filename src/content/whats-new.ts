@@ -20,11 +20,18 @@ export type WhatsNewItem = {
  */
 export const WHATS_NEW: WhatsNewItem[] = [
   {
+    id: "helper-store-status",
+    date: "2026-09-14",
+    title: "Helper notes show what Chrome has",
+    helper: true,
+    body: "Next to Chrome helper notes we show what the Chrome Web Store actually has: the live version, or that a newer one is in review.",
+  },
+  {
     id: "helper-0-7-0-8",
     date: "2026-09-13",
     title: "Chrome helper 0.7.0.8 is at the Store",
     helper: true,
-    body: "We sent helper 0.7.0.8 to the Chrome Web Store. Google still has to approve it. Until they do, Chrome may show the older helper.",
+    body: "We sent helper 0.7.0.8 to the Chrome Web Store.",
   },
   {
     id: "admin-users-shop-links",

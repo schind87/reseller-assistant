@@ -35,6 +35,7 @@ const USER_FACING_IGNORE_PREFIXES = [
   "extension/README.md",
   "extension/STORE.md",
   "extension/store-assets/",
+  "src/content/chrome-store-status.json",
 ];
 
 const { values } = parseArgs({

@@ -10,6 +10,7 @@
     "extension:live": "node scripts/sync-extension-live.mjs",
     "extension:pack": "node scripts/pack-extension.mjs",
     "extension:publish": "node scripts/publish-extension.mjs",
+    "chrome-store:status": "node scripts/fetch-chrome-store-status.mjs",
     "extension:store-images": "node scripts/generate-extension-icons.mjs",
     "photos:migrate-r2": "node scripts/migrate-photos-to-r2.mjs",
     "whats-new:check": "node scripts/check-whats-new.mjs"

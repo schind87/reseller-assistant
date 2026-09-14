@@ -10,6 +10,7 @@ const nextConfig: NextConfig = {
   // Keep the Chrome extension folder available to the download API on Vercel.
   outputFileTracingIncludes: {
     "/api/extension/download": ["./extension/**/*"],
+    "/whats-new": ["./src/content/chrome-store-status.json"],
   },
   async redirects() {
     const hosts = [

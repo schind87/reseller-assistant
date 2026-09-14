@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { WhatsNewView } from "@/components/WhatsNewView";
 import { WHATS_NEW } from "@/content/whats-new";
+import { getChromeHelperStoreChip } from "@/lib/chrome-web-store-status";
 import { getSessionFromCookies, isUserSession } from "@/lib/session";
 
 export const metadata: Metadata = {
@@ -10,14 +11,17 @@ export const metadata: Metadata = {
     "Recent changes on the Reseller Assistant website and Chrome helper.",
 };
 
+export const revalidate = 300;
+
 export default async function WhatsNewPage() {
-  let signedIn = false;
-  try {
-    const session = await getSessionFromCookies();
-    signedIn = isUserSession(session);
-  } catch {
-    signedIn = false;
-  }
+  const sessionPromise = getSessionFromCookies()
+    .then((session) => isUserSession(session))
+    .catch(() => false);
+  const storePromise = getChromeHelperStoreChip();
+  const [signedIn, storeStatus] = await Promise.all([
+    sessionPromise,
+    storePromise,
+  ]);
 
   return (
     <main className="mx-auto flex w-full max-w-2xl flex-col gap-8 px-4 py-10">
@@ -40,7 +44,7 @@ export default async function WhatsNewPage() {
       </header>
 
       {WHATS_NEW.length > 0 ? (
-        <WhatsNewView items={WHATS_NEW} />
+        <WhatsNewView items={WHATS_NEW} storeStatus={storeStatus} />
       ) : (
         <p className="text-base text-[var(--muted)]">Nothing listed yet.</p>
       )}

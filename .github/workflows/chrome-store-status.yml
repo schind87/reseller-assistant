@@ -1,0 +1,56 @@
+# Writes src/content/chrome-store-status.json from Chrome Web Store fetchStatus.
+# Missing secrets skip (exit 0). Does not invent a version or review state.
+name: Chrome helper Store status
+
+on:
+  schedule:
+    - cron: "20 */6 * * *"
+  workflow_dispatch:
+  workflow_run:
+    workflows: ["Chrome helper store"]
+    types: [completed]
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/chrome-store-status.yml"
+      - "scripts/fetch-chrome-store-status.mjs"
+
+concurrency:
+  group: chrome-store-status
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  snapshot:
+    name: Snapshot Chrome Web Store status
+    runs-on: ubuntu-latest
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' || github.event.workflow_run.conclusion == 'failure'
+    env:
+      CHROME_WEB_STORE_CLIENT_ID: ${{ secrets.CHROME_WEB_STORE_CLIENT_ID }}
+      CHROME_WEB_STORE_CLIENT_SECRET: ${{ secrets.CHROME_WEB_STORE_CLIENT_SECRET }}
+      CHROME_WEB_STORE_REFRESH_TOKEN: ${{ secrets.CHROME_WEB_STORE_REFRESH_TOKEN }}
+      CHROME_WEB_STORE_EXTENSION_ID: ${{ secrets.CHROME_WEB_STORE_EXTENSION_ID }}
+      CHROME_WEB_STORE_PUBLISHER_ID: ${{ secrets.CHROME_WEB_STORE_PUBLISHER_ID }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+
+      - name: Fetch Store status
+        run: node scripts/fetch-chrome-store-status.mjs
+
+      - name: Commit snapshot if it changed
+        run: |
+          git add src/content/chrome-store-status.json
+          if git diff --cached --quiet; then
+            echo "Store status snapshot unchanged."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Refresh Chrome helper Store status snapshot."
+          git push origin HEAD:main

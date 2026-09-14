@@ -12,7 +12,7 @@ Release path: push helper changes to `main` (bump `manifest.json` `version` firs
 | Attach the zip as a GitHub Actions artifact | 2-step verification on the publisher Google account |
 | Skip the CWS upload (do not fail the job) until secrets exist | Paste the secrets below into GitHub once |
 
-App deploy stays on Vercel. Store credentials stay in GitHub Actions secrets — never Vercel, never the repo.
+App deploy stays on Vercel. Store credentials stay in GitHub Actions secrets — never the repo. Do not put them on Vercel unless you want `/whats-new` to call `fetchStatus` live (same names as below). Otherwise that page reads `src/content/chrome-store-status.json`, which GitHub Action **Chrome helper Store status** refreshes from `fetchStatus`.
 
 ### GitHub Actions secrets (add once)
 
@@ -37,6 +37,16 @@ Local publish reads the same names from the environment (`npm run extension:publ
 5. After the first listing exists in the console, copy the item id and publisher id into the secrets above.
 
 Until those five secrets are set, CI still packs the zip; download it from the workflow artifact and upload it in the console if you need a release today.
+
+### What’s new Store status
+
+`/whats-new` shows a small chip next to Chrome helper notes from Chrome Web Store `fetchStatus` (`GET …/v2/publishers/{publisherId}/items/{extensionId}:fetchStatus`). It never guesses a version or review state.
+
+1. If `CHROME_WEB_STORE_*` is set on the Next.js process, the page fetches live (cached ~5 minutes).
+2. Else it uses `src/content/chrome-store-status.json` when that file has a real `fetchedAt` from CI.
+3. If neither is available, the chip is omitted.
+
+Refresh the snapshot: `npm run chrome-store:status` (skips when secrets are missing). GitHub Action **Chrome helper Store status** runs that script on a schedule, after helper store jobs, and when the script/workflow changes.
 
 ## Listing copy (console)
 

@@ -5,6 +5,7 @@ import type { WhatsNewItem, WhatsNewScreenshot } from "@/content/whats-new";
 
 type WhatsNewViewProps = {
   items: WhatsNewItem[];
+  storeStatus?: { label: string; tone: "accent" | "danger" } | null;
 };
 
 function formatNoteDate(iso: string): string {
@@ -30,7 +31,27 @@ function groupByDate(items: WhatsNewItem[]): { date: string; items: WhatsNewItem
   return groups;
 }
 
-export function WhatsNewView({ items }: WhatsNewViewProps) {
+function StoreStatusChip({
+  status,
+}: {
+  status: { label: string; tone: "accent" | "danger" };
+}) {
+  return (
+    <span
+      role="status"
+      translate="no"
+      className={
+        status.tone === "danger"
+          ? "max-w-full break-words rounded-lg bg-red-50 px-2 py-1 text-xs font-semibold text-red-800"
+          : "max-w-full break-words rounded-lg bg-[var(--accent-soft)] px-2 py-1 text-xs font-semibold text-[var(--accent)]"
+      }
+    >
+      {status.label}
+    </span>
+  );
+}
+
+export function WhatsNewView({ items, storeStatus = null }: WhatsNewViewProps) {
   const [open, setOpen] = useState<WhatsNewScreenshot | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
 
@@ -50,6 +71,7 @@ export function WhatsNewView({ items }: WhatsNewViewProps) {
   }
 
   const sorted = items.toSorted((a, b) => b.date.localeCompare(a.date));
+  const firstHelperId = sorted.find((item) => item.helper)?.id;
   const groups = groupByDate(sorted);
 
   return (
@@ -66,9 +88,14 @@ export function WhatsNewView({ items }: WhatsNewViewProps) {
                   {item.title}
                 </h3>
                 {item.helper ? (
-                  <span className="rounded-lg bg-[var(--accent-soft)] px-2 py-1 text-xs font-semibold uppercase tracking-wide text-[var(--accent)]">
-                    Chrome helper
-                  </span>
+                  <>
+                    <span className="rounded-lg bg-[var(--accent-soft)] px-2 py-1 text-xs font-semibold uppercase tracking-wide text-[var(--accent)]">
+                      Chrome helper
+                    </span>
+                    {storeStatus && item.id === firstHelperId ? (
+                      <StoreStatusChip status={storeStatus} />
+                    ) : null}
+                  </>
                 ) : null}
               </div>
               <p className="text-base text-[var(--foreground)]">{item.body}</p>

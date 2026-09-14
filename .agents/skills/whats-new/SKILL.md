@@ -32,6 +32,9 @@ are not the What’s new page.
 - Route: `/whats-new`
 - One list for website + helper
 - Public, like `/privacy`
+- Chrome helper notes may show a Store status chip from `fetchStatus` (live
+  `CHROME_WEB_STORE_*` or `src/content/chrome-store-status.json`). Do not type a
+  version or “in review” by hand. Snapshot-only commits are not a notes ship.
 
 ## How notes stay updated (durable)
 
