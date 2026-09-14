@@ -20,11 +20,13 @@ npm run extension:pack
 
 Output: `dist/reseller-assistant-chrome.zip`
 
-That pack is part of release. A push to `main` that changes helper source runs [`.github/workflows/chrome-web-store.yml`](../.github/workflows/chrome-web-store.yml): it packs the zip (Actions artifact) and, when the Chrome Web Store secrets are set, uploads it and submits it for Google review. You can also run **Chrome helper store** from the Actions tab, or:
+That pack is part of release. A push to `main` that changes helper source runs [`.github/workflows/chrome-web-store.yml`](../.github/workflows/chrome-web-store.yml): it packs the zip, attaches a GitHub Release (`chrome-helper-v*`) you can Load unpacked while Google review is pending, and, when the Chrome Web Store secrets are set, uploads the same zip and submits it for review. You can also run **Chrome helper store** from the Actions tab, or:
 
 ```bash
 npm run extension:publish
 ```
+
+While a version is in review: GitHub → **Releases** → `chrome-helper-v…` → download `reseller-assistant-chrome.zip` → unzip → `chrome://extensions` → Developer mode → **Load unpacked** → the folder that contains `manifest.json`. That is the production package (reseller.mvfeed.us), not localhost. Turn off the Chrome Web Store install while you test it.
 
 Bump `manifest.json` `version` before a store release. Google still reviews the listing; the API cannot skip that. First-time listing copy, screenshots, and privacy answers stay in [`STORE.md`](STORE.md).
 

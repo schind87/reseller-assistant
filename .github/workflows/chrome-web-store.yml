@@ -1,6 +1,7 @@
 # Packs dist/reseller-assistant-chrome.zip on helper changes.
+# Publishes a GitHub Release of that exact zip for Load unpacked while review is pending.
 # Uploads and submits for Google review when Chrome Web Store secrets are set.
-# Missing secrets skip the upload so this workflow can run before credentials exist.
+# Missing secrets skip the CWS upload so this workflow can run before credentials exist.
 name: Chrome helper store
 
 on:
@@ -14,8 +15,6 @@ on:
       - "scripts/pack-extension.mjs"
       - "scripts/publish-extension.mjs"
       - ".github/workflows/chrome-web-store.yml"
-  release:
-    types: [published]
   workflow_dispatch:
     inputs:
       publish:
@@ -23,8 +22,10 @@ on:
         type: boolean
         default: true
 
+# Do not trigger on GitHub Release — this workflow creates those releases.
+
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   pack-and-upload:
@@ -43,11 +44,48 @@ jobs:
       - name: Pack store zip
         run: npm run extension:pack
 
+      - id: version
+        run: echo "version=$(node -p "require('./extension/manifest.json').version")" >> "$GITHUB_OUTPUT"
+
       - uses: actions/upload-artifact@v6
         with:
-          name: reseller-assistant-chrome
+          name: reseller-assistant-chrome-${{ steps.version.outputs.version }}
           path: dist/reseller-assistant-chrome.zip
           if-no-files-found: error
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: reseller-assistant-chrome-${{ steps.version.outputs.version }}-load-unpacked
+          path: dist/reseller-assistant-chrome/
+          if-no-files-found: error
+
+      - name: GitHub Release for local install
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          TAG="chrome-helper-v${VERSION}"
+          NOTES="Production Chrome helper ${VERSION} — the same zip submitted to the Chrome Web Store.
+
+          While Google review is pending, install this copy locally:
+
+          1. Download reseller-assistant-chrome.zip from this release
+          2. Unzip it
+          3. Chrome → chrome://extensions → Developer mode → Load unpacked
+          4. Select the unzipped folder that contains manifest.json
+
+          This package talks to production (reseller.mvfeed.us), not localhost. Turn off the Chrome Web Store install while you test, or Chrome will run two helpers."
+          NOTES=$(printf '%s\n' "$NOTES" | sed 's/^[[:space:]]*//')
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" dist/reseller-assistant-chrome.zip --clobber
+            gh release edit "$TAG" --notes "$NOTES"
+          else
+            gh release create "$TAG" dist/reseller-assistant-chrome.zip \
+              --title "Chrome helper ${VERSION}" \
+              --notes "$NOTES"
+          fi
+          echo "Release: https://github.com/${GITHUB_REPOSITORY}/releases/tag/${TAG}"
 
       - name: Upload to Chrome Web Store
         env:
@@ -57,5 +95,5 @@ jobs:
           CHROME_WEB_STORE_EXTENSION_ID: ${{ secrets.CHROME_WEB_STORE_EXTENSION_ID }}
           CHROME_WEB_STORE_PUBLISHER_ID: ${{ secrets.CHROME_WEB_STORE_PUBLISHER_ID }}
           CHROME_WEB_STORE_PUBLISH: ${{ github.event_name != 'workflow_dispatch' && 'true' || (inputs.publish && 'true' || 'false') }}
-          CHROME_WEB_STORE_REQUIRE: ${{ github.event_name == 'workflow_dispatch' && 'true' || github.event_name == 'release' && 'true' || 'false' }}
+          CHROME_WEB_STORE_REQUIRE: ${{ github.event_name == 'workflow_dispatch' && 'true' || 'false' }}
         run: npm run extension:publish -- --skip-pack

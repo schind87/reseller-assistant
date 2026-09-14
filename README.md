@@ -83,7 +83,7 @@ Stable Vercel production aliases (`reseller-assistant.vercel.app` and the projec
 
 See [`extension/README.md`](extension/README.md). Sellers install from the Chrome Web Store when that listing is live. Privacy policy: `/privacy`.
 
-**Release:** a push to `main` deploys the app on Vercel. If the helper source changed, GitHub Actions also runs `npm run extension:pack` (`dist/reseller-assistant-chrome.zip`) and, when the Chrome Web Store secrets are set, uploads that zip and submits it for Google review. Google still has to approve the listing (and the first listing is created once in the [developer console](https://chrome.google.com/webstore/devconsole)). Secret names and the one-time OAuth setup are in [`extension/STORE.md`](extension/STORE.md).
+**Release:** a push to `main` deploys the app on Vercel. If the helper source changed, GitHub Actions packs `dist/reseller-assistant-chrome.zip`, attaches it to a GitHub Release (`chrome-helper-v*`) for Load unpacked while review is pending, and, when the Chrome Web Store secrets are set, uploads that zip and submits it for Google review. Google still has to approve the listing (and the first listing is created once in the [developer console](https://chrome.google.com/webstore/devconsole)). Secret names and the one-time OAuth setup are in [`extension/STORE.md`](extension/STORE.md).
 
 Bump `extension/manifest.json` `version` before shipping helper changes, or the store upload is rejected.
 

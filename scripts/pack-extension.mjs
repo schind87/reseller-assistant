@@ -1,4 +1,4 @@
-import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import JSZip from "jszip";
@@ -6,6 +6,7 @@ import JSZip from "jszip";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const extensionRoot = path.join(root, "extension");
 const outDir = path.join(root, "dist");
+const unpackedDir = path.join(outDir, "reseller-assistant-chrome");
 const outFile = path.join(outDir, "reseller-assistant-chrome.zip");
 
 const SKIP = new Set([".DS_Store", "Thumbs.db", "README.md", "STORE.md"]);
@@ -32,32 +33,41 @@ function productionManifest(source) {
   };
 }
 
-async function addDir(zip, dirPath, zipPrefix) {
+async function addDir(zip, dirPath, zipPrefix, diskPrefix) {
   const entries = await readdir(dirPath, { withFileTypes: true });
   for (const entry of entries) {
     if (entry.name.startsWith(".") || SKIP.has(entry.name)) continue;
     const full = path.join(dirPath, entry.name);
     const zipPath = zipPrefix ? `${zipPrefix}/${entry.name}` : entry.name;
+    const diskPath = path.join(diskPrefix, entry.name);
     if (entry.isDirectory()) {
       if (SKIP_DIRS.has(entry.name)) continue;
-      await addDir(zip, full, zipPath);
+      await mkdir(diskPath, { recursive: true });
+      await addDir(zip, full, zipPath, diskPath);
       continue;
     }
+    let bytes;
     if (entry.name === "manifest.json") {
       const source = JSON.parse(await readFile(full, "utf8"));
-      zip.file(zipPath, JSON.stringify(productionManifest(source), null, 2));
-      continue;
+      bytes = Buffer.from(JSON.stringify(productionManifest(source), null, 2));
+    } else {
+      bytes = await readFile(full);
     }
-    zip.file(zipPath, await readFile(full));
+    zip.file(zipPath, bytes);
+    await writeFile(diskPath, bytes);
   }
 }
 
 await mkdir(outDir, { recursive: true });
+await rm(unpackedDir, { recursive: true, force: true });
+await mkdir(unpackedDir, { recursive: true });
 const zip = new JSZip();
-await addDir(zip, extensionRoot, "");
+await addDir(zip, extensionRoot, "", unpackedDir);
 const bytes = await zip.generateAsync({
   type: "nodebuffer",
   compression: "DEFLATE",
 });
 await writeFile(outFile, bytes);
-console.log(`Wrote ${outFile} (${bytes.length} bytes)`);
+const manifest = JSON.parse(await readFile(path.join(unpackedDir, "manifest.json"), "utf8"));
+console.log(`Wrote ${outFile} (${bytes.length} bytes) version ${manifest.version}`);
+console.log(`Wrote unpacked ${unpackedDir} (Load unpacked this folder)`);

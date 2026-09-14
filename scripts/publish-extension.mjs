@@ -116,13 +116,11 @@ async function fetchStatus(creds, token) {
   return requestJson(url, { method: "GET", headers: authHeaders(token) });
 }
 
-const UPLOAD_OK = new Set([
-  "",
-  "SUCCESS",
-  "SUCCEEDED",
-  "UPLOAD_SUCCESS",
-  "UPLOAD_SUCCEEDED",
-]);
+function isAlreadyInFlight(message) {
+  return /PENDING|IN_REVIEW|already.{0,80}(review|submit|publish|upload)|same version|version has already/i.test(
+    message
+  );
+}
 
 function uploadState(resource) {
   return resource.uploadState ?? resource.lastAsyncUploadState ?? "";
@@ -225,11 +223,22 @@ async function main() {
     return;
   }
 
-  const published = await publishItem(creds, token);
-  const state = published.state ? ` state=${published.state}` : "";
-  console.log(
-    `Submitted for Chrome Web Store review${state}. Google still has to approve the listing.`
-  );
+  try {
+    const published = await publishItem(creds, token);
+    const state = published.state ? ` state=${published.state}` : "";
+    console.log(
+      `Submitted for Chrome Web Store review${state}. Google still has to approve the listing.`
+    );
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (isAlreadyInFlight(message)) {
+      console.log(
+        `Chrome Web Store already has this version in review. ${message}`
+      );
+      return;
+    }
+    throw err;
+  }
 }
 
 try {

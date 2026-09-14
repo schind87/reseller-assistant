@@ -2,14 +2,15 @@
 
 ## Publish from CI
 
-Release path: push helper changes to `main` (bump `manifest.json` `version` first) → GitHub Actions packs `dist/reseller-assistant-chrome.zip` → if secrets are set, the zip is uploaded and submitted for review.
+Release path: push helper changes to `main` (bump `manifest.json` `version` first) → GitHub Actions packs `dist/reseller-assistant-chrome.zip` → a GitHub Release (`chrome-helper-v*`) gets that zip for Load unpacked while review is pending → if secrets are set, the same zip is uploaded and submitted for review.
 
 | Automatic | Still you / Google |
 | --- | --- |
 | Pack the production zip (no localhost hosts) | Create the listing **once** in the [developer console](https://chrome.google.com/webstore/devconsole) (this copy, screenshots, privacy practices) |
+| GitHub Release of that zip for local Load unpacked | Unzip the release and Load unpacked while review is pending; turn off the store install so you are not running two helpers |
 | Upload a new version and submit it for review | Google review and approval before sellers see the update |
 | Attach the zip as a GitHub Actions artifact | 2-step verification on the publisher Google account |
-| Skip the upload (do not fail the job) until secrets exist | Paste the secrets below into GitHub once |
+| Skip the CWS upload (do not fail the job) until secrets exist | Paste the secrets below into GitHub once |
 
 App deploy stays on Vercel. Store credentials stay in GitHub Actions secrets — never Vercel, never the repo.
 
