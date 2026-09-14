@@ -30,7 +30,7 @@ export const WHATS_NEW: WhatsNewItem[] = [
     date: "2026-09-14",
     title: "Helper notes show what Chrome has",
     helper: true,
-    body: "Next to Chrome helper notes we show what the Chrome Web Store actually has: the live version, or that a newer one is in review.",
+    body: "The newest Chrome helper note shows what the Chrome Web Store actually has: the live version, or that a newer one is in review.",
   },
   {
     id: "helper-0-7-0-8",
