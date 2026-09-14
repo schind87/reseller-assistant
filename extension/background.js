@@ -223,9 +223,45 @@ async function findMarketplaceTabs(preferredPlatform) {
   });
 }
 
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function sendTabMessage(tabId, message, timeoutMs = 5000) {
+  return Promise.race([
+    chrome.tabs.sendMessage(tabId, message),
+    sleep(timeoutMs).then(() => {
+      throw new Error("No helper response from the closet page");
+    }),
+  ]);
+}
+
+function keepAliveUntil(stopAt) {
+  const id = setInterval(() => {
+    if (Date.now() >= stopAt) {
+      clearInterval(id);
+      return;
+    }
+    void chrome.runtime.getPlatformInfo();
+  }, 12000);
+  return () => clearInterval(id);
+}
+
+async function withBudget(work, timeoutMs, fallback) {
+  const release = keepAliveUntil(Date.now() + timeoutMs + 5000);
+  try {
+    return await Promise.race([
+      work(),
+      sleep(timeoutMs).then(() => fallback),
+    ]);
+  } finally {
+    release();
+  }
+}
+
 async function ensureContentScript(tabId) {
   try {
-    await chrome.tabs.sendMessage(tabId, { type: "ping" });
+    await sendTabMessage(tabId, { type: "ping" }, 2500);
     return;
   } catch {
     // inject
@@ -234,14 +270,10 @@ async function ensureContentScript(tabId) {
     target: { tabId },
     files: ["coach-shared.js", "closet-sync.js", "content.js", "page-coach.js"],
   });
-  await chrome.tabs.sendMessage(tabId, { type: "ping" });
+  await sendTabMessage(tabId, { type: "ping" }, 4000);
 }
 
-function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function waitForTabComplete(tabId, timeoutMs = 16000) {
+function waitForTabComplete(tabId, timeoutMs = 10000) {
   return new Promise((resolve) => {
     let finished = false;
     const finish = () => {
@@ -267,8 +299,21 @@ function waitForTabComplete(tabId, timeoutMs = 16000) {
 
 async function extractClosetFromTab(tabId) {
   await ensureContentScript(tabId);
-  const result = await chrome.tabs.sendMessage(tabId, { type: "extractCloset" });
-  return result || { ok: false, listings: [], error: "No closet response" };
+  try {
+    const result = await sendTabMessage(
+      tabId,
+      { type: "extractCloset" },
+      18000
+    );
+    return result || { ok: false, listings: [], error: "No closet response" };
+  } catch (error) {
+    return {
+      ok: false,
+      listings: [],
+      error:
+        error instanceof Error ? error.message : "Could not read closet",
+    };
+  }
 }
 
 async function openClosetTab(url, options) {
@@ -315,25 +360,40 @@ async function checkCloset(message) {
     throw new Error("Missing closet URL");
   }
 
-  const tabId = await openClosetTab(closetUrl);
-  await waitForTabComplete(tabId);
-  await sleep(1200);
-  let result = await extractClosetFromTab(tabId);
+  return withBudget(
+    async () => {
+      const tabId = await openClosetTab(closetUrl);
+      await waitForTabComplete(tabId);
+      let result = await extractClosetFromTab(tabId);
 
-  if (result?.loginRequired) return result;
-  if (result?.ok && Array.isArray(result.listings) && result.listings.length) {
-    return result;
-  }
+      if (result?.loginRequired) return result;
+      if (
+        result?.ok &&
+        Array.isArray(result.listings) &&
+        result.listings.length
+      ) {
+        return result;
+      }
 
-  const fallback = fallbackClosetUrl(platform, username);
-  if (fallback && fallback !== closetUrl) {
-    await chrome.tabs.update(tabId, { url: fallback });
-    await waitForTabComplete(tabId);
-    await sleep(1200);
-    result = await extractClosetFromTab(tabId);
-  }
+      const fallback = fallbackClosetUrl(platform, username);
+      if (fallback && fallback !== closetUrl) {
+        await chrome.tabs.update(tabId, { url: fallback });
+        await waitForTabComplete(tabId);
+        result = await extractClosetFromTab(tabId);
+      }
 
-  return result || { ok: false, listings: [], error: "Could not read closet" };
+      return (
+        result || { ok: false, listings: [], error: "Could not read closet" }
+      );
+    },
+    45000,
+    {
+      ok: false,
+      listings: [],
+      error:
+        "The closet page took too long to read. Keep it open in Chrome, then try Check listings again.",
+    }
+  );
 }
 
 function isAccountTab(url, platform) {
@@ -356,10 +416,22 @@ function accountDetectUrl(platform) {
 
 async function extractUsernameFromTab(tabId) {
   await ensureContentScript(tabId);
-  const result = await chrome.tabs.sendMessage(tabId, {
-    type: "extractUsername",
-  });
-  return result || { ok: false, error: "No username response" };
+  try {
+    const result = await sendTabMessage(
+      tabId,
+      { type: "extractUsername" },
+      12000
+    );
+    return result || { ok: false, error: "No username response" };
+  } catch (error) {
+    return {
+      ok: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : "Could not find closet name",
+    };
+  }
 }
 
 async function detectClosetUsername(message) {
@@ -374,7 +446,6 @@ async function detectClosetUsername(message) {
     tabId = await openClosetTab(accountDetectUrl(platform), { active: false });
     openedDetectPage = true;
     await waitForTabComplete(tabId);
-    await sleep(1200);
   } else {
     await ensureContentScript(tabId);
   }
@@ -385,7 +456,6 @@ async function detectClosetUsername(message) {
   if (!openedDetectPage) {
     tabId = await openClosetTab(accountDetectUrl(platform), { active: false });
     await waitForTabComplete(tabId);
-    await sleep(1200);
     result = await extractUsernameFromTab(tabId);
   }
 
@@ -798,6 +868,62 @@ async function openTweakListingWindow() {
       "Opened the listing editor. Save, then close the window — it will refresh.",
   });
 }
+
+async function handleWebTask(message) {
+  if (message.type === "checkCloset") {
+    try {
+      return {
+        type: "checkClosetResult",
+        result: await checkCloset(message),
+      };
+    } catch (error) {
+      return {
+        type: "checkClosetResult",
+        result: {
+          ok: false,
+          listings: [],
+          error:
+            error instanceof Error ? error.message : "Could not check closet",
+        },
+      };
+    }
+  }
+  if (message.type === "detectClosetUsername") {
+    try {
+      return {
+        type: "detectClosetUsernameResult",
+        result: await detectClosetUsername(message),
+      };
+    } catch (error) {
+      return {
+        type: "detectClosetUsernameResult",
+        result: {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : "Could not find closet name",
+        },
+      };
+    }
+  }
+  return null;
+}
+
+chrome.runtime.onConnect.addListener((port) => {
+  if (port.name !== "ra-web") return;
+  port.onMessage.addListener((message) => {
+    if (!message || typeof message !== "object") return;
+    void handleWebTask(message).then((reply) => {
+      if (!reply) return;
+      try {
+        port.postMessage(reply);
+      } catch {
+        // Port closed.
+      }
+    });
+  });
+});
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (!message || typeof message !== "object") return;

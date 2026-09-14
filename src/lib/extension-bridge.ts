@@ -192,7 +192,7 @@ export function requestClosetCheck(payload: ClosetCheckPayload): void {
 }
 
 export function waitForClosetCheckResult(
-  timeoutMs = 28000
+  timeoutMs = 65000
 ): Promise<ClosetCheckResult> {
   if (typeof window === "undefined") {
     return Promise.resolve({
@@ -208,7 +208,8 @@ export function waitForClosetCheckResult(
       resolve({
         ok: false,
         listings: [],
-        error: "Timed out waiting for the closet page. Reload the Chrome helper, then try again.",
+        error:
+          "The closet page took too long. Keep Mercari or Poshmark open in Chrome, then try Check listings again.",
       });
     }, timeoutMs);
 
@@ -234,7 +235,7 @@ export function waitForClosetCheckResult(
 
 export async function checkClosetWithExtension(
   payload: ClosetCheckPayload,
-  timeoutMs = 28000
+  timeoutMs = 65000
 ): Promise<ClosetCheckResult> {
   const pending = waitForClosetCheckResult(timeoutMs);
   requestClosetCheck(payload);
@@ -261,7 +262,7 @@ export function requestClosetUsername(platform: Platform): void {
 }
 
 export function waitForClosetUsernameResult(
-  timeoutMs = 22000
+  timeoutMs = 45000
 ): Promise<ClosetUsernameResult> {
   if (typeof window === "undefined") {
     return Promise.resolve({ ok: false, error: "No window" });
@@ -273,7 +274,7 @@ export function waitForClosetUsernameResult(
       resolve({
         ok: false,
         error:
-          "Timed out looking for your closet. Reload the Chrome helper, then try again.",
+          "Looking for your closet took too long. Sign in to that store in Chrome, then try Find my closet again.",
       });
     }, timeoutMs);
 
@@ -300,7 +301,7 @@ export function waitForClosetUsernameResult(
 
 export async function detectClosetUsernameWithExtension(
   platform: Platform,
-  timeoutMs = 22000
+  timeoutMs = 45000
 ): Promise<ClosetUsernameResult> {
   const pending = waitForClosetUsernameResult(timeoutMs);
   requestClosetUsername(platform);

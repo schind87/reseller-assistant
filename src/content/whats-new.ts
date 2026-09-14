@@ -20,6 +20,14 @@ export type WhatsNewItem = {
  */
 export const WHATS_NEW: WhatsNewItem[] = [
   {
+    id: "check-listings-wait",
+    date: "2026-09-14",
+    title: "Check listings waits for the closet to load",
+    helper: true,
+    body:
+      "Check listings was stopping too soon on slow Mercari and Poshmark pages. The Chrome helper now waits for closet cards, and the website gives it more time.",
+  },
+  {
     id: "helper-store-status",
     date: "2026-09-14",
     title: "Chrome may still have an older helper",

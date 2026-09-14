@@ -3,9 +3,18 @@ function raIsLoginWall() {
   if (/\/login(?:\/|$)/.test(path) || /\/signin(?:\/|$)/.test(path)) {
     return true;
   }
-  const text = `${document.title || ""} ${
-    document.body ? document.body.innerText.slice(0, 1200) : ""
-  }`.toLowerCase();
+  const title = (document.title || "").toLowerCase();
+  if (
+    /log in|sign in/.test(title) &&
+    !/closet|listing|mypage|sell/.test(path)
+  ) {
+    return true;
+  }
+  const loginRoot = document.querySelector(
+    'form[action*="login"], form[action*="signin"], [data-test="login-form"]'
+  );
+  if (!loginRoot) return false;
+  const text = `${title} ${(loginRoot.textContent || "").slice(0, 800)}`.toLowerCase();
   return (
     /log in to continue|sign in to continue|welcome back/.test(text) &&
     /log in|sign in|join poshmark/.test(text)
@@ -71,11 +80,64 @@ function raParsePrice(raw) {
     return Number.isFinite(amount) ? amount : null;
   }
   if (raw && typeof raw === "object") {
-    if (typeof raw.val === "number") return raParsePrice(raw.val);
-    if (typeof raw.amount === "number") return raParsePrice(raw.amount);
+    if (raw.val != null) return raParsePrice(raw.val);
+    if (raw.amount != null) return raParsePrice(raw.amount);
     if (typeof raw.cents === "number") return raParsePrice(raw.cents / 100);
   }
   return null;
+}
+
+const RA_JSON_SKIP_KEY =
+  /featureSettings|feature_settings|i18n|internationalization|experiences|sizeCharts|experiments|seoMeta|seoLinking|colorToHex|colorToDisplay/i;
+
+function raParseJsonPrefix(text) {
+  if (!text || typeof text !== "string") return null;
+  const start = text.search(/[\[{]/);
+  if (start < 0) return null;
+  let depth = 0;
+  let inString = false;
+  let escape = false;
+  for (let i = start; i < text.length; i++) {
+    const ch = text[i];
+    if (inString) {
+      if (escape) {
+        escape = false;
+        continue;
+      }
+      if (ch === "\\") {
+        escape = true;
+        continue;
+      }
+      if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') {
+      inString = true;
+      continue;
+    }
+    if (ch === "{" || ch === "[") depth += 1;
+    else if (ch === "}" || ch === "]") {
+      depth -= 1;
+      if (depth === 0) {
+        try {
+          return JSON.parse(text.slice(start, i + 1));
+        } catch {
+          return null;
+        }
+      }
+    }
+  }
+  return null;
+}
+
+function raParseEmbeddedJson(text) {
+  if (!text || typeof text !== "string") return null;
+  try {
+    return JSON.parse(text);
+  } catch {
+    // Poshmark embeds `window.__INITIAL_STATE__={...};(function(){...})()`.
+  }
+  return raParseJsonPrefix(text);
 }
 
 function raExternalIdFromUrl(url) {
@@ -115,6 +177,7 @@ function raWalkJsonListings(value, seen, listings, depth) {
     record.listing_url ||
     record.itemUrl ||
     record.permalink ||
+    record.share_url ||
     null;
 
   const title = record.title || record.name || record.item_name || null;
@@ -153,7 +216,11 @@ function raWalkJsonListings(value, seen, listings, depth) {
   }
 
   for (const key of Object.keys(record)) {
-    if (["props", "data", "listings", "items", "tiles", "results"].includes(key) || depth < 4) {
+    if (RA_JSON_SKIP_KEY.test(key)) continue;
+    if (
+      ["props", "data", "listings", "items", "tiles", "results"].includes(key) ||
+      depth < 4
+    ) {
       raWalkJsonListings(record[key], seen, listings, depth + 1);
     }
   }
@@ -172,22 +239,33 @@ function raListingsFromScripts(seen, listings) {
         text.slice(0, 400)
       )
     ) {
-      try {
-        const json = JSON.parse(text);
-        raWalkJsonListings(json, seen, listings, 0);
-      } catch {
-        // Not standalone JSON.
-      }
+      const json = raParseEmbeddedJson(text);
+      if (json) raWalkJsonListings(json, seen, listings, 0);
     }
+  }
+}
+
+function raListingsFromPageStore(seen, listings) {
+  try {
+    const app = document.querySelector("#app");
+    const vue = app && app.__vue__;
+    const state = vue && vue.$store && vue.$store.state;
+    if (!state) return;
+    raWalkJsonListings(state.$_closet, seen, listings, 0);
+    raWalkJsonListings(state.$_market, seen, listings, 0);
+  } catch {
+    // Vue store is best-effort.
   }
 }
 
 function raClosestCard(node) {
   return (
     node.closest("article") ||
-    node.closest("[data-testid*='listing']") ||
-    node.closest("[class*='tile']") ||
-    node.closest("[class*='card']") ||
+    node.closest("[data-et-name='listing']") ||
+    node.closest("[data-testid*='listing' i]") ||
+    node.closest(".card--small") ||
+    node.closest(".tile") ||
+    node.closest("[class*='card--']") ||
     node.closest("li") ||
     node.parentElement
   );
@@ -202,7 +280,7 @@ function raListingsFromDom(seen, listings) {
     if (!url) continue;
     const card = raClosestCard(link);
     const img = card ? card.querySelector("img") : link.querySelector("img");
-    const text = (card ? card.innerText : link.textContent) || "";
+    const text = (card ? card.textContent : link.textContent) || "";
     const priceMatch = text.match(/\$\s?(\d[\d,]*(?:\.\d{2})?)/);
     const statusMatch = text.match(
       /\b(sold|reserved|not for sale|available|active)\b/i
@@ -226,16 +304,27 @@ function raListingsFromDom(seen, listings) {
   }
 }
 
-async function raScrollClosetOnce() {
-  const height = Math.max(
-    document.body ? document.body.scrollHeight : 0,
-    document.documentElement ? document.documentElement.scrollHeight : 0
-  );
-  window.scrollTo(0, Math.min(height, 1800));
-  await new Promise((resolve) => window.setTimeout(resolve, 700));
+function raSleep(ms) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
 
-async function raExtractClosetListings() {
+function raLooksLikeEmptyCloset() {
+  const root = document.querySelector("main") || document.body;
+  if (!root) return false;
+  const text = (root.textContent || "").slice(0, 2500).toLowerCase();
+  return /no listings found|doesn'?t have any listings|0 items/.test(text);
+}
+
+function raCollectClosetListings() {
+  const seen = new Set();
+  const listings = [];
+  raListingsFromPageStore(seen, listings);
+  raListingsFromScripts(seen, listings);
+  raListingsFromDom(seen, listings);
+  return listings;
+}
+
+async function raExtractClosetListings(timeoutMs = 12000) {
   if (raIsLoginWall()) {
     return {
       ok: false,
@@ -245,12 +334,37 @@ async function raExtractClosetListings() {
     };
   }
 
-  await raScrollClosetOnce();
+  const deadline = Date.now() + Math.max(1200, timeoutMs);
+  let listings = raCollectClosetListings();
+  let scrolled = false;
+  let emptySince = 0;
 
-  const seen = new Set();
-  const listings = [];
-  raListingsFromScripts(seen, listings);
-  raListingsFromDom(seen, listings);
+  while (!listings.length && Date.now() < deadline) {
+    if (raIsLoginWall()) {
+      return {
+        ok: false,
+        listings: [],
+        loginRequired: true,
+        error: "Sign in to this store in Chrome, then try Check listings again.",
+      };
+    }
+    if (!scrolled) {
+      const height = Math.max(
+        document.body ? document.body.scrollHeight : 0,
+        document.documentElement ? document.documentElement.scrollHeight : 0
+      );
+      window.scrollTo(0, Math.min(height, 1800));
+      scrolled = true;
+    }
+    if (raLooksLikeEmptyCloset()) {
+      if (!emptySince) emptySince = Date.now();
+      else if (Date.now() - emptySince >= 5000) break;
+    } else {
+      emptySince = 0;
+    }
+    await raSleep(400);
+    listings = raCollectClosetListings();
+  }
 
   return {
     ok: true,
@@ -436,3 +550,9 @@ async function raExtractSignedInUsername() {
 
 globalThis.raExtractClosetListings = raExtractClosetListings;
 globalThis.raExtractSignedInUsername = raExtractSignedInUsername;
+globalThis.raParseEmbeddedJson = raParseEmbeddedJson;
+globalThis.raParseJsonPrefix = raParseJsonPrefix;
+globalThis.raWalkJsonListings = raWalkJsonListings;
+globalThis.raMarketplaceItemUrl = raMarketplaceItemUrl;
+globalThis.raParsePrice = raParsePrice;
+globalThis.raClosestCard = raClosestCard;
