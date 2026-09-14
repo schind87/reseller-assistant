@@ -46,6 +46,9 @@ upload (later versions are uploaded by CI).
 Privacy policy URL (must be live before review):
 https://reseller.mvfeed.us/privacy
 
+What’s new (website + helper):
+https://reseller.mvfeed.us/whats-new
+
 Support / homepage:
 https://reseller.mvfeed.us
 

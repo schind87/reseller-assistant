@@ -9,6 +9,7 @@ Sellers should install from the **Chrome Web Store** so Chrome updates the helpe
 When the listing is live, Profile → Chrome helper → **Add from the Chrome Web Store**. Chrome updates it automatically.
 
 Privacy: https://reseller.mvfeed.us/privacy
+What’s new: https://reseller.mvfeed.us/whats-new
 
 Store listing copy and permission justifications: [`STORE.md`](STORE.md).
 

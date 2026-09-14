@@ -44,6 +44,7 @@ There is **no shared Dialog primitive**. Closest mature example: [ListingTweakDi
 
 - Close control labelled “Close”, not an unlabeled ×.
 - `ra-focus-pop` only on the photo-role picker — do not spread motion to every modal.
+- What’s new screenshot overlay follows listing `PhotoLightbox` (dark full-screen preview, Close, Escape, backdrop click). Do not copy AI Photo Lab’s lightbox onto that page.
 
 ## Bad patterns
 

@@ -1,0 +1,68 @@
+# Fails a ship that changes seller-facing code without updating What's new.
+# When CURSOR_API_KEY is set, writes the note with Cursor CLI and pushes to main.
+name: What's new notes
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: whats-new-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  check-and-update:
+    name: Check What's new
+    runs-on: ubuntu-latest
+    env:
+      CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
+      GITHUB_EVENT_BEFORE: ${{ github.event.before }}
+      GITHUB_SHA: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Check notes for this push
+        id: check
+        run: |
+          set +e
+          node scripts/check-whats-new.mjs
+          code=$?
+          set -e
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          if [ "$code" -eq 0 ] || [ "$code" -eq 2 ]; then
+            exit 0
+          fi
+          exit "$code"
+
+      - name: Update notes with Cursor CLI
+        if: steps.check.outputs.code == '2' && env.CURSOR_API_KEY != ''
+        run: |
+          curl -fsS https://cursor.com/install | bash
+          echo "$HOME/.cursor/bin" >> "$GITHUB_PATH"
+          export PATH="$HOME/.cursor/bin:$PATH"
+          agent -p "$(cat .agents/skills/whats-new/automation-prompt.md)"
+
+      - name: Push notes to main
+        if: steps.check.outputs.code == '2' && env.CURSOR_API_KEY != ''
+        run: |
+          git add src/content/whats-new.ts public/whats-new src/app/whats-new src/components/WhatsNewView.tsx
+          if git diff --cached --quiet; then
+            echo "Cursor CLI made no notes changes."
+            node scripts/check-whats-new.mjs
+            exit $?
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Add What's new notes for this ship."
+          git push origin HEAD:main
+          node scripts/check-whats-new.mjs --base "${GITHUB_EVENT_BEFORE}" --head HEAD
+
+      - name: Fail if notes are still missing
+        if: steps.check.outputs.code == '2' && env.CURSOR_API_KEY == ''
+        run: node scripts/check-whats-new.mjs

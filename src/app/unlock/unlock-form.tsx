@@ -316,6 +316,10 @@ export function UnlockForm() {
         <Link href="/privacy" className="text-[var(--accent)] hover:underline">
           Privacy
         </Link>
+        {" · "}
+        <Link href="/whats-new" className="text-[var(--accent)] hover:underline">
+          What’s new
+        </Link>
       </p>
     </main>
   );

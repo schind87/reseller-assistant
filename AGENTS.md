@@ -28,6 +28,13 @@ Skip:
 - unrelated documentation
 - tests with no shipped UI impact
 
+## What’s new notes
+
+When shipping something a seller can see on the website or in the Chrome
+helper, load `.agents/skills/whats-new/SKILL.md` and add the note in the same
+commit. One page: `/whats-new`. GitHub Action `.github/workflows/whats-new.yml`
+checks this; see that skill for Cursor CLI / automation setup.
+
 ## Cursor Cloud specific instructions
 
 Reseller Assistant is a single Next.js 16 app (App Router, Turbopack) backed by

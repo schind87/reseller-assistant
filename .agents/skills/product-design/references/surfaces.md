@@ -26,6 +26,7 @@ Load this file whenever UI work has a target screen, overlay, or flow. Then load
 | Admin AI Photo Lab | [AiBgDebugConsole](../../../../src/components/AiBgDebugConsole.tsx) | [surfaces-admin.md](surfaces-admin.md) |
 | Admin users | [AdminUsersConsole](../../../../src/components/AdminUsersConsole.tsx) | [surfaces-admin.md](surfaces-admin.md), [surfaces-lists.md](surfaces-lists.md) |
 | Admin bar | [AdminBar](../../../../src/components/AdminBar.tsx) | [surfaces-admin.md](surfaces-admin.md), [surfaces-navigation.md](surfaces-navigation.md) |
+| What’s new | [whats-new/page.tsx](../../../../src/app/whats-new/page.tsx) | [surfaces-whats-new.md](surfaces-whats-new.md), [surfaces-dialogs.md](surfaces-dialogs.md) |
 
 ## Not present as product surfaces
 

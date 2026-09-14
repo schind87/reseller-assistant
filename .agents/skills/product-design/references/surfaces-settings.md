@@ -9,7 +9,7 @@ Account, PIN, seller preferences after first run, or new account-level options.
 
 ## Canonical owner
 
-Profile mode in [AppHome.tsx](../../../../src/components/AppHome.tsx): eyebrow “Account”, title “Profile”, compact `SellerOnboarding`, [MarketplaceAccountsCard](../../../../src/components/MarketplaceAccountsCard.tsx), `PinSetupCard`, Sign out. Admin tools are in the admin bar, not Profile.
+Profile mode in [AppHome.tsx](../../../../src/components/AppHome.tsx): eyebrow “Account”, title “Profile”, compact `SellerOnboarding`, [MarketplaceAccountsCard](../../../../src/components/MarketplaceAccountsCard.tsx), `PinSetupCard`, Chrome helper, What’s new, Sign out. Admin tools are in the admin bar, not Profile.
 
 ## Stable rules
 
@@ -36,7 +36,7 @@ Profile mode in [AppHome.tsx](../../../../src/components/AppHome.tsx): eyebrow �
 
 - Sign out is `BigButton variant="ghost"` at the bottom — available, not tempting.
 - Linked closets sit after seller preferences: Find my closet (Chrome helper + confirm), optional paste, Check listings, Open closet. Live marketplace listings are a Profile list, not a second home dashboard.
-- Chrome helper install is on Profile: Chrome Web Store when `NEXT_PUBLIC_CHROME_WEB_STORE_ID` is set, otherwise the zip + Load unpacked steps. Privacy is linked from Profile and sign-in.
+- Chrome helper install is on Profile: Chrome Web Store when `NEXT_PUBLIC_CHROME_WEB_STORE_ID` is set, otherwise the zip + Load unpacked steps. Privacy is linked from sign-in and the helper card. What’s new is a text link above Sign out (and on sign-in next to Privacy).
 
 ## Bad patterns
 

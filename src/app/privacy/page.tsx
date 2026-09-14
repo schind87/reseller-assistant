@@ -120,9 +120,12 @@ export default function PrivacyPage() {
         </p>
       </section>
 
-      <p className="text-base text-[var(--muted)]">
+      <p className="flex flex-wrap gap-x-4 gap-y-2 text-base text-[var(--muted)]">
         <Link href="/unlock" className="text-[var(--accent)] hover:underline">
           Sign in
+        </Link>
+        <Link href="/whats-new" className="text-[var(--accent)] hover:underline">
+          What’s new
         </Link>
       </p>
     </main>

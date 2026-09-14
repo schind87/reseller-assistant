@@ -81,11 +81,13 @@ Stable Vercel production aliases (`reseller-assistant.vercel.app` and the projec
 
 ## Chrome extension
 
-See [`extension/README.md`](extension/README.md). Sellers install from the Chrome Web Store when that listing is live. Privacy policy: `/privacy`.
+See [`extension/README.md`](extension/README.md). Sellers install from the Chrome Web Store when that listing is live. Privacy policy: `/privacy`. What’s new (website + helper): `/whats-new`.
 
 **Release:** a push to `main` deploys the app on Vercel. If the helper source changed, GitHub Actions packs `dist/reseller-assistant-chrome.zip`, attaches it to a GitHub Release (`chrome-helper-v*`) for Load unpacked while review is pending, and, when the Chrome Web Store secrets are set, uploads that zip and submits it for Google review. Google still has to approve the listing (and the first listing is created once in the [developer console](https://chrome.google.com/webstore/devconsole)). Secret names and the one-time OAuth setup are in [`extension/STORE.md`](extension/STORE.md).
 
 Bump `extension/manifest.json` `version` before shipping helper changes, or the store upload is rejected.
+
+**What’s new:** sellers read `/whats-new` (website and Chrome helper on one page). Update `src/content/whats-new.ts` in the same commit as a user-visible ship — [`.agents/skills/whats-new/SKILL.md`](.agents/skills/whats-new/SKILL.md). GitHub Action **What’s new notes** fails the commit if seller-facing files changed without a notes update. With repo secret `CURSOR_API_KEY`, that Action runs Cursor CLI to write the note and push to `main`. Optional: the same prompt at [cursor.com/automations](https://cursor.com/automations) on **Push to branch** `main` (do not open a PR).
 
 ## Main flows
 
@@ -107,3 +109,4 @@ Bump `extension/manifest.json` `version` before shipping helper changes, or the 
 - `npm run photos:migrate-r2` — copy Supabase `listing-photos` objects to R2 (`--dry-run`, `--skip-thumbs`, `--delete-source`)
 - `npm run extension:pack` — production Chrome helper zip (`dist/reseller-assistant-chrome.zip`)
 - `npm run extension:publish` — pack, then upload/submit to the Chrome Web Store (skips upload if GitHub/CI secrets are missing; `--require` fails instead)
+- `npm run whats-new:check` — fail if this git range changed seller-facing files without updating `/whats-new`

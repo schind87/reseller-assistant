@@ -250,6 +250,15 @@ export function AppHome({
 
         <ExtensionInstallCard />
 
+        <p>
+          <Link
+            href="/whats-new"
+            className="text-base font-semibold text-[var(--accent)] hover:underline"
+          >
+            What’s new
+          </Link>
+        </p>
+
         <BigButton variant="ghost" onClick={() => void logout()}>
           Sign out
         </BigButton>

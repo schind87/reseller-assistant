@@ -74,6 +74,7 @@ Untitled home rows use `{Platform} draft` as the title and the job state alone a
 | Write description with AI / Rewrite description with AI | Hub description control |
 | Create new listing | Home primary |
 | Sign out | Profile |
+| What’s new | Public `/whats-new` (website + Chrome helper) |
 
 ## Actions (established)
 

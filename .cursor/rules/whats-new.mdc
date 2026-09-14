@@ -1,0 +1,16 @@
+---
+description: Update What's new in the same ship as seller-visible website or Chrome helper changes.
+globs: src/app/**/*.tsx,src/components/**/*.tsx,src/content/whats-new.ts,extension/**/*.js,extension/**/*.html,extension/manifest.json
+alwaysApply: false
+---
+
+# What's new notes
+
+If this change is something a seller can see on the website or in the Chrome
+helper, add or update an item in `src/content/whats-new.ts` in the **same
+commit**. Follow `.agents/skills/whats-new/SKILL.md`.
+
+- One page: `/whats-new`. Mark helper work with `helper: true`.
+- Screenshots live in `public/whats-new/` and open in the in-page lightbox.
+  Do not link a raw image URL.
+- Skip tests-only, telemetry, and generated `extension-live/` / `.next/`.
