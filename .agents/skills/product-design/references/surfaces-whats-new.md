@@ -45,7 +45,7 @@ How notes stay current: [.agents/skills/whats-new/SKILL.md](../../../whats-new/S
 - **Evidence:** `ScreenshotLightbox` in `WhatsNewView`; listing `PhotoLightbox` in `ListingHub`.
 - **Exceptions:** None.
 - **Bad:** `<a href="/whats-new/foo.png">` that leaves the page.
-- **Good:** A photo well labelled “See category after” opens the overlay; Close returns to the list.
+- **Good:** A photo well labelled “Category after” opens the overlay; Close returns to the list.
 
 ### rule/whats-new-screenshots-are-photo-wells
 

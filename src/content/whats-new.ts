@@ -20,41 +20,36 @@ export type WhatsNewItem = {
  */
 export const WHATS_NEW: WhatsNewItem[] = [
   {
-    id: "whats-new-scan",
-    date: "2026-09-14",
-    title: "What’s new is a list of changes",
-    body: "Each change is its own row. Screenshots are photos you tap. Chrome’s Store status sits on the newest helper note, not guessed.",
-  },
-  {
     id: "helper-store-status",
     date: "2026-09-14",
-    title: "Helper notes show what Chrome has",
+    title: "Chrome may still have an older helper",
     helper: true,
-    body: "The newest Chrome helper note shows what the Chrome Web Store actually has: the live version, or that a newer one is in review.",
+    body:
+      "If a newer helper is in review, Chrome keeps the live version until Google approves it.",
   },
   {
     id: "helper-0-7-0-8",
     date: "2026-09-13",
-    title: "Chrome helper 0.7.0.8 is at the Store",
+    title: "Chrome helper 0.7.0.8 sent to the Store",
     helper: true,
-    body: "We sent helper 0.7.0.8 to the Chrome Web Store.",
+    body: "We uploaded 0.7.0.8 for Google to review.",
   },
   {
     id: "admin-users-shop-links",
     date: "2026-09-13",
-    title: "Users can open a seller’s shop",
+    title: "Users can Check listings for a seller",
     helper: true,
     body: "On Users, admins can link a seller’s Mercari or Poshmark closet and run Check listings. Check listings still uses the Chrome helper.",
     screenshots: [
       {
         src: "/whats-new/admin-users.webp",
-        alt: "Users page with linked shop names and no R2 copy control",
-        label: "See Users",
+        alt: "Users page with linked closet names.",
+        label: "Users",
       },
       {
         src: "/whats-new/admin-check-listings.webp",
-        alt: "Check listings on a linked Poshmark closet from Users",
-        label: "See Check listings",
+        alt: "Check listings on a linked Poshmark closet from Users.",
+        label: "Check listings",
       },
     ],
   },
@@ -65,30 +60,30 @@ export const WHATS_NEW: WhatsNewItem[] = [
     helper: true,
     body: "Open Poshmark from a listing and the helper fills the sell form from what you already saved.",
     bullets: [
-      "Price goes in the listing price field as a whole dollar.",
-      "Category is picked from Poshmark’s own list, including the last step (like Tees).",
-      "Style tags are tapped from Poshmark’s suggestions, not typed in and left hanging.",
+      "Price (dollars only).",
+      "Category — last step (like Tees), not the first match.",
+      "Style tags — tap a suggestion instead of leaving extra text.",
     ],
     screenshots: [
       {
         src: "/whats-new/price-filled.png",
-        alt: "Poshmark listing price filled with 18",
-        label: "See price",
+        alt: "Poshmark listing price filled with 18.",
+        label: "Price",
       },
       {
         src: "/whats-new/category-before.png",
-        alt: "Poshmark category still set to Select Category",
-        label: "See category before",
+        alt: "Poshmark category still set to Select Category.",
+        label: "Category before",
       },
       {
         src: "/whats-new/category-after.png",
-        alt: "Poshmark category set to Women Tops and Tees Short Sleeve",
-        label: "See category after",
+        alt: "Poshmark category set to Women Tops and Tees Short Sleeve.",
+        label: "Category after",
       },
       {
         src: "/whats-new/style-tags.png",
-        alt: "Poshmark style tags Casual and Athletic confirmed as chips",
-        label: "See style tags",
+        alt: "Poshmark style tags Casual and Athletic confirmed as chips.",
+        label: "Style tags",
       },
     ],
   },
@@ -100,13 +95,13 @@ export const WHATS_NEW: WhatsNewItem[] = [
     screenshots: [
       {
         src: "/whats-new/more-idle.webp",
-        alt: "Listing row with a More button on the right",
-        label: "See More",
+        alt: "Listing row with More at the right end of the action row.",
+        label: "More",
       },
       {
         src: "/whats-new/more-delete.webp",
-        alt: "Same listing row with More changed to a red Delete button",
-        label: "See Delete",
+        alt: "Same listing row with More changed to a red Delete.",
+        label: "Delete",
       },
     ],
   },
@@ -115,12 +110,12 @@ export const WHATS_NEW: WhatsNewItem[] = [
     date: "2026-09-04",
     title: "Link your Mercari or Poshmark closet",
     helper: true,
-    body: "On Profile, under Linked closets, you can attach your shop and Check listings. Find my closet uses the Chrome helper while you are signed into that store in Chrome.",
+    body: "On Profile, under Linked closets, you can link your closet and Check listings. Find my closet uses the Chrome helper while you are signed into that store in Chrome.",
     screenshots: [
       {
         src: "/whats-new/closet-linked.webp",
-        alt: "Profile showing a Poshmark closet linked as maracloset84",
-        label: "See linked closet",
+        alt: "Profile showing a Poshmark closet linked as maracloset84.",
+        label: "Linked closet",
       },
     ],
   },

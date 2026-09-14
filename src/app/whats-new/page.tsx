@@ -59,8 +59,8 @@ export default async function WhatsNewPage() {
       ) : (
         <p className="text-base text-[var(--muted)]">
           {signedIn
-            ? "No notes yet. Use ← All listings when you are ready."
-            : "No notes yet. Use Sign in when you are ready."}
+            ? "No changes yet. Use ← All listings."
+            : "No changes yet. Use Sign in."}
         </p>
       )}
 
