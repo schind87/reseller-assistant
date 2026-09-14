@@ -25,46 +25,46 @@ export default async function WhatsNewPage() {
 
   return (
     <main className="mx-auto flex w-full max-w-2xl flex-col gap-8 px-4 py-10">
-      <header className="flex flex-col gap-2">
-        <p className="text-sm font-semibold uppercase tracking-wide text-[var(--accent)]">
-          Reseller Assistant
-        </p>
-        <h1 className="text-pretty font-[family-name:var(--font-brand)] text-4xl text-[var(--foreground)]">
-          What’s new
-        </h1>
-        <p className="text-lg text-[var(--muted)]">
-          Website and Chrome helper, together. Newest first.
-        </p>
-        <p className="text-base text-[var(--muted)]">
-          <span className="rounded-lg bg-[var(--accent-soft)] px-2 py-1 text-xs font-semibold uppercase tracking-wide text-[var(--accent)]">
-            Chrome helper
-          </span>{" "}
-          marks a change in the optional Chrome add-on.
-        </p>
-      </header>
-
-      {WHATS_NEW.length > 0 ? (
-        <WhatsNewView items={WHATS_NEW} storeStatus={storeStatus} />
-      ) : (
-        <p className="text-base text-[var(--muted)]">Nothing listed yet.</p>
-      )}
-
-      <p className="flex flex-wrap gap-x-4 gap-y-2 text-base text-[var(--muted)]">
+      <header className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <p className="text-sm font-semibold uppercase tracking-wide text-[var(--accent)]">
+            Reseller Assistant
+          </p>
+          <h1 className="mt-1 text-pretty font-[family-name:var(--font-brand)] text-4xl text-[var(--foreground)]">
+            What’s new
+          </h1>
+          <p className="mt-2 text-lg text-[var(--muted)]">
+            Website and Chrome helper. Newest first.
+          </p>
+        </div>
         {signedIn ? (
           <Link
             href="/app"
-            className="font-semibold text-[var(--accent)] hover:underline"
+            className="shrink-0 text-base font-semibold text-[var(--accent)] hover:underline"
           >
             ← All listings
           </Link>
         ) : (
           <Link
             href="/unlock"
-            className="font-semibold text-[var(--accent)] hover:underline"
+            className="shrink-0 text-base font-semibold text-[var(--accent)] hover:underline"
           >
             Sign in
           </Link>
         )}
+      </header>
+
+      {WHATS_NEW.length > 0 ? (
+        <WhatsNewView items={WHATS_NEW} storeStatus={storeStatus} />
+      ) : (
+        <p className="text-base text-[var(--muted)]">
+          {signedIn
+            ? "No notes yet. Use ← All listings when you are ready."
+            : "No notes yet. Use Sign in when you are ready."}
+        </p>
+      )}
+
+      <p className="text-base text-[var(--muted)]">
         <Link
           href="/privacy"
           className="font-semibold text-[var(--accent)] hover:underline"

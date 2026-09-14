@@ -20,6 +20,12 @@ export type WhatsNewItem = {
  */
 export const WHATS_NEW: WhatsNewItem[] = [
   {
+    id: "whats-new-scan",
+    date: "2026-09-14",
+    title: "What’s new is a list of changes",
+    body: "Each change is its own row. Screenshots are photos you tap. Chrome’s Store status sits on the newest helper note, not guessed.",
+  },
+  {
     id: "helper-store-status",
     date: "2026-09-14",
     title: "Helper notes show what Chrome has",

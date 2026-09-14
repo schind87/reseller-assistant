@@ -12,8 +12,9 @@ If sellers can see a website or Chrome helper change and it is not on
 1. Add one item at the top of `WHATS_NEW` (newest first, `date` as YYYY-MM-DD).
 2. Plain language. Short title and body. `helper: true` when the Chrome helper
    is involved.
-3. Screenshots belong in `public/whats-new/` and open in the in-page lightbox
-   (`label` + `alt`). Never link a raw image URL or anything under `internal/`.
+3. Screenshots belong in `public/whats-new/` as photo wells that open the
+   in-page lightbox (`label` + `alt`). Never link a raw image URL or anything
+   under `internal/`.
 4. Commit and push directly to `main`. Do not create a branch or pull request.
    Message like: `Add What’s new notes for <short change>.`
 

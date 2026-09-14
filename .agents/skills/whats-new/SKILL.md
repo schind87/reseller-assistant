@@ -21,9 +21,9 @@ are not the What’s new page.
 3. Set `helper: true` when the Chrome helper is involved. Do not make a second
    page for the helper.
 4. If a screenshot helps, copy it into `public/whats-new/` and add a
-   `screenshots` entry (`src`, `alt`, `label`). The page opens those in an
-   in-page lightbox. **Do not** link a raw image URL, and **do not** link
-   Project `internal/` paths.
+   `screenshots` entry (`src`, `alt`, `label`). The page shows photo wells
+   that open an in-page lightbox. **Do not** link a raw image URL, and **do
+   not** link Project `internal/` paths.
 5. Reuse existing product words: listing, Chrome helper, Phone Companion,
    Linked closets, Check listings, All listings, Users.
 
@@ -32,7 +32,7 @@ are not the What’s new page.
 - Route: `/whats-new`
 - One list for website + helper
 - Public, like `/privacy`
-- Chrome helper notes may show a Store status chip from `fetchStatus` (live
+- Chrome helper notes may show a Store status well from `fetchStatus` (live
   `CHROME_WEB_STORE_*` or `src/content/chrome-store-status.json`). Do not type a
   version or “in review” by hand. Snapshot-only commits are not a notes ship.
 

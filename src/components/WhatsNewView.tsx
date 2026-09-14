@@ -3,9 +3,11 @@
 import { useEffect, useId, useRef, useState } from "react";
 import type { WhatsNewItem, WhatsNewScreenshot } from "@/content/whats-new";
 
+type StoreStatus = { label: string; tone: "accent" | "danger" };
+
 type WhatsNewViewProps = {
   items: WhatsNewItem[];
-  storeStatus?: { label: string; tone: "accent" | "danger" } | null;
+  storeStatus?: StoreStatus | null;
 };
 
 function formatNoteDate(iso: string): string {
@@ -31,23 +33,59 @@ function groupByDate(items: WhatsNewItem[]): { date: string; items: WhatsNewItem
   return groups;
 }
 
-function StoreStatusChip({
-  status,
-}: {
-  status: { label: string; tone: "accent" | "danger" };
-}) {
+function HelperMark() {
   return (
-    <span
+    <span className="shrink-0 rounded-lg bg-[var(--accent-soft)] px-2 py-1 text-xs font-semibold uppercase tracking-wide text-[var(--accent)]">
+      Chrome helper
+    </span>
+  );
+}
+
+function StoreStatusWell({ status }: { status: StoreStatus }) {
+  return (
+    <p
       role="status"
       translate="no"
       className={
         status.tone === "danger"
-          ? "max-w-full break-words rounded-lg bg-red-50 px-2 py-1 text-xs font-semibold text-red-800"
-          : "max-w-full break-words rounded-lg bg-[var(--accent-soft)] px-2 py-1 text-xs font-semibold text-[var(--accent)]"
+          ? "rounded-xl bg-red-50 px-4 py-3 text-base text-red-800"
+          : "rounded-xl bg-[var(--accent-soft)] px-4 py-3 text-base text-[var(--accent)]"
       }
     >
       {status.label}
-    </span>
+    </p>
+  );
+}
+
+function ScreenshotWell({
+  screenshot,
+  onOpen,
+}: {
+  screenshot: WhatsNewScreenshot;
+  onOpen: (screenshot: WhatsNewScreenshot, trigger: HTMLButtonElement) => void;
+}) {
+  return (
+    <button
+      type="button"
+      className="flex w-[8.5rem] shrink-0 flex-col overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] text-left hover:border-[var(--accent)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
+      onClick={(event) => onOpen(screenshot, event.currentTarget)}
+    >
+      <span className="block h-20 w-full overflow-hidden">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={screenshot.src}
+          alt={screenshot.alt}
+          width={272}
+          height={160}
+          loading="lazy"
+          decoding="async"
+          className="h-full w-full object-contain"
+        />
+      </span>
+      <span className="px-2 py-2 text-sm font-semibold text-[var(--accent)]">
+        {screenshot.label}
+      </span>
+    </button>
   );
 }
 
@@ -76,57 +114,60 @@ export function WhatsNewView({ items, storeStatus = null }: WhatsNewViewProps) {
 
   return (
     <>
-      {groups.map((group) => (
-        <section key={group.date} className="flex flex-col gap-6">
-          <h2 className="text-base font-semibold text-[var(--accent)]">
-            {formatNoteDate(group.date)}
-          </h2>
-          {group.items.map((item) => (
-            <article key={item.id} className="flex flex-col gap-3">
-              <div className="flex flex-wrap items-center gap-2">
-                <h3 className="min-w-0 break-words font-[family-name:var(--font-brand)] text-2xl text-[var(--foreground)]">
-                  {item.title}
-                </h3>
-                {item.helper ? (
-                  <>
-                    <span className="rounded-lg bg-[var(--accent-soft)] px-2 py-1 text-xs font-semibold uppercase tracking-wide text-[var(--accent)]">
-                      Chrome helper
-                    </span>
+      {groups.map((group) => {
+        const dateId = `whats-new-${group.date}`;
+        return (
+          <section
+            key={group.date}
+            aria-labelledby={dateId}
+            className="flex flex-col gap-3"
+          >
+            <p
+              id={dateId}
+              className="text-sm font-semibold text-[var(--muted)]"
+            >
+              {formatNoteDate(group.date)}
+            </p>
+            <ul className="flex flex-col gap-3">
+              {group.items.map((item) => (
+                <li key={item.id}>
+                  <article className="flex flex-col gap-3 rounded-2xl border border-[var(--border)] bg-white p-5">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h2 className="min-w-0 break-words font-[family-name:var(--font-brand)] text-2xl text-[var(--foreground)]">
+                        {item.title}
+                      </h2>
+                      {item.helper ? <HelperMark /> : null}
+                    </div>
                     {storeStatus && item.id === firstHelperId ? (
-                      <StoreStatusChip status={storeStatus} />
+                      <StoreStatusWell status={storeStatus} />
                     ) : null}
-                  </>
-                ) : null}
-              </div>
-              <p className="text-base text-[var(--foreground)]">{item.body}</p>
-              {item.bullets && item.bullets.length > 0 ? (
-                <ul className="list-disc space-y-2 pl-5 text-base text-[var(--foreground)]">
-                  {item.bullets.map((bullet) => (
-                    <li key={bullet}>{bullet}</li>
-                  ))}
-                </ul>
-              ) : null}
-              {item.screenshots && item.screenshots.length > 0 ? (
-                <ul className="flex flex-col gap-1">
-                  {item.screenshots.map((screenshot) => (
-                    <li key={screenshot.src}>
-                      <button
-                        type="button"
-                        className="touch-target text-left text-base font-semibold text-[var(--accent)] hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
-                        onClick={(event) =>
-                          openScreenshot(screenshot, event.currentTarget)
-                        }
-                      >
-                        {screenshot.label}
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
-            </article>
-          ))}
-        </section>
-      ))}
+                    <p className="text-base text-[var(--foreground)]">{item.body}</p>
+                    {item.bullets && item.bullets.length > 0 ? (
+                      <ul className="list-disc space-y-2 pl-5 text-base text-[var(--foreground)]">
+                        {item.bullets.map((bullet) => (
+                          <li key={bullet}>{bullet}</li>
+                        ))}
+                      </ul>
+                    ) : null}
+                    {item.screenshots && item.screenshots.length > 0 ? (
+                      <ul className="flex flex-wrap gap-2">
+                        {item.screenshots.map((screenshot) => (
+                          <li key={screenshot.src}>
+                            <ScreenshotWell
+                              screenshot={screenshot}
+                              onOpen={openScreenshot}
+                            />
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
+                  </article>
+                </li>
+              ))}
+            </ul>
+          </section>
+        );
+      })}
 
       {open ? (
         <ScreenshotLightbox screenshot={open} onClose={closeScreenshot} />
