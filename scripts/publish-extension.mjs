@@ -117,7 +117,7 @@ async function fetchStatus(creds, token) {
 }
 
 function isAlreadyInFlight(message) {
-  return /PENDING|IN_REVIEW|already.{0,80}(review|submit|publish|upload)|same version|version has already/i.test(
+  return /PENDING|IN_REVIEW|NOT_UPDATEABLE|FAILED_PRECONDITION|in review|already.{0,80}(review|submit|publish|upload)|same version|version has already/i.test(
     message
   );
 }
@@ -211,7 +211,19 @@ async function main() {
   console.log(`Uploading store zip (${zipBytes.length} bytes) for item ${creds.extensionId}.`);
 
   const token = await fetchAccessToken(creds);
-  const uploaded = await uploadZip(creds, token, zipBytes);
+  let uploaded;
+  try {
+    uploaded = await uploadZip(creds, token, zipBytes);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (isAlreadyInFlight(message)) {
+      console.log(
+        `Chrome Web Store already has this version in review. Skipping upload. ${message}`
+      );
+      return;
+    }
+    throw err;
+  }
   console.log(
     `Upload ${uploadState(uploaded) || "ok"} for ${creds.extensionId}${
       uploaded.crxVersion ? ` (crx ${uploaded.crxVersion})` : ""
