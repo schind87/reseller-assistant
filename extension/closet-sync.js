@@ -53,6 +53,56 @@ function raMarketplaceItemUrl(url) {
   return null;
 }
 
+function raSlug(value) {
+  const slug = String(value || "listing")
+    .replace(/[^A-Za-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80);
+  return slug || "listing";
+}
+
+function raSynthesizedListingUrl(id, title) {
+  if (!id) return null;
+  const host = (location.hostname || "").toLowerCase();
+  if (host === "poshmark.com" || host.endsWith(".poshmark.com")) {
+    return `https://poshmark.com/listing/${raSlug(title)}-${id}`;
+  }
+  if (host === "mercari.com" || host.endsWith(".mercari.com")) {
+    return `https://www.mercari.com/us/item/${id}`;
+  }
+  return null;
+}
+
+function raLooksLikeMarketplaceListing(record) {
+  const direct =
+    record.url ||
+    record.canonical_url ||
+    record.listing_url ||
+    record.itemUrl ||
+    record.permalink ||
+    record.share_url ||
+    null;
+  if (raMarketplaceItemUrl(direct)) return true;
+  return Boolean(record.cover_shot || record.price_amount);
+}
+
+function raRecordListingUrl(record) {
+  const direct =
+    record.url ||
+    record.canonical_url ||
+    record.listing_url ||
+    record.itemUrl ||
+    record.permalink ||
+    record.share_url ||
+    null;
+  const fromDirect = raMarketplaceItemUrl(direct);
+  if (fromDirect) return fromDirect;
+  const id = record.id || record.listing_id || record.item_id || record.uuid;
+  const title = record.title || record.name || record.item_name;
+  if (!id || !raLooksLikeMarketplaceListing(record)) return null;
+  return raMarketplaceItemUrl(raSynthesizedListingUrl(String(id), title));
+}
+
 function raClosetStatus(raw) {
   const value = String(raw || "").toLowerCase().replace(/[_-]+/g, " ").trim();
   if (!value) return "unknown";
@@ -166,20 +216,15 @@ function raPushListing(seen, listings, item) {
   });
 }
 
-function raWalkJsonListings(value, seen, listings, depth) {
+function raWalkJsonListings(value, seen, listings, depth, visiting) {
   if (depth > 8 || listings.length >= 200) return;
   if (!value || typeof value !== "object") return;
+  const seenObjects = visiting || new WeakSet();
+  if (seenObjects.has(value)) return;
+  seenObjects.add(value);
 
   const record = value;
-  const url =
-    record.url ||
-    record.canonical_url ||
-    record.listing_url ||
-    record.itemUrl ||
-    record.permalink ||
-    record.share_url ||
-    null;
-
+  const url = raRecordListingUrl(record);
   const title = record.title || record.name || record.item_name || null;
   const id = record.id || record.listing_id || record.item_id || record.uuid;
   if (url && (title || id)) {
@@ -200,6 +245,7 @@ function raWalkJsonListings(value, seen, listings, depth) {
       thumbnailUrl:
         record.cover_shot?.url_small ||
         record.cover_shot?.url ||
+        record.picture_url ||
         record.thumbnail ||
         record.thumbnail_url ||
         record.image_url ||
@@ -210,7 +256,7 @@ function raWalkJsonListings(value, seen, listings, depth) {
 
   if (Array.isArray(value)) {
     for (const entry of value) {
-      raWalkJsonListings(entry, seen, listings, depth + 1);
+      raWalkJsonListings(entry, seen, listings, depth + 1, seenObjects);
     }
     return;
   }
@@ -218,12 +264,31 @@ function raWalkJsonListings(value, seen, listings, depth) {
   for (const key of Object.keys(record)) {
     if (RA_JSON_SKIP_KEY.test(key)) continue;
     if (
-      ["props", "data", "listings", "items", "tiles", "results"].includes(key) ||
+      [
+        "props",
+        "data",
+        "listings",
+        "items",
+        "tiles",
+        "results",
+        "listingsPostData",
+        "closetListings",
+      ].includes(key) ||
       depth < 4
     ) {
-      raWalkJsonListings(record[key], seen, listings, depth + 1);
+      raWalkJsonListings(record[key], seen, listings, depth + 1, seenObjects);
     }
   }
+}
+
+function raWalkClosetJson(json, seen, listings) {
+  if (!json || typeof json !== "object") return;
+  const closet = json.$_closet;
+  if (closet && closet.listingsPostData) {
+    raWalkJsonListings(closet.listingsPostData, seen, listings, 0);
+  }
+  if (listings.length) return;
+  raWalkJsonListings(json, seen, listings, 0);
 }
 
 function raListingsFromScripts(seen, listings) {
@@ -240,7 +305,7 @@ function raListingsFromScripts(seen, listings) {
       )
     ) {
       const json = raParseEmbeddedJson(text);
-      if (json) raWalkJsonListings(json, seen, listings, 0);
+      if (json) raWalkClosetJson(json, seen, listings);
     }
   }
 }
@@ -251,6 +316,8 @@ function raListingsFromPageStore(seen, listings) {
     const vue = app && app.__vue__;
     const state = vue && vue.$store && vue.$store.state;
     if (!state) return;
+    raWalkJsonListings(state.$_closet && state.$_closet.listingsPostData, seen, listings, 0);
+    if (listings.length) return;
     raWalkJsonListings(state.$_closet, seen, listings, 0);
     raWalkJsonListings(state.$_market, seen, listings, 0);
   } catch {
@@ -320,7 +387,9 @@ function raCollectClosetListings() {
   const listings = [];
   raListingsFromPageStore(seen, listings);
   raListingsFromScripts(seen, listings);
-  raListingsFromDom(seen, listings);
+  if (listings.length === 0) {
+    raListingsFromDom(seen, listings);
+  }
   return listings;
 }
 
@@ -553,6 +622,8 @@ globalThis.raExtractSignedInUsername = raExtractSignedInUsername;
 globalThis.raParseEmbeddedJson = raParseEmbeddedJson;
 globalThis.raParseJsonPrefix = raParseJsonPrefix;
 globalThis.raWalkJsonListings = raWalkJsonListings;
+globalThis.raRecordListingUrl = raRecordListingUrl;
+globalThis.raSynthesizedListingUrl = raSynthesizedListingUrl;
 globalThis.raMarketplaceItemUrl = raMarketplaceItemUrl;
 globalThis.raParsePrice = raParsePrice;
 globalThis.raClosestCard = raClosestCard;

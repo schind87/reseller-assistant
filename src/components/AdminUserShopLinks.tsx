@@ -8,9 +8,11 @@ import {
 } from "@/lib/extension-bridge";
 import {
   closetCheckHint,
+  closetStatusLabel,
   closetUsernameParseError,
   marketplaceClosetUrl,
   parseMarketplaceUsername,
+  type MarketplaceClosetItem,
 } from "@/lib/marketplace-profiles";
 import { PLATFORM_LABELS } from "@/lib/platforms";
 import { SUPPORTED_SELLING_WEBSITES } from "@/lib/seller-preferences";
@@ -18,6 +20,7 @@ import type { Platform } from "@/lib/types";
 
 type ClosetResponse = {
   shopLinks?: AdminUserShopLink[];
+  listings?: MarketplaceClosetItem[];
   error?: string;
 };
 
@@ -37,7 +40,9 @@ type AdminUserShopLinksProps = {
   userId: string;
   userLabel: string;
   shopLinks: AdminUserShopLink[];
+  closetListings: MarketplaceClosetItem[];
   onShopLinksChange: (shopLinks: AdminUserShopLink[]) => void;
+  onClosetListingsChange: (listings: MarketplaceClosetItem[]) => void;
 };
 
 function linkFor(
@@ -47,11 +52,24 @@ function linkFor(
   return shopLinks.find((link) => link.platform === platform) ?? null;
 }
 
+function formatPrice(price: number | null): string | null {
+  if (price == null) return null;
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: price % 1 === 0 ? 0 : 2,
+  }).format(price);
+}
+
+const CLOSET_LIST_CAP = 40;
+
 export function AdminUserShopLinks({
   userId,
   userLabel,
   shopLinks,
+  closetListings,
   onShopLinksChange,
+  onClosetListingsChange,
 }: AdminUserShopLinksProps) {
   const [drafts, setDrafts] = useState<Record<Platform, string>>(() => ({
     mercari: linkFor(shopLinks, "mercari")?.username ?? "",
@@ -61,6 +79,11 @@ export function AdminUserShopLinks({
   const [linking, setLinking] = useState<Platform | null>(null);
   const [unlinking, setUnlinking] = useState<Platform | null>(null);
   const [checking, setChecking] = useState<Platform | null>(null);
+
+  function applyPayload(json: ClosetResponse, fallbackShopLinks: AdminUserShopLink[]) {
+    onShopLinksChange(json.shopLinks ?? fallbackShopLinks);
+    if (json.listings) onClosetListingsChange(json.listings);
+  }
 
   async function handleLink(platform: Platform, event: FormEvent) {
     event.preventDefault();
@@ -82,11 +105,10 @@ export function AdminUserShopLinks({
       if (!res.ok) {
         throw new Error(json.error ?? "Could not link closet");
       }
-      const next = json.shopLinks ?? [
+      applyPayload(json, [
         ...shopLinks.filter((link) => link.platform !== platform),
         emptyLink(platform, username),
-      ];
-      onShopLinksChange(next);
+      ]);
       setDrafts((prev) => ({ ...prev, [platform]: username }));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not link closet");
@@ -114,10 +136,15 @@ export function AdminUserShopLinks({
       if (!res.ok) {
         throw new Error(json.error ?? "Could not unlink closet");
       }
-      const next =
-        json.shopLinks ??
-        shopLinks.filter((link) => link.platform !== platform);
-      onShopLinksChange(next);
+      applyPayload(
+        json,
+        shopLinks.filter((link) => link.platform !== platform)
+      );
+      if (!json.listings) {
+        onClosetListingsChange(
+          closetListings.filter((item) => item.platform !== platform)
+        );
+      }
       setDrafts((prev) => ({ ...prev, [platform]: "" }));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not unlink closet");
@@ -177,6 +204,7 @@ export function AdminUserShopLinks({
         throw new Error(json.error ?? "Could not save closet listings");
       }
       if (json.shopLinks) onShopLinksChange(json.shopLinks);
+      if (json.listings) onClosetListingsChange(json.listings);
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Could not check listings"
@@ -201,6 +229,10 @@ export function AdminUserShopLinks({
       ) : null}
       {SUPPORTED_SELLING_WEBSITES.map((platform) => {
         const account = linkFor(shopLinks, platform);
+        const storeListings = closetListings.filter(
+          (item) => item.platform === platform
+        );
+        const visibleListings = storeListings.slice(0, CLOSET_LIST_CAP);
         const inputId = `admin-user-${userId}-${platform}-closet`;
         const busy =
           linking === platform ||
@@ -260,6 +292,42 @@ export function AdminUserShopLinks({
                     {unlinking === platform ? "Unlinking…" : "Unlink"}
                   </button>
                 </div>
+                {account.lastCheckedAt && storeListings.length === 0 ? (
+                  <p className="text-sm text-[var(--muted)]">
+                    No {PLATFORM_LABELS[platform]} listings saved for this
+                    seller.
+                  </p>
+                ) : null}
+                {storeListings.length > 0 ? (
+                  <ul className="flex flex-col gap-1">
+                    {visibleListings.map((item) => {
+                      const label = item.title?.trim() || "Untitled listing";
+                      const price = formatPrice(item.price);
+                      return (
+                        <li key={item.id}>
+                          <a
+                            href={item.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-sm text-[var(--accent)] hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
+                          >
+                            {label}
+                          </a>
+                          <span className="text-sm text-[var(--muted)]">
+                            {" "}
+                            · {closetStatusLabel(item.status)}
+                            {price ? ` · ${price}` : ""}
+                          </span>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                ) : null}
+                {storeListings.length > CLOSET_LIST_CAP ? (
+                  <p className="text-sm text-[var(--muted)]">
+                    Showing {CLOSET_LIST_CAP} of {storeListings.length}
+                  </p>
+                ) : null}
               </>
             ) : (
               <form

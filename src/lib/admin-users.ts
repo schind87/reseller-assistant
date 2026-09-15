@@ -3,6 +3,7 @@ import {
   listingJobStepLabel,
   type ListingJobStep,
 } from "@/lib/listing-job";
+import type { MarketplaceClosetItem } from "@/lib/marketplace-profiles";
 import type { ListingStatus, Platform } from "@/lib/types";
 
 export type AdminUserListing = {
@@ -36,6 +37,7 @@ export type AdminUserRow = {
   lastListingAt: string | null;
   listings: AdminUserListing[];
   shopLinks: AdminUserShopLink[];
+  closetListings: MarketplaceClosetItem[];
 };
 
 export type AdminUserFilters = {

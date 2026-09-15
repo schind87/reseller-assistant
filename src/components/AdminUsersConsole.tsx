@@ -375,10 +375,20 @@ export function AdminUsersConsole({
                         userId={user.id}
                         userLabel={label}
                         shopLinks={user.shopLinks}
+                        closetListings={user.closetListings}
                         onShopLinksChange={(shopLinks) =>
                           setUsers((prev) =>
                             prev.map((row) =>
                               row.id === user.id ? { ...row, shopLinks } : row
+                            )
+                          )
+                        }
+                        onClosetListingsChange={(closetListings) =>
+                          setUsers((prev) =>
+                            prev.map((row) =>
+                              row.id === user.id
+                                ? { ...row, closetListings }
+                                : row
                             )
                           )
                         }

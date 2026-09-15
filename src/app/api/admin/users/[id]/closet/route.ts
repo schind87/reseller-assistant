@@ -16,6 +16,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import {
   deleteMarketplaceAccount,
   listMarketplaceAccounts,
+  listMarketplaceClosetItems,
   upsertMarketplaceAccount,
 } from "@/lib/supabase/marketplace-closet";
 
@@ -87,10 +88,14 @@ export async function PUT(request: Request, context: RouteContext) {
       parsed.data.platform,
       username
     );
-    const accounts = await listMarketplaceAccounts(id);
+    const [accounts, listings] = await Promise.all([
+      listMarketplaceAccounts(id),
+      listMarketplaceClosetItems(id),
+    ]);
     return NextResponse.json({
       account: { platform: account.platform, username: account.username },
       shopLinks: shopLinksPayload(accounts),
+      listings,
     });
   } catch (err) {
     console.error("admin link closet error:", err);
@@ -126,8 +131,14 @@ export async function DELETE(request: Request, context: RouteContext) {
     }
 
     await deleteMarketplaceAccount(id, platform.data);
-    const accounts = await listMarketplaceAccounts(id);
-    return NextResponse.json({ shopLinks: shopLinksPayload(accounts) });
+    const [accounts, listings] = await Promise.all([
+      listMarketplaceAccounts(id),
+      listMarketplaceClosetItems(id),
+    ]);
+    return NextResponse.json({
+      shopLinks: shopLinksPayload(accounts),
+      listings,
+    });
   } catch (err) {
     console.error("admin unlink closet error:", err);
     return NextResponse.json(
@@ -175,6 +186,7 @@ export async function POST(request: Request, context: RouteContext) {
     return NextResponse.json({
       ...result,
       shopLinks: shopLinksPayload(result.accounts),
+      listings: result.listings,
     });
   } catch (err) {
     console.error("admin check closet error:", err);

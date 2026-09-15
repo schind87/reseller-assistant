@@ -105,6 +105,15 @@
       );
     }
 
+    function withTimeout(promise, timeoutMs, message) {
+      return Promise.race([
+        promise,
+        new Promise((_, reject) => {
+          setTimeout(() => reject(new Error(message)), timeoutMs);
+        }),
+      ]);
+    }
+
     // Holding a port open keeps the MV3 service worker alive while Check
     // listings waits on a slow closet page. The RPC stays on sendMessage so
     // older helpers still respond.
@@ -128,12 +137,16 @@
 
     if (data.type === "check-closet") {
       void withHelperPort(() =>
-        chrome.runtime.sendMessage({
-          type: "checkCloset",
-          platform: data.platform,
-          username: data.username,
-          closetUrl: data.closetUrl,
-        })
+        withTimeout(
+          chrome.runtime.sendMessage({
+            type: "checkCloset",
+            platform: data.platform,
+            username: data.username,
+            closetUrl: data.closetUrl,
+          }),
+          50000,
+          "The closet page took too long to read. Keep it open in Chrome, then try Check listings again."
+        )
       )
         .then((result) => postClosetCheck(result))
         .catch((error) => postClosetCheck(null, error));
@@ -142,10 +155,14 @@
 
     if (data.type === "detect-closet-username") {
       void withHelperPort(() =>
-        chrome.runtime.sendMessage({
-          type: "detectClosetUsername",
-          platform: data.platform,
-        })
+        withTimeout(
+          chrome.runtime.sendMessage({
+            type: "detectClosetUsername",
+            platform: data.platform,
+          }),
+          40000,
+          "Looking for your closet took too long. Sign in to that store in Chrome, then try Find my closet again."
+        )
       )
         .then((result) => postClosetUsername(result))
         .catch((error) => postClosetUsername(null, error));

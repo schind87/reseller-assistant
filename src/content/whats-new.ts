@@ -20,6 +20,14 @@ export type WhatsNewItem = {
  */
 export const WHATS_NEW: WhatsNewItem[] = [
   {
+    id: "admin-check-listings-seller",
+    date: "2026-09-15",
+    title: "Check listings on Users saves that seller’s closet",
+    helper: true,
+    body:
+      "Check listings from Users now reads Poshmark closet cards and saves them on that seller, not the signed-in admin.",
+  },
+  {
     id: "check-listings-wait",
     date: "2026-09-14",
     title: "Check listings waits for the closet to load",

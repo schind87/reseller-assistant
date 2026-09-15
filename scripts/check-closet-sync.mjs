@@ -17,6 +17,7 @@ const ctx = {
   URL,
   Set,
   Map,
+  WeakSet,
   JSON,
   console,
 };
@@ -29,6 +30,7 @@ const {
   raWalkJsonListings,
   raMarketplaceItemUrl,
   raParsePrice,
+  raRecordListingUrl,
 } = ctx;
 
 function assert(name, actual, expected) {
@@ -97,6 +99,47 @@ assert(
 );
 assert("price object string val", raParsePrice({ val: "29.00" }), 29);
 assert("invalid json prefix", raParseEmbeddedJson("not json"), null);
+
+const poshNoUrl = {
+  id: "6aa5b133d78df104a9189ca2",
+  title: "Tommy Bahama Men's Blue Tropical Print Shirt Size Large",
+  price_amount: { val: "35.0" },
+  inventory: { status: "available" },
+  cover_shot: {
+    url_small: "https://di2ponv0v5otw.cloudfront.net/posts/s.jpg",
+  },
+};
+const synthesized = raRecordListingUrl(poshNoUrl);
+assert(
+  "synthesize poshmark listing url",
+  synthesized,
+  "https://poshmark.com/listing/Tommy-Bahama-Men-s-Blue-Tropical-Print-Shirt-Size-Large-6aa5b133d78df104a9189ca2"
+);
+
+const postDataSeen = new Set();
+const postDataListings = [];
+raWalkJsonListings(
+  {
+    $_closet: {
+      listingsPostData: { data: [poshNoUrl] },
+    },
+  },
+  postDataSeen,
+  postDataListings,
+  0
+);
+assert("listingsPostData without url", postDataListings.length, 1);
+assert(
+  "listingsPostData id",
+  postDataListings[0].externalId,
+  "6aa5b133d78df104a9189ca2"
+);
+
+const cyclic = { title: "skip me" };
+cyclic.self = cyclic;
+const cyclicListings = [];
+raWalkJsonListings(cyclic, new Set(), cyclicListings, 0);
+assert("cyclic json walk", cyclicListings.length, 0);
 
 console.log(`ok closet-sync ${listings.length + mercariListings.length} listings`);
 console.log("ok embedded INITIAL_STATE parse");

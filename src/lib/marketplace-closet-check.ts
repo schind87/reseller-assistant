@@ -26,7 +26,7 @@ export const marketplaceClosetCheckItemSchema = z.object({
 
 export const marketplaceClosetCheckBodySchema = z.object({
   platform: marketplacePlatformSchema,
-  listings: z.array(marketplaceClosetCheckItemSchema).max(200),
+  listings: z.array(z.unknown()).max(200),
   error: z.string().max(240).optional(),
 });
 
@@ -65,6 +65,41 @@ function sanitizeHttpsUrl(raw: string, platform?: Platform): string | null {
   }
 }
 
+function clipString(value: unknown, max: number): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  return trimmed.slice(0, max);
+}
+
+function clipUrl(value: unknown, max: number): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  return trimmed.slice(0, max);
+}
+
+export function normalizeClosetCheckItem(
+  raw: unknown
+): z.infer<typeof marketplaceClosetCheckItemSchema> | null {
+  if (!raw || typeof raw !== "object") return null;
+  const record = raw as Record<string, unknown>;
+  const parsed = marketplaceClosetCheckItemSchema.safeParse({
+    externalId: clipString(record.externalId, 120),
+    title: clipString(record.title, 200),
+    price:
+      typeof record.price === "number" &&
+      Number.isFinite(record.price) &&
+      record.price >= 0
+        ? record.price
+        : null,
+    status: record.status,
+    url: clipUrl(record.url, 500),
+    thumbnailUrl: clipUrl(record.thumbnailUrl, 500),
+  });
+  return parsed.success ? parsed.data : null;
+}
+
 export async function applyMarketplaceClosetCheck(
   userId: string,
   body: MarketplaceClosetCheckBody
@@ -79,7 +114,9 @@ export async function applyMarketplaceClosetCheck(
   }
 
   const items: ClosetCheckItemInput[] = [];
-  for (const item of body.listings) {
+  for (const raw of body.listings) {
+    const item = normalizeClosetCheckItem(raw);
+    if (!item) continue;
     const url = sanitizeHttpsUrl(item.url, body.platform);
     if (!url) continue;
     const thumbnailUrl = item.thumbnailUrl

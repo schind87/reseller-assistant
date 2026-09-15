@@ -4,13 +4,14 @@ import {
 } from "@/lib/seller-preferences";
 import { deleteListing } from "@/lib/supabase/queries";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { listMarketplaceAccountsByUserId } from "@/lib/supabase/marketplace-closet";
+import { listMarketplaceAccountsByUserId, listMarketplaceClosetItemsByUserId } from "@/lib/supabase/marketplace-closet";
 import { isPostingPhotoRole, type ListingStatus, type PhotoRole, type Platform } from "@/lib/types";
 import type {
   AdminUserListing,
   AdminUserRow,
   AdminUserShopLink,
 } from "@/lib/admin-users";
+import type { MarketplaceClosetItem } from "@/lib/marketplace-profiles";
 
 const PAGE_SIZE = 1000;
 
@@ -59,7 +60,8 @@ function defaultStore(preferences: unknown): Platform | null {
 export async function listAdminUsers(): Promise<AdminUserRow[]> {
   const supabase = createAdminClient();
 
-  const [profiles, listings, photos, accountsByUser] = await Promise.all([
+  const [profiles, listings, photos, accountsByUser, closetItemsByUser] =
+    await Promise.all([
     selectAll<ProfileRow>(async (from, to) => {
       const { data, error } = await supabase
         .from("profiles")
@@ -89,6 +91,7 @@ export async function listAdminUsers(): Promise<AdminUserRow[]> {
       return (data ?? []) as PhotoRow[];
     }),
     listMarketplaceAccountsByUserId(),
+    listMarketplaceClosetItemsByUserId(),
   ]);
 
   const photoCountByListing = new Map<string, number>();
@@ -131,6 +134,7 @@ export async function listAdminUsers(): Promise<AdminUserRow[]> {
       defaultStore: defaultStore(profile.listing_preferences),
       listings: owned,
       shopLinks: shopLinksForUser(accountsByUser.get(profile.id)),
+      closetListings: closetItemsByUser.get(profile.id) ?? [],
     });
   });
 
@@ -146,6 +150,7 @@ export async function listAdminUsers(): Promise<AdminUserRow[]> {
         defaultStore: null,
         listings: unowned,
         shopLinks: [],
+        closetListings: [],
       })
     );
   }
@@ -163,6 +168,7 @@ export async function listAdminUsers(): Promise<AdminUserRow[]> {
         defaultStore: null,
         listings: orphanListings,
         shopLinks: shopLinksForUser(accountsByUser.get(userId)),
+        closetListings: closetItemsByUser.get(userId) ?? [],
       })
     );
   }
@@ -197,6 +203,7 @@ function toUserRow(input: {
   defaultStore: Platform | null;
   listings: AdminUserListing[];
   shopLinks: AdminUserShopLink[];
+  closetListings: MarketplaceClosetItem[];
 }): AdminUserRow {
   const listings = input.listings.toSorted((a, b) =>
     b.updatedAt.localeCompare(a.updatedAt)
@@ -224,6 +231,7 @@ function toUserRow(input: {
     lastListingAt,
     listings,
     shopLinks: input.shopLinks,
+    closetListings: input.closetListings,
   };
 }
 
