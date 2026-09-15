@@ -1452,18 +1452,18 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
             </p>
           ) : null}
 
-      <details className="rounded-xl border border-dashed border-[var(--border)] px-4 py-3">
-        <summary className="cursor-pointer list-none text-sm font-semibold text-[var(--muted)] marker:content-none [&::-webkit-details-marker]:hidden">
-          More
-        </summary>
-        <div className="mt-3 flex flex-col gap-3 border-t border-[var(--border)] pt-3">
-          <a
-            href={`/api/listings/${listingId}/photos/zip`}
-            className="text-base font-semibold text-[var(--accent)]"
-          >
-            Download listing photos
-          </a>
-          {isAdmin ? (
+      {isAdmin ? (
+        <details className="rounded-xl border border-dashed border-[var(--border)] px-4 py-3">
+          <summary className="cursor-pointer list-none text-sm font-semibold text-[var(--muted)] marker:content-none [&::-webkit-details-marker]:hidden">
+            More
+          </summary>
+          <div className="mt-3 flex flex-col gap-3 border-t border-[var(--border)] pt-3">
+            <a
+              href={`/api/listings/${listingId}/photos/zip`}
+              className="text-base font-semibold text-[var(--accent)]"
+            >
+              Download listing photos
+            </a>
             <a
               href={`/app/admin/bg-lab?listingId=${encodeURIComponent(listingId)}`}
               target="_blank"
@@ -1472,8 +1472,6 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
             >
               Open AI Photo Lab →
             </a>
-          ) : null}
-          {isAdmin ? (
             <div className="flex flex-col gap-2">
               <p className="text-sm font-semibold text-[var(--foreground)]">
                 AI model (admin)
@@ -1537,17 +1535,17 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
                 })}
               </ul>
             </div>
-          ) : null}
-          <button
-            type="button"
-            disabled={deletingListing || saving || processing}
-            onClick={() => void deleteThisListing()}
-            className="text-left text-base font-semibold text-[var(--danger)] disabled:opacity-50"
-          >
-            {deletingListing ? "Deleting…" : "Delete this listing"}
-          </button>
-        </div>
-      </details>
+            <button
+              type="button"
+              disabled={deletingListing || saving || processing}
+              onClick={() => void deleteThisListing()}
+              className="text-left text-base font-semibold text-[var(--danger)] disabled:opacity-50"
+            >
+              {deletingListing ? "Deleting…" : "Delete this listing"}
+            </button>
+          </div>
+        </details>
+      ) : null}
 
           <section className="flex flex-col gap-6">
             <h2 className="font-[family-name:var(--font-brand)] text-2xl">
@@ -1854,7 +1852,7 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
           </section>
         </div>
 
-        <aside className="order-first sticky top-0 z-10 flex flex-col gap-3 bg-[var(--background)] py-1 lg:order-none">
+        <aside className="order-first sticky top-[var(--admin-bar-height)] z-10 flex flex-col gap-3 bg-[var(--background)] py-1 lg:order-none">
           <Link
             href="/app"
             className="touch-target inline-flex items-center justify-center self-stretch rounded-xl border border-[var(--border)] bg-white px-4 text-base font-semibold text-[var(--foreground)] hover:bg-[var(--surface-muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"

@@ -11,6 +11,7 @@
   --surface-muted: #efeae2;
   --border: #ddd6cb;
   --danger: #9b3b2f;
+  --admin-bar-height: 0px;
   --font-brand: var(--font-source-serif);
   --font-body: var(--font-dm-sans);
 }
@@ -23,6 +24,10 @@
   --color-border: var(--border);
   --font-sans: var(--font-dm-sans);
   --font-serif: var(--font-source-serif);
+}
+
+html {
+  scroll-padding-top: var(--admin-bar-height);
 }
 
 body {

@@ -20,6 +20,13 @@ export type WhatsNewItem = {
  */
 export const WHATS_NEW: WhatsNewItem[] = [
   {
+    id: "seller-no-more",
+    date: "2026-09-15",
+    title: "More is only for admins",
+    body:
+      "Sellers no longer see More on a listing. Delete a listing from All listings. Admins still have More for Photo Lab and related tools.",
+  },
+  {
     id: "admin-check-listings-helper-rpc",
     date: "2026-09-15",
     title: "Check listings from Users keeps talking to the helper",

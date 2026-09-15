@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -16,6 +16,7 @@ type AdminBarProps = {
 export function AdminBar({ initialAdmin }: AdminBarProps) {
   const pathname = usePathname();
   const [isAdmin, setIsAdmin] = useState(initialAdmin);
+  const navRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -32,10 +33,35 @@ export function AdminBar({ initialAdmin }: AdminBarProps) {
     };
   }, [pathname]);
 
+  useLayoutEffect(() => {
+    if (!isAdmin) {
+      document.documentElement.style.setProperty("--admin-bar-height", "0px");
+      return;
+    }
+    const nav = navRef.current;
+    if (!nav) return;
+
+    function syncHeight() {
+      document.documentElement.style.setProperty(
+        "--admin-bar-height",
+        `${nav.offsetHeight}px`
+      );
+    }
+
+    syncHeight();
+    const observer = new ResizeObserver(syncHeight);
+    observer.observe(nav);
+    return () => {
+      observer.disconnect();
+      document.documentElement.style.setProperty("--admin-bar-height", "0px");
+    };
+  }, [isAdmin]);
+
   if (!isAdmin) return null;
 
   return (
     <nav
+      ref={navRef}
       aria-label="Admin"
       className="sticky top-0 z-20 border-b border-[var(--border)] bg-[var(--surface-muted)]"
     >
