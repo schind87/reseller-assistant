@@ -8,8 +8,10 @@ import {
 } from "@/lib/extension-bridge";
 import {
   closetCheckHint,
+  closetItemsInDisplayOrder,
   closetStatusLabel,
   closetUsernameParseError,
+  groupClosetItemsByStatus,
   marketplaceClosetUrl,
   parseMarketplaceUsername,
   type MarketplaceClosetItem,
@@ -59,6 +61,47 @@ function formatPrice(price: number | null): string | null {
     currency: "USD",
     maximumFractionDigits: price % 1 === 0 ? 0 : 2,
   }).format(price);
+}
+
+function AdminClosetItemList({ items }: { items: MarketplaceClosetItem[] }) {
+  const groups = groupClosetItemsByStatus(items);
+  const showGroupLabels = groups.length > 1;
+  return (
+    <div className="flex flex-col gap-2">
+      {groups.map((group) => (
+        <div key={group.status} className="flex flex-col gap-1">
+          {showGroupLabels ? (
+            <p className="text-sm font-semibold text-[var(--muted)]">
+              {group.label}
+            </p>
+          ) : null}
+          <ul className="flex flex-col gap-1">
+            {group.items.map((item) => {
+              const label = item.title?.trim() || "Untitled listing";
+              const price = formatPrice(item.price);
+              return (
+                <li key={item.id}>
+                  <a
+                    href={item.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sm text-[var(--accent)] hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
+                  >
+                    {label}
+                  </a>
+                  <span className="text-sm text-[var(--muted)]">
+                    {" "}
+                    · {closetStatusLabel(item.status)}
+                    {price ? ` · ${price}` : ""}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 const CLOSET_LIST_CAP = 40;
@@ -232,7 +275,6 @@ export function AdminUserShopLinks({
         const storeListings = closetListings.filter(
           (item) => item.platform === platform
         );
-        const visibleListings = storeListings.slice(0, CLOSET_LIST_CAP);
         const inputId = `admin-user-${userId}-${platform}-closet`;
         const busy =
           linking === platform ||
@@ -294,34 +336,17 @@ export function AdminUserShopLinks({
                 </div>
                 {account.lastCheckedAt && storeListings.length === 0 ? (
                   <p className="text-sm text-[var(--muted)]">
-                    No {PLATFORM_LABELS[platform]} listings saved for this
+                    No {PLATFORM_LABELS[platform]} closet listings saved for this
                     seller.
                   </p>
                 ) : null}
                 {storeListings.length > 0 ? (
-                  <ul className="flex flex-col gap-1">
-                    {visibleListings.map((item) => {
-                      const label = item.title?.trim() || "Untitled listing";
-                      const price = formatPrice(item.price);
-                      return (
-                        <li key={item.id}>
-                          <a
-                            href={item.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-sm text-[var(--accent)] hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
-                          >
-                            {label}
-                          </a>
-                          <span className="text-sm text-[var(--muted)]">
-                            {" "}
-                            · {closetStatusLabel(item.status)}
-                            {price ? ` · ${price}` : ""}
-                          </span>
-                        </li>
-                      );
-                    })}
-                  </ul>
+                  <AdminClosetItemList
+                    items={closetItemsInDisplayOrder(storeListings).slice(
+                      0,
+                      CLOSET_LIST_CAP
+                    )}
+                  />
                 ) : null}
                 {storeListings.length > CLOSET_LIST_CAP ? (
                   <p className="text-sm text-[var(--muted)]">

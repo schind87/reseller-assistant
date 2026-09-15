@@ -163,6 +163,68 @@ export function closetStatusLabel(status: MarketplaceClosetStatus): string {
   }
 }
 
+/** Live closet first, then parked/sold, then unknown. Not RA draft jobs. */
+export const CLOSET_STATUS_DISPLAY_ORDER: MarketplaceClosetStatus[] = [
+  "active",
+  "reserved",
+  "sold",
+  "not_for_sale",
+  "unknown",
+];
+
+export type ClosetStatusGroup = {
+  status: MarketplaceClosetStatus;
+  label: string;
+  items: MarketplaceClosetItem[];
+};
+
+export function groupClosetItemsByStatus(
+  items: MarketplaceClosetItem[]
+): ClosetStatusGroup[] {
+  const buckets = new Map<MarketplaceClosetStatus, MarketplaceClosetItem[]>();
+  for (const status of CLOSET_STATUS_DISPLAY_ORDER) {
+    buckets.set(status, []);
+  }
+  for (const item of items) {
+    const status = closetStatusBucket(item.status);
+    buckets.get(status)!.push(item);
+  }
+  return CLOSET_STATUS_DISPLAY_ORDER.flatMap((status) => {
+    const groupItems = buckets.get(status) ?? [];
+    if (groupItems.length === 0) return [];
+    return [
+      {
+        status,
+        label: closetStatusLabel(status),
+        items: groupItems,
+      },
+    ];
+  });
+}
+
+export function closetItemsInDisplayOrder(
+  items: MarketplaceClosetItem[]
+): MarketplaceClosetItem[] {
+  return groupClosetItemsByStatus(items).flatMap((group) => group.items);
+}
+
+function closetStatusBucket(
+  status: MarketplaceClosetStatus
+): MarketplaceClosetStatus {
+  switch (status) {
+    case "active":
+    case "reserved":
+    case "sold":
+    case "not_for_sale":
+    case "unknown":
+      return status;
+    default: {
+      const _exhaustive: never = status;
+      return _exhaustive;
+    }
+  }
+}
+
 export function closetCheckHint(platform: Platform): string {
   return `Sign in to ${PLATFORM_LABELS[platform]} in Chrome, then tap Check listings.`;
 }

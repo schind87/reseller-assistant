@@ -20,6 +20,13 @@ export type WhatsNewItem = {
  */
 export const WHATS_NEW: WhatsNewItem[] = [
   {
+    id: "listing-status-jobs-vs-closet",
+    date: "2026-09-15",
+    title: "Posted drafts are not closet Active or Sold",
+    body:
+      "All listings now keeps Posted drafts under their own heading. Linked closets still show live Active, Sold, and other closet statuses from Check listings. Open Mercari or Poshmark waits until the draft is ready to post.",
+  },
+  {
     id: "seller-no-more",
     date: "2026-09-15",
     title: "More is only for admins",

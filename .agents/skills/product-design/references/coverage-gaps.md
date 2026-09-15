@@ -20,7 +20,7 @@ exemplar, or `frontend-invariants.mdc` with evidence.
 ## Visual language
 
 - **Error color:** banners use Tailwind `red-50` / `red-800` while actions use `--danger`. Unsettled whether errors should use `--danger`.
-- **Listing status labels:** raw `replaceAll("_", " ")`, no badge system. Do not invent status chips.
+- **Listing status chips:** Job labels and closet labels are muted text, not colored pills. Do not invent a badge system.
 - **Extension vs web tokens** are parallel (`--bg`/`--ink` vs `--background`/`--foreground`) and extension uses system fonts. Unsettled how strictly they must match.
 - **Shadow scale:** dialogs `shadow-2xl` vs mostly flat seller UI. No documented elevation system.
 - **Dark mode** is not a product. Do not add a theme switch.

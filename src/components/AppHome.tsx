@@ -11,6 +11,7 @@ import { SellerOnboarding } from "@/components/SellerOnboarding";
 import {
   listingJobStep,
   listingListSubtitle,
+  listingPostedHomeSubtitle,
 } from "@/lib/listing-job";
 import { PLATFORM_LABELS, PLATFORM_PHOTO_ASPECT } from "@/lib/platforms";
 import {
@@ -27,6 +28,71 @@ function preferredSellingWebsite(
   preferences: ListingPreferences | null
 ): Platform {
   return preferences?.sellingWebsite ?? "mercari";
+}
+
+function HomeListingRow({
+  listing,
+  subtitle,
+  deleting,
+  onDelete,
+}: {
+  listing: ListingWithThumb;
+  subtitle: string | null;
+  deleting: boolean;
+  onDelete: (id: string, label: string) => void;
+}) {
+  const label =
+    listing.title || `${PLATFORM_LABELS[listing.platform]} draft`;
+  const aspect = PLATFORM_PHOTO_ASPECT[listing.platform];
+  return (
+    <li className="overflow-hidden rounded-2xl border border-[var(--border)] bg-white">
+      <div className="flex items-stretch gap-2">
+        <Link
+          href={`/app/listings/${listing.id}`}
+          className="flex min-w-0 flex-1 items-stretch gap-3 transition-colors hover:bg-[var(--surface-muted)]"
+        >
+          <div
+            className="h-[4.75rem] shrink-0 self-center overflow-hidden bg-[var(--surface-muted)] sm:ml-3 sm:rounded-xl"
+            style={{
+              aspectRatio: `${aspect.width} / ${aspect.height}`,
+            }}
+          >
+            {listing.thumbUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={listing.thumbUrl}
+                alt=""
+                loading="lazy"
+                decoding="async"
+                className="h-full w-full object-contain"
+              />
+            ) : (
+              <div className="flex h-full items-center justify-center text-[10px] font-semibold uppercase tracking-wide text-[var(--muted)]">
+                No photo
+              </div>
+            )}
+          </div>
+          <span className="min-w-0 flex-1 py-4 pr-2 pl-3 sm:pl-0 sm:pr-4">
+            <p className="text-lg font-semibold text-[var(--foreground)]">
+              {label}
+            </p>
+            {subtitle ? (
+              <p className="mt-1 text-base text-[var(--muted)]">{subtitle}</p>
+            ) : null}
+          </span>
+        </Link>
+        <button
+          type="button"
+          disabled={deleting}
+          aria-label={`Delete ${label}`}
+          onClick={() => onDelete(listing.id, label)}
+          className="touch-target flex shrink-0 items-center self-stretch px-4 text-base font-semibold text-[var(--danger)] hover:bg-red-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {deleting ? "…" : "Delete"}
+        </button>
+      </div>
+    </li>
+  );
 }
 
 type AppHomeProps = {
@@ -59,6 +125,12 @@ export function AppHome({
     ),
     ...initialListings.filter((listing) => !deletedIds.includes(listing.id)),
   ];
+  const inProgressListings = listings.filter(
+    (listing) => listing.status !== "posted"
+  );
+  const postedListings = listings.filter(
+    (listing) => listing.status === "posted"
+  );
   const [prefsDone, setPrefsDone] = useState(preferencesCompleted);
   const [preferences, setPreferences] = useState(initialPreferences);
   const [editingPrefs, setEditingPrefs] = useState(!preferencesCompleted);
@@ -308,75 +380,50 @@ export function AppHome({
             No clothing listings yet. Tap Create new listing.
           </p>
         ) : (
-          <ul className="flex flex-col gap-3">
-            {listings.map((listing) => {
-              const label =
-                listing.title ||
-                `${PLATFORM_LABELS[listing.platform]} draft`;
-              const aspect = PLATFORM_PHOTO_ASPECT[listing.platform];
-              const deleting = deletingId === listing.id;
-              return (
-                <li
-                  key={listing.id}
-                  className="overflow-hidden rounded-2xl border border-[var(--border)] bg-white"
-                >
-                  <div className="flex items-stretch gap-2">
-                    <Link
-                      href={`/app/listings/${listing.id}`}
-                      className="flex min-w-0 flex-1 items-stretch gap-3 transition-colors hover:bg-[var(--surface-muted)]"
-                    >
-                      <div
-                        className="h-[4.75rem] shrink-0 self-center overflow-hidden bg-[var(--surface-muted)] sm:ml-3 sm:rounded-xl"
-                        style={{
-                          aspectRatio: `${aspect.width} / ${aspect.height}`,
-                        }}
-                      >
-                        {listing.thumbUrl ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img
-                            src={listing.thumbUrl}
-                            alt=""
-                            loading="lazy"
-                            decoding="async"
-                            className="h-full w-full object-contain"
-                          />
-                        ) : (
-                          <div className="flex h-full items-center justify-center text-[10px] font-semibold uppercase tracking-wide text-[var(--muted)]">
-                            No photo
-                          </div>
-                        )}
-                      </div>
-                      <span className="min-w-0 flex-1 py-4 pr-2 pl-3 sm:pl-0 sm:pr-4">
-                        <p className="text-lg font-semibold text-[var(--foreground)]">
-                          {label}
-                        </p>
-                        <p className="mt-1 text-base text-[var(--muted)]">
-                          {listingListSubtitle(
-                            listing.platform,
-                            listingJobStep({
-                              status: listing.status,
-                              title: listing.title,
-                              hasListingPhoto: listing.hasListingPhoto,
-                            }),
-                            Boolean(listing.title?.trim())
-                          )}
-                        </p>
-                      </span>
-                    </Link>
-                    <button
-                      type="button"
-                      disabled={deleting}
-                      aria-label={`Delete ${label}`}
-                      onClick={() => void deleteListing(listing.id, label)}
-                      className="touch-target flex shrink-0 items-center self-stretch px-4 text-base font-semibold text-[var(--danger)] hover:bg-red-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      {deleting ? "…" : "Delete"}
-                    </button>
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
+          <div className="flex flex-col gap-8">
+            {inProgressListings.length > 0 ? (
+              <ul className="flex flex-col gap-3">
+                {inProgressListings.map((listing) => (
+                  <HomeListingRow
+                    key={listing.id}
+                    listing={listing}
+                    deleting={deletingId === listing.id}
+                    subtitle={listingListSubtitle(
+                      listing.platform,
+                      listingJobStep({
+                        status: listing.status,
+                        title: listing.title,
+                        hasListingPhoto: listing.hasListingPhoto,
+                      }),
+                      Boolean(listing.title?.trim())
+                    )}
+                    onDelete={(id, label) => void deleteListing(id, label)}
+                  />
+                ))}
+              </ul>
+            ) : null}
+            {postedListings.length > 0 ? (
+              <div>
+                <h3 className="mb-4 font-[family-name:var(--font-brand)] text-xl">
+                  Posted
+                </h3>
+                <ul className="flex flex-col gap-3">
+                  {postedListings.map((listing) => (
+                    <HomeListingRow
+                      key={listing.id}
+                      listing={listing}
+                      deleting={deletingId === listing.id}
+                      subtitle={listingPostedHomeSubtitle(
+                        listing.platform,
+                        Boolean(listing.title?.trim())
+                      )}
+                      onDelete={(id, label) => void deleteListing(id, label)}
+                    />
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+          </div>
         )}
       </section>
     </main>

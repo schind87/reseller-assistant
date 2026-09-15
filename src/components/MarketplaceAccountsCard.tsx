@@ -12,6 +12,7 @@ import {
   closetFindHint,
   closetLinkConfirmMessage,
   closetStatusLabel,
+  groupClosetItemsByStatus,
   marketplaceClosetUrl,
   parseMarketplaceUsername,
   type MarketplaceAccount,
@@ -39,6 +40,87 @@ function formatPrice(price: number | null): string | null {
     currency: "USD",
     maximumFractionDigits: price % 1 === 0 ? 0 : 2,
   }).format(price);
+}
+
+function ClosetCardRow({
+  item,
+  aspect,
+}: {
+  item: MarketplaceClosetItem;
+  aspect: { width: number; height: number };
+}) {
+  const label = item.title?.trim() || "Untitled listing";
+  const price = formatPrice(item.price);
+  return (
+    <li className="flex items-stretch overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface-muted)]/40">
+      <a
+        href={item.url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="flex min-w-0 flex-1 items-stretch gap-3 transition-colors hover:bg-[var(--surface-muted)]"
+      >
+        <div
+          className="h-[4.75rem] shrink-0 self-center overflow-hidden bg-[var(--surface-muted)] sm:ml-3 sm:rounded-xl"
+          style={{
+            aspectRatio: `${aspect.width} / ${aspect.height}`,
+          }}
+        >
+          {item.thumbnailUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={item.thumbnailUrl}
+              alt=""
+              loading="lazy"
+              decoding="async"
+              className="h-full w-full object-contain"
+            />
+          ) : (
+            <div className="flex h-full items-center justify-center text-[10px] font-semibold uppercase tracking-wide text-[var(--muted)]">
+              No photo
+            </div>
+          )}
+        </div>
+        <span className="min-w-0 flex-1 py-3 pr-3 pl-3 sm:pl-0">
+          <p className="break-words text-base font-semibold text-[var(--foreground)]">
+            {label}
+          </p>
+          <p className="mt-1 text-sm text-[var(--muted)]">
+            {closetStatusLabel(item.status)}
+            {price ? ` · ${price}` : ""}
+          </p>
+        </span>
+      </a>
+    </li>
+  );
+}
+
+function ClosetCardList({
+  items,
+  aspect,
+}: {
+  items: MarketplaceClosetItem[];
+  aspect: { width: number; height: number };
+}) {
+  const groups = groupClosetItemsByStatus(items);
+  const showGroupLabels = groups.length > 1;
+  return (
+    <div className="flex flex-col gap-4">
+      {groups.map((group) => (
+        <div key={group.status} className="flex flex-col gap-2">
+          {showGroupLabels ? (
+            <h4 className="text-sm font-semibold text-[var(--muted)]">
+              {group.label}
+            </h4>
+          ) : null}
+          <ul className="flex flex-col gap-2">
+            {group.items.map((item) => (
+              <ClosetCardRow key={item.id} item={item} aspect={aspect} />
+            ))}
+          </ul>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 function accountFor(
@@ -239,7 +321,7 @@ export function MarketplaceAccountsCard({
           Linked closets
         </h2>
         <p className="mt-1 text-base text-[var(--muted)]">
-          Check what’s live on Mercari and Poshmark from here.
+          Live closet cards from Check listings. Drafts stay on All listings.
         </p>
       </div>
 
@@ -370,62 +452,16 @@ export function MarketplaceAccountsCard({
             {account && storeListings.length === 0 ? (
               <p className="text-base text-[var(--muted)]">
                 {account.lastCheckedAt
-                  ? `No ${PLATFORM_LABELS[platform]} listings found. ${closetCheckHint(platform)}`
-                  : `No ${PLATFORM_LABELS[platform]} listings saved yet. Tap Check listings.`}
+                  ? `No ${PLATFORM_LABELS[platform]} closet listings found. ${closetCheckHint(platform)}`
+                  : `No ${PLATFORM_LABELS[platform]} closet listings saved yet. Tap Check listings.`}
               </p>
             ) : null}
 
             {storeListings.length > 0 ? (
-              <ul className="flex flex-col gap-2">
-                {storeListings.map((item) => {
-                  const label = item.title?.trim() || "Untitled listing";
-                  const price = formatPrice(item.price);
-                  return (
-                    <li
-                      key={item.id}
-                      className="flex items-stretch overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface-muted)]/40"
-                    >
-                      <a
-                        href={item.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex min-w-0 flex-1 items-stretch gap-3 transition-colors hover:bg-[var(--surface-muted)]"
-                      >
-                        <div
-                          className="h-[4.75rem] shrink-0 self-center overflow-hidden bg-[var(--surface-muted)] sm:ml-3 sm:rounded-xl"
-                          style={{
-                            aspectRatio: `${aspect.width} / ${aspect.height}`,
-                          }}
-                        >
-                          {item.thumbnailUrl ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img
-                              src={item.thumbnailUrl}
-                              alt=""
-                              loading="lazy"
-                              decoding="async"
-                              className="h-full w-full object-contain"
-                            />
-                          ) : (
-                            <div className="flex h-full items-center justify-center text-[10px] font-semibold uppercase tracking-wide text-[var(--muted)]">
-                              No photo
-                            </div>
-                          )}
-                        </div>
-                        <span className="min-w-0 flex-1 py-3 pr-3 pl-3 sm:pl-0">
-                          <p className="break-words text-base font-semibold text-[var(--foreground)]">
-                            {label}
-                          </p>
-                          <p className="mt-1 text-sm text-[var(--muted)]">
-                            {closetStatusLabel(item.status)}
-                            {price ? ` · ${price}` : ""}
-                          </p>
-                        </span>
-                      </a>
-                    </li>
-                  );
-                })}
-              </ul>
+              <ClosetCardList
+                items={storeListings}
+                aspect={aspect}
+              />
             ) : null}
           </div>
         );

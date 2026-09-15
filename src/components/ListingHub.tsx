@@ -19,7 +19,11 @@ import { ListingSchemaForm } from "@/components/ListingSchemaForm";
 import { ListingTweakDialog } from "@/components/ListingTweakDialog";
 import { PhotoAspectCrop } from "@/components/PhotoAspectCrop";
 import { QrPanel } from "@/components/QrPanel";
-import { listingJobStep, listingJobStepLabel } from "@/lib/listing-job";
+import {
+  listingJobCanOpenMarketplace,
+  listingJobStep,
+  listingJobStepLabel,
+} from "@/lib/listing-job";
 import {
   getSeedListingSchema,
   type PlatformListingSchema,
@@ -1816,7 +1820,7 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
                     >
                       {saving ? "Saving…" : "Save changes"}
                     </BigButton>
-                    {jobStep !== "posted" ? (
+                    {listingJobCanOpenMarketplace(jobStep) ? (
                       <BigButton
                         type="button"
                         variant="secondary"

@@ -30,7 +30,7 @@ export function listingJobStepLabel(step: ListingJobStep): string {
     case "open_marketplace":
       return "Ready to post";
     case "mark_posted":
-      return "Post not confirmed";
+      return "Confirm posted";
     case "posted":
       return "Posted";
     default: {
@@ -70,6 +70,30 @@ export function listingListSubtitle(
   const state = listingJobStepLabel(step);
   if (!titled) return state;
   return `${PLATFORM_LABELS[platform]} · ${state}`;
+}
+
+/** Home Posted section already names the job; do not repeat it in the subtitle. */
+export function listingPostedHomeSubtitle(
+  platform: Platform,
+  titled: boolean
+): string | null {
+  return titled ? PLATFORM_LABELS[platform] : null;
+}
+
+export function listingJobCanOpenMarketplace(step: ListingJobStep): boolean {
+  switch (step) {
+    case "open_marketplace":
+    case "mark_posted":
+      return true;
+    case "add_photos":
+    case "finish_with_ai":
+    case "posted":
+      return false;
+    default: {
+      const _exhaustive: never = step;
+      return _exhaustive;
+    }
+  }
 }
 
 export function listingJobBusyLabel(

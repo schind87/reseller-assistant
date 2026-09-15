@@ -262,7 +262,7 @@ export function AdminUsersConsole({
           />
           <FilterSelect
             id="admin-users-job"
-            label="Listing state"
+            label="Listing job"
             value={filters.job}
             onChange={(value) =>
               setFilters({
@@ -271,7 +271,7 @@ export function AdminUsersConsole({
               })
             }
             options={[
-              { value: "all", label: "All states" },
+              { value: "all", label: "All jobs" },
               ...ADMIN_USER_JOB_FILTERS.map((job) => ({
                 value: job,
                 label: listingJobStepLabel(job),
@@ -280,7 +280,7 @@ export function AdminUsersConsole({
           />
           <FilterSelect
             id="admin-users-listings"
-            label="Listings"
+            label="Clothing listings"
             value={filters.listings}
             onChange={(value) =>
               setFilters({
@@ -394,60 +394,66 @@ export function AdminUsersConsole({
                         }
                       />
                     ) : null}
-                    {visibleListings.length === 0 ? (
-                      <p className="text-base text-[var(--muted)]">
-                        No listings.
-                      </p>
-                    ) : (
-                      <ul className="flex flex-col gap-2">
-                        {visibleListings.map((listing) => {
-                          const listingLabel =
-                            listing.title?.trim() ||
-                            `${PLATFORM_LABELS[listing.platform]} draft`;
-                          return (
-                            <li
-                              key={listing.id}
-                              className="flex flex-col gap-2 rounded-xl border border-[var(--border)] px-3 py-3 sm:flex-row sm:items-center sm:justify-between"
-                            >
-                              <div className="min-w-0">
-                                <p className="break-words font-semibold text-[var(--foreground)]">
-                                  {listingLabel}
-                                </p>
-                                <p className="text-sm text-[var(--muted)]">
-                                  {PLATFORM_LABELS[listing.platform]} ·{" "}
-                                  {listingJobLabel(listing)} ·{" "}
-                                  {listing.photoCount}{" "}
-                                  {listing.photoCount === 1
-                                    ? "photo"
-                                    : "photos"}
-                                </p>
-                              </div>
-                              <div className="flex flex-wrap gap-x-4 gap-y-1">
-                                <Link
-                                  href={`/app/listings/${listing.id}`}
-                                  className="text-sm font-semibold text-[var(--accent)] hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
-                                >
-                                  Open listing
-                                </Link>
-                                <Link
-                                  href={`/app/admin/bg-lab?listingId=${encodeURIComponent(listing.id)}`}
-                                  className="text-sm font-semibold text-[var(--accent)] hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
-                                >
-                                  Open AI Photo Lab
-                                </Link>
-                                <button
-                                  type="button"
-                                  disabled={deletingListingId === listing.id}
-                                  onClick={() =>
-                                    void handleDeleteListing(
-                                      listing.id,
-                                      listingLabel,
-                                      user.id
-                                    )
-                                  }
-                                  className="text-sm font-semibold text-[var(--danger)] hover:underline disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--danger)]"
-                                  aria-label={`Delete ${listingLabel}`}
-                                >
+                    <div className="flex flex-col gap-2">
+                      <h2 className="text-sm font-semibold text-[var(--foreground)]">
+                        Clothing listings
+                      </h2>
+                      {visibleListings.length === 0 ? (
+                        <p className="text-base text-[var(--muted)]">
+                          {user.listings.length === 0
+                            ? "No clothing listings."
+                            : "No clothing listings match these filters."}
+                        </p>
+                      ) : (
+                        <ul className="flex flex-col gap-2">
+                          {visibleListings.map((listing) => {
+                            const listingLabel =
+                              listing.title?.trim() ||
+                              `${PLATFORM_LABELS[listing.platform]} draft`;
+                            return (
+                              <li
+                                key={listing.id}
+                                className="flex flex-col gap-2 rounded-xl border border-[var(--border)] px-3 py-3 sm:flex-row sm:items-center sm:justify-between"
+                              >
+                                <div className="min-w-0">
+                                  <p className="break-words font-semibold text-[var(--foreground)]">
+                                    {listingLabel}
+                                  </p>
+                                  <p className="text-sm text-[var(--muted)]">
+                                    {PLATFORM_LABELS[listing.platform]} ·{" "}
+                                    {listingJobLabel(listing)} ·{" "}
+                                    {listing.photoCount}{" "}
+                                    {listing.photoCount === 1
+                                      ? "photo"
+                                      : "photos"}
+                                  </p>
+                                </div>
+                                <div className="flex flex-wrap gap-x-4 gap-y-1">
+                                  <Link
+                                    href={`/app/listings/${listing.id}`}
+                                    className="text-sm font-semibold text-[var(--accent)] hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
+                                  >
+                                    Open listing
+                                  </Link>
+                                  <Link
+                                    href={`/app/admin/bg-lab?listingId=${encodeURIComponent(listing.id)}`}
+                                    className="text-sm font-semibold text-[var(--accent)] hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
+                                  >
+                                    Open AI Photo Lab
+                                  </Link>
+                                  <button
+                                    type="button"
+                                    disabled={deletingListingId === listing.id}
+                                    onClick={() =>
+                                      void handleDeleteListing(
+                                        listing.id,
+                                        listingLabel,
+                                        user.id
+                                      )
+                                    }
+                                    className="text-sm font-semibold text-[var(--danger)] hover:underline disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
+                                    aria-label={`Delete ${listingLabel}`}
+                                  >
                                   {deletingListingId === listing.id
                                     ? "…"
                                     : "Delete listing"}
@@ -458,6 +464,7 @@ export function AdminUsersConsole({
                         })}
                       </ul>
                     )}
+                    </div>
                     {canDeleteUser ? (
                       <button
                         type="button"

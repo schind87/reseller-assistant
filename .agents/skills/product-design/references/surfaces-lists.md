@@ -39,9 +39,9 @@ There is no table component.
 ### rule/status-is-secondary
 
 - **Scope:** Listing rows and hub eyebrow
-- **Rule:** Show marketplace + status as muted/eyebrow text, not colored status pills for every state. Current code uses `status.replaceAll("_", " ")`.
+- **Rule:** Show marketplace + job or closet status as muted/eyebrow text, not colored status pills. Draft jobs use `listingJobStepLabel`. Closet cards use `closetStatusLabel`.
 - **Rationale:** Status is supporting information; the title and primary action matter more.
-- **Evidence:** Home subtitle; hub eyebrow.
+- **Evidence:** Home subtitle; hub eyebrow; Posted drafts sit under a Posted heading. Closet cards are Profile / Users only.
 - **Exceptions:** None yet — pill language is a coverage gap, not a standard.
 
 ## Good patterns
@@ -56,5 +56,4 @@ There is no table component.
 
 ## Coverage gaps
 
-- Listing status has no canonical display map (raw snake_case → spaces).
 - No virtualization standard; not needed at current seller volumes.
