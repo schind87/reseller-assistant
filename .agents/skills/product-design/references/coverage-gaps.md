@@ -37,6 +37,7 @@ exemplar, or `frontend-invariants.mdc` with evidence.
 - **Autosave vs explicit save** for listing fields is mixed (hub dirty flag vs tweak Save).
 - **Large listing lists** have no pagination/virtualization standard (not yet a problem).
 - **Admin AI Photo Lab** is a dense lab UI. It is not a template for seller screens; few of its controls are documented as product standards.
+- **Mercari sold cards can be missing** from Check listings when the helper falls back to `/mypage/listings/active/`. A sold draft may then look unconfirmed. Do not invent a third “sold on store” draft job to paper over that scrape hole.
 
 ## Responsive / device
 

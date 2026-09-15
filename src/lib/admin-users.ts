@@ -3,17 +3,27 @@ import {
   listingJobStepLabel,
   type ListingJobStep,
 } from "@/lib/listing-job";
-import type { MarketplaceClosetItem } from "@/lib/marketplace-profiles";
+import {
+  checkedPlatformsFromAccounts,
+  matchListingsToClosetItems,
+} from "@/lib/listing-closet-match";
+import type {
+  MarketplaceClosetItem,
+  MarketplaceClosetStatus,
+} from "@/lib/marketplace-profiles";
 import type { ListingStatus, Platform } from "@/lib/types";
 
 export type AdminUserListing = {
   id: string;
   title: string | null;
+  price: number | null;
   platform: Platform;
   status: ListingStatus;
   updatedAt: string;
   photoCount: number;
   hasListingPhoto: boolean;
+  closetMatchStatus: MarketplaceClosetStatus | null;
+  closetChecked: boolean;
 };
 
 export type AdminUserShopLink = {
@@ -74,6 +84,66 @@ export type AdminUserSummary = {
   poshmarkCount: number;
 };
 
+export function adminListingJob(listing: AdminUserListing): ListingJobStep {
+  return listingJobStep({
+    status: listing.status,
+    title: listing.title,
+    hasListingPhoto: listing.hasListingPhoto,
+    closetMatch: listing.closetMatchStatus != null,
+    closetChecked: listing.closetChecked,
+  });
+}
+
+export function decorateAdminUserListings(
+  listings: AdminUserListing[],
+  closetListings: MarketplaceClosetItem[],
+  shopLinks: AdminUserShopLink[]
+): AdminUserListing[] {
+  const matches = matchListingsToClosetItems(listings, closetListings);
+  const checked = checkedPlatformsFromAccounts(shopLinks);
+  return listings.map((listing) => ({
+    ...listing,
+    closetMatchStatus: matches.get(listing.id)?.status ?? null,
+    closetChecked: checked.has(listing.platform),
+  }));
+}
+
+export function applyClosetToAdminUser(
+  user: AdminUserRow,
+  patch: {
+    shopLinks?: AdminUserShopLink[];
+    closetListings?: MarketplaceClosetItem[];
+  }
+): AdminUserRow {
+  const shopLinks = patch.shopLinks ?? user.shopLinks;
+  const closetListings = patch.closetListings ?? user.closetListings;
+  const listings = decorateAdminUserListings(
+    user.listings,
+    closetListings,
+    shopLinks
+  );
+  let postedCount = 0;
+  let photoCount = 0;
+  let lastListingAt: string | null = null;
+  for (const listing of listings) {
+    if (adminListingJob(listing) === "posted") postedCount += 1;
+    photoCount += listing.photoCount;
+    if (!lastListingAt || listing.updatedAt > lastListingAt) {
+      lastListingAt = listing.updatedAt;
+    }
+  }
+  return {
+    ...user,
+    shopLinks,
+    closetListings,
+    listings,
+    listingCount: listings.length,
+    postedCount,
+    photoCount,
+    lastListingAt,
+  };
+}
+
 function listingMatchesFilters(
   listing: AdminUserListing,
   filters: AdminUserFilters
@@ -82,24 +152,13 @@ function listingMatchesFilters(
     return false;
   }
   if (filters.job !== "all") {
-    const job = listingJobStep({
-      status: listing.status,
-      title: listing.title,
-      hasListingPhoto: listing.hasListingPhoto,
-    });
-    if (job !== filters.job) return false;
+    if (adminListingJob(listing) !== filters.job) return false;
   }
   return true;
 }
 
 export function listingJobLabel(listing: AdminUserListing): string {
-  return listingJobStepLabel(
-    listingJobStep({
-      status: listing.status,
-      title: listing.title,
-      hasListingPhoto: listing.hasListingPhoto,
-    })
-  );
+  return listingJobStepLabel(adminListingJob(listing));
 }
 
 export function matchingListings(
@@ -159,7 +218,7 @@ export function summarizeAdminUsers(
     const listings = matchingListings(user, filters);
     listingCount += listings.length;
     for (const listing of listings) {
-      if (listing.status === "posted") postedCount += 1;
+      if (adminListingJob(listing) === "posted") postedCount += 1;
       if (listing.platform === "mercari") mercariCount += 1;
       if (listing.platform === "poshmark") poshmarkCount += 1;
     }

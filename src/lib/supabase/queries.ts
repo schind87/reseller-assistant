@@ -832,6 +832,60 @@ export async function markPosted(id: string): Promise<Listing> {
   });
 }
 
+export type ListingMatchRow = {
+  id: string;
+  platform: Platform;
+  title: string | null;
+  price: number | null;
+  status: ListingStatus;
+};
+
+function coerceListingPrice(value: unknown): number | null {
+  if (value == null) return null;
+  const price = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(price) ? price : null;
+}
+
+export async function listListingMatchRows(
+  userId: string
+): Promise<ListingMatchRow[]> {
+  const supabase = createAdminClient();
+  const { data, error } = await supabase
+    .from("listings")
+    .select("id, platform, title, price, status")
+    .eq("user_id", userId);
+  if (error) throw new Error(`listListingMatchRows: ${error.message}`);
+  return ((data ?? []) as Array<{
+    id: string;
+    platform: Platform;
+    title: string | null;
+    price: unknown;
+    status: ListingStatus;
+  }>).map((row) => ({
+    id: row.id,
+    platform: row.platform,
+    title: row.title,
+    price: coerceListingPrice(row.price),
+    status: row.status,
+  }));
+}
+
+export async function markMatchedListingsPosted(ids: string[]): Promise<void> {
+  if (ids.length === 0) return;
+  const now = new Date().toISOString();
+  const supabase = createAdminClient();
+  const { error } = await supabase
+    .from("listings")
+    .update({
+      status: "posted",
+      posted_at: now,
+      updated_at: now,
+    })
+    .in("id", ids)
+    .neq("status", "posted");
+  if (error) throw new Error(`markMatchedListingsPosted: ${error.message}`);
+}
+
 export function appUrl(path = "", origin?: string | null): string {
   const fallback =
     process.env.NEXT_PUBLIC_APP_URL ||

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { authorizeListingAccess } from "@/lib/listing-access";
+import { loadListingClosetState } from "@/lib/listing-closet";
 import { roundPoshmarkDollars } from "@/lib/poshmark-formats";
 import {
   deleteListing,
@@ -66,11 +67,21 @@ export async function GET(_request: Request, context: RouteContext) {
       return NextResponse.json({ error: "Listing not found" }, { status: 404 });
     }
 
-    const photos: ListingPhotoWithUrl[] = await withSignedPhotoUrls(
-      result.photos
-    );
+    const [photos, closet] = await Promise.all([
+      withSignedPhotoUrls(result.photos),
+      loadListingClosetState(
+        result.listing.user_id,
+        result.listing.id,
+        result.listing.platform
+      ),
+    ]);
 
-    return NextResponse.json({ listing: result.listing, photos });
+    return NextResponse.json({
+      listing: result.listing,
+      photos,
+      closetMatch: closet.closetMatch,
+      closetChecked: closet.closetChecked,
+    });
   } catch (err) {
     console.error("get listing error:", err);
     return NextResponse.json(

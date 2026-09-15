@@ -13,13 +13,18 @@ import {
   listingListSubtitle,
   listingPostedHomeSubtitle,
 } from "@/lib/listing-job";
+import {
+  checkedPlatformsFromAccounts,
+  matchListingsToClosetItems,
+} from "@/lib/listing-closet-match";
 import { PLATFORM_LABELS, PLATFORM_PHOTO_ASPECT } from "@/lib/platforms";
 import {
   type ListingPreferences,
 } from "@/lib/seller-preferences";
-import type {
-  MarketplaceAccount,
-  MarketplaceClosetItem,
+import {
+  closetStatusLabel,
+  type MarketplaceAccount,
+  type MarketplaceClosetItem,
 } from "@/lib/marketplace-profiles";
 import type { Listing, Platform } from "@/lib/types";
 import type { ListingWithThumb } from "@/lib/supabase/queries";
@@ -125,11 +130,26 @@ export function AppHome({
     ),
     ...initialListings.filter((listing) => !deletedIds.includes(listing.id)),
   ];
+  const closetMatches = matchListingsToClosetItems(
+    listings,
+    initialMarketplaceListings
+  );
+  const checkedPlatforms = checkedPlatformsFromAccounts(
+    initialMarketplaceAccounts
+  );
+  const listingJob = (listing: ListingWithThumb) =>
+    listingJobStep({
+      status: listing.status,
+      title: listing.title,
+      hasListingPhoto: listing.hasListingPhoto,
+      closetMatch: closetMatches.has(listing.id),
+      closetChecked: checkedPlatforms.has(listing.platform),
+    });
   const inProgressListings = listings.filter(
-    (listing) => listing.status !== "posted"
+    (listing) => listingJob(listing) !== "posted"
   );
   const postedListings = listings.filter(
-    (listing) => listing.status === "posted"
+    (listing) => listingJob(listing) === "posted"
   );
   const [prefsDone, setPrefsDone] = useState(preferencesCompleted);
   const [preferences, setPreferences] = useState(initialPreferences);
@@ -390,11 +410,7 @@ export function AppHome({
                     deleting={deletingId === listing.id}
                     subtitle={listingListSubtitle(
                       listing.platform,
-                      listingJobStep({
-                        status: listing.status,
-                        title: listing.title,
-                        hasListingPhoto: listing.hasListingPhoto,
-                      }),
+                      listingJob(listing),
                       Boolean(listing.title?.trim())
                     )}
                     onDelete={(id, label) => void deleteListing(id, label)}
@@ -408,18 +424,22 @@ export function AppHome({
                   Posted
                 </h3>
                 <ul className="flex flex-col gap-3">
-                  {postedListings.map((listing) => (
-                    <HomeListingRow
-                      key={listing.id}
-                      listing={listing}
-                      deleting={deletingId === listing.id}
-                      subtitle={listingPostedHomeSubtitle(
-                        listing.platform,
-                        Boolean(listing.title?.trim())
-                      )}
-                      onDelete={(id, label) => void deleteListing(id, label)}
-                    />
-                  ))}
+                  {postedListings.map((listing) => {
+                    const match = closetMatches.get(listing.id);
+                    return (
+                      <HomeListingRow
+                        key={listing.id}
+                        listing={listing}
+                        deleting={deletingId === listing.id}
+                        subtitle={listingPostedHomeSubtitle(
+                          listing.platform,
+                          Boolean(listing.title?.trim()),
+                          match ? closetStatusLabel(match.status) : null
+                        )}
+                        onDelete={(id, label) => void deleteListing(id, label)}
+                      />
+                    );
+                  })}
                 </ul>
               </div>
             ) : null}

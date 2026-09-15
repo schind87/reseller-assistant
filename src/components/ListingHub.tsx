@@ -20,9 +20,11 @@ import { ListingTweakDialog } from "@/components/ListingTweakDialog";
 import { PhotoAspectCrop } from "@/components/PhotoAspectCrop";
 import { QrPanel } from "@/components/QrPanel";
 import {
+  listingJobCanMarkPosted,
   listingJobCanOpenMarketplace,
   listingJobStep,
   listingJobStepLabel,
+  listingPostedBanner,
 } from "@/lib/listing-job";
 import {
   getSeedListingSchema,
@@ -68,6 +70,10 @@ import {
   isPostingPhotoRole,
 } from "@/lib/types";
 import { roundPoshmarkDollars } from "@/lib/poshmark-formats";
+import {
+  closetStatusLabel,
+  type MarketplaceClosetItem,
+} from "@/lib/marketplace-profiles";
 
 type ListingHubProps = {
   listingId: string;
@@ -77,6 +83,8 @@ type ListingHubProps = {
 type ListingPayload = {
   listing: Listing;
   photos: ListingPhotoWithUrl[];
+  closetMatch: MarketplaceClosetItem | null;
+  closetChecked: boolean;
 };
 
 /** Keep prior signed URLs when storage paths are unchanged so poll refreshes don't flash images. */
@@ -104,6 +112,16 @@ function mergePhotosWithStableUrls(
         old.processedSignedThumbUrl ?? photo.processedSignedThumbUrl,
     };
   });
+}
+
+function closetSnapshot(data: ListingPayload): string {
+  return [
+    data.closetChecked ? "1" : "0",
+    data.closetMatch?.id ?? "",
+    data.closetMatch?.status ?? "",
+    data.closetMatch?.title ?? "",
+    data.closetMatch?.price ?? "",
+  ].join("|");
 }
 
 function listingSnapshot(listing: Listing): string {
@@ -384,16 +402,26 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
         if (!res.ok) throw new Error(json.error ?? "Could not load listing");
         const listing = json.listing as Listing;
         const photos = json.photos as ListingPhotoWithUrl[];
+        const closetMatch =
+          (json.closetMatch as MarketplaceClosetItem | null | undefined) ?? null;
+        const closetChecked = Boolean(json.closetChecked);
         setData((prev) => {
           const mergedPhotos = mergePhotosWithStableUrls(prev?.photos, photos);
+          const next: ListingPayload = {
+            listing,
+            photos: mergedPhotos,
+            closetMatch,
+            closetChecked,
+          };
           if (
             prev &&
             listingSnapshot(prev.listing) === listingSnapshot(listing) &&
-            photosSnapshot(prev.photos) === photosSnapshot(mergedPhotos)
+            photosSnapshot(prev.photos) === photosSnapshot(mergedPhotos) &&
+            closetSnapshot(prev) === closetSnapshot(next)
           ) {
             return prev;
           }
-          return { listing, photos: mergedPhotos };
+          return next;
         });
         setError(null);
 
@@ -878,6 +906,7 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
       );
       setDraftDirty(false);
       setStatusMessage("Listing fields saved.");
+      void load({ syncDraft: false });
       return true;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not save");
@@ -1405,6 +1434,16 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
     status: listing.status,
     title,
     hasListingPhoto: listingPhotos.length > 0,
+    closetMatch: Boolean(data.closetMatch),
+    closetChecked: data.closetChecked,
+  });
+  const postedBanner = listingPostedBanner({
+    platform,
+    job: jobStep,
+    closetChecked: data.closetChecked,
+    closetStatusLabel: data.closetMatch
+      ? closetStatusLabel(data.closetMatch.status)
+      : null,
   });
   const fieldsAiBusy = processing || rewritingDescription || saving;
   const canFillFieldsWithAi = listingPhotos.length > 0;
@@ -1450,9 +1489,9 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
             </p>
           ) : null}
 
-          {jobStep === "posted" ? (
+          {postedBanner ? (
             <p className="rounded-xl bg-[var(--accent-soft)] px-4 py-3 text-base text-[var(--accent)]">
-              Marked as posted on {PLATFORM_LABELS[platform]}.
+              {postedBanner}
             </p>
           ) : null}
 
@@ -1837,7 +1876,7 @@ export function ListingHub({ listingId, isAdmin = false }: ListingHubProps) {
                           : `Open ${PLATFORM_LABELS[platform]}`}
                       </BigButton>
                     ) : null}
-                    {jobStep === "mark_posted" ? (
+                    {listingJobCanMarkPosted(jobStep, data.closetChecked) ? (
                       <BigButton
                         type="button"
                         variant="ghost"

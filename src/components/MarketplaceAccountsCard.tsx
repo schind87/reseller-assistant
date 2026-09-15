@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
+import { useRouter } from "next/navigation";
 import { BigButton } from "@/components/BigButton";
 import {
   checkClosetWithExtension,
@@ -11,6 +12,7 @@ import {
   closetCheckHint,
   closetFindHint,
   closetLinkConfirmMessage,
+  closetMatchedDraftsCopy,
   closetStatusLabel,
   groupClosetItemsByStatus,
   marketplaceClosetUrl,
@@ -25,6 +27,7 @@ import type { Platform } from "@/lib/types";
 type ClosetPayload = {
   accounts: MarketplaceAccount[];
   listings: MarketplaceClosetItem[];
+  matchedDraftCount?: number;
   error?: string;
 };
 
@@ -134,6 +137,7 @@ export function MarketplaceAccountsCard({
   initialAccounts = [],
   initialListings = [],
 }: MarketplaceAccountsCardProps) {
+  const router = useRouter();
   const [accounts, setAccounts] = useState(initialAccounts);
   const [listings, setListings] = useState(initialListings);
   const [drafts, setDrafts] = useState<Record<Platform, string>>(() => ({
@@ -141,6 +145,7 @@ export function MarketplaceAccountsCard({
     poshmark: accountFor(initialAccounts, "poshmark")?.username ?? "",
   }));
   const [error, setError] = useState<string | null>(null);
+  const [checkMessage, setCheckMessage] = useState<string | null>(null);
   const [linking, setLinking] = useState<Platform | null>(null);
   const [finding, setFinding] = useState<Platform | null>(null);
   const [checking, setChecking] = useState<Platform | null>(null);
@@ -160,6 +165,7 @@ export function MarketplaceAccountsCard({
   async function saveLinkedUsername(platform: Platform, username: string) {
     setLinking(platform);
     setError(null);
+    setCheckMessage(null);
     try {
       const res = await fetch("/api/marketplace/closet", {
         method: "PUT",
@@ -195,6 +201,7 @@ export function MarketplaceAccountsCard({
   async function findAndLinkCloset(platform: Platform) {
     setFinding(platform);
     setError(null);
+    setCheckMessage(null);
     try {
       const present = await detectExtensionPresent();
       if (!present) {
@@ -236,6 +243,7 @@ export function MarketplaceAccountsCard({
   async function unlinkCloset(platform: Platform) {
     setUnlinking(platform);
     setError(null);
+    setCheckMessage(null);
     try {
       const res = await fetch(
         `/api/marketplace/closet?platform=${encodeURIComponent(platform)}`,
@@ -260,6 +268,7 @@ export function MarketplaceAccountsCard({
 
     setChecking(platform);
     setError(null);
+    setCheckMessage(null);
     try {
       const present = await detectExtensionPresent();
       if (!present) {
@@ -305,6 +314,10 @@ export function MarketplaceAccountsCard({
         throw new Error(json.error ?? "Could not save closet listings");
       }
       applyPayload(json);
+      const matched =
+        typeof json.matchedDraftCount === "number" ? json.matchedDraftCount : 0;
+      setCheckMessage(closetMatchedDraftsCopy(matched, platform));
+      router.refresh();
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Could not check listings"
@@ -321,7 +334,8 @@ export function MarketplaceAccountsCard({
           Linked closets
         </h2>
         <p className="mt-1 text-base text-[var(--muted)]">
-          Live closet cards from Check listings. Drafts stay on All listings.
+          Live closet cards from Check listings. Matching drafts show as Posted
+          on All listings.
         </p>
       </div>
 
@@ -331,6 +345,15 @@ export function MarketplaceAccountsCard({
           className="rounded-xl bg-red-50 px-4 py-3 text-base text-red-800"
         >
           {error}
+        </p>
+      ) : null}
+
+      {checkMessage ? (
+        <p
+          role="status"
+          className="rounded-xl bg-[var(--accent-soft)] px-4 py-3 text-base text-[var(--accent)]"
+        >
+          {checkMessage}
         </p>
       ) : null}
 

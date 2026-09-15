@@ -41,7 +41,7 @@ There is no table component.
 - **Scope:** Listing rows and hub eyebrow
 - **Rule:** Show marketplace + job or closet status as muted/eyebrow text, not colored status pills. Draft jobs use `listingJobStepLabel`. Closet cards use `closetStatusLabel`.
 - **Rationale:** Status is supporting information; the title and primary action matter more.
-- **Evidence:** Home subtitle; hub eyebrow; Posted drafts sit under a Posted heading. Closet cards are Profile / Users only.
+- **Evidence:** Home subtitle; hub eyebrow; Posted drafts sit under a Posted heading. After Check listings, Posted rows may show closet Active/Sold as muted subtitle text. Closet cards themselves stay on Profile / Users.
 - **Exceptions:** None yet — pill language is a coverage gap, not a standard.
 
 ## Good patterns

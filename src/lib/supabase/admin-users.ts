@@ -6,10 +6,11 @@ import { deleteListing } from "@/lib/supabase/queries";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { listMarketplaceAccountsByUserId, listMarketplaceClosetItemsByUserId } from "@/lib/supabase/marketplace-closet";
 import { isPostingPhotoRole, type ListingStatus, type PhotoRole, type Platform } from "@/lib/types";
-import type {
-  AdminUserListing,
-  AdminUserRow,
-  AdminUserShopLink,
+import {
+  applyClosetToAdminUser,
+  type AdminUserListing,
+  type AdminUserRow,
+  type AdminUserShopLink,
 } from "@/lib/admin-users";
 import type { MarketplaceClosetItem } from "@/lib/marketplace-profiles";
 
@@ -30,6 +31,7 @@ type ListingRow = {
   platform: Platform;
   status: ListingStatus;
   title: string | null;
+  price: number | string | null;
   updated_at: string;
 };
 
@@ -76,7 +78,7 @@ export async function listAdminUsers(): Promise<AdminUserRow[]> {
     selectAll<ListingRow>(async (from, to) => {
       const { data, error } = await supabase
         .from("listings")
-        .select("id, user_id, platform, status, title, updated_at")
+        .select("id, user_id, platform, status, title, price, updated_at")
         .order("updated_at", { ascending: false })
         .range(from, to);
       if (error) throw new Error(`listAdminUsers listings: ${error.message}`);
@@ -108,14 +110,23 @@ export async function listAdminUsers(): Promise<AdminUserRow[]> {
 
   const listingsByUser = new Map<string | null, AdminUserListing[]>();
   for (const listing of listings) {
+    const parsedPrice =
+      listing.price == null
+        ? null
+        : typeof listing.price === "number"
+          ? listing.price
+          : Number(listing.price);
     const row: AdminUserListing = {
       id: listing.id,
       title: listing.title,
+      price: parsedPrice == null || Number.isNaN(parsedPrice) ? null : parsedPrice,
       platform: listing.platform,
       status: listing.status,
       updatedAt: listing.updated_at,
       photoCount: photoCountByListing.get(listing.id) ?? 0,
       hasListingPhoto: postingPhotoByListing.has(listing.id),
+      closetMatchStatus: null,
+      closetChecked: false,
     };
     const key = listing.user_id;
     const list = listingsByUser.get(key) ?? [];
@@ -208,31 +219,24 @@ function toUserRow(input: {
   const listings = input.listings.toSorted((a, b) =>
     b.updatedAt.localeCompare(a.updatedAt)
   );
-  let postedCount = 0;
-  let photoCount = 0;
-  let lastListingAt: string | null = null;
-  for (const listing of listings) {
-    if (listing.status === "posted") postedCount += 1;
-    photoCount += listing.photoCount;
-    if (!lastListingAt || listing.updatedAt > lastListingAt) {
-      lastListingAt = listing.updatedAt;
-    }
-  }
-  return {
-    id: input.id,
-    email: input.email,
-    createdAt: input.createdAt,
-    hasPin: input.hasPin,
-    prefsCompleted: input.prefsCompleted,
-    defaultStore: input.defaultStore,
-    listingCount: listings.length,
-    postedCount,
-    photoCount,
-    lastListingAt,
-    listings,
-    shopLinks: input.shopLinks,
-    closetListings: input.closetListings,
-  };
+  return applyClosetToAdminUser(
+    {
+      id: input.id,
+      email: input.email,
+      createdAt: input.createdAt,
+      hasPin: input.hasPin,
+      prefsCompleted: input.prefsCompleted,
+      defaultStore: input.defaultStore,
+      listingCount: listings.length,
+      postedCount: 0,
+      photoCount: 0,
+      lastListingAt: null,
+      listings,
+      shopLinks: input.shopLinks,
+      closetListings: input.closetListings,
+    },
+    {}
+  );
 }
 
 export async function deleteAdminUser(userId: string): Promise<void> {

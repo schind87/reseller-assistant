@@ -225,6 +225,13 @@ function closetStatusBucket(
   }
 }
 
+export function closetMatchedDraftsCopy(
+  count: number,
+  platform: Platform
+): string {
+  return `Found ${count} of your drafts on ${PLATFORM_LABELS[platform]}.`;
+}
+
 export function closetCheckHint(platform: Platform): string {
   return `Sign in to ${PLATFORM_LABELS[platform]} in Chrome, then tap Check listings.`;
 }

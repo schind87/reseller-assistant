@@ -13,8 +13,14 @@ export function listingJobStep(input: {
   status: ListingStatus;
   title: string | null | undefined;
   hasListingPhoto: boolean;
+  closetMatch?: boolean;
+  closetChecked?: boolean;
 }): ListingJobStep {
-  if (input.status === "posted") return "posted";
+  if (input.closetMatch) return "posted";
+  if (input.status === "posted") {
+    if (input.closetChecked) return "mark_posted";
+    return "posted";
+  }
   if (input.status === "posting") return "mark_posted";
   if (!input.hasListingPhoto) return "add_photos";
   if (!input.title?.trim()) return "finish_with_ai";
@@ -72,12 +78,36 @@ export function listingListSubtitle(
   return `${PLATFORM_LABELS[platform]} · ${state}`;
 }
 
-/** Home Posted section already names the job; do not repeat it in the subtitle. */
+/** Home Posted section already names the job; closet status replaces a second Posted label. */
 export function listingPostedHomeSubtitle(
   platform: Platform,
-  titled: boolean
+  titled: boolean,
+  closetLabel?: string | null
 ): string | null {
-  return titled ? PLATFORM_LABELS[platform] : null;
+  const store = PLATFORM_LABELS[platform];
+  if (closetLabel) {
+    return titled ? `${store} · ${closetLabel}` : closetLabel;
+  }
+  return titled ? store : null;
+}
+
+export function listingPostedBanner(input: {
+  platform: Platform;
+  job: ListingJobStep;
+  closetChecked: boolean;
+  closetStatusLabel: string | null;
+}): string | null {
+  const store = PLATFORM_LABELS[input.platform];
+  if (input.closetStatusLabel) {
+    return `${input.closetStatusLabel} on ${store}.`;
+  }
+  if (input.job === "posted") {
+    return `Marked as posted on ${store}.`;
+  }
+  if (input.job === "mark_posted" && input.closetChecked) {
+    return `Not on ${store} yet. Check listings on Profile.`;
+  }
+  return null;
 }
 
 export function listingJobCanOpenMarketplace(step: ListingJobStep): boolean {
@@ -94,6 +124,13 @@ export function listingJobCanOpenMarketplace(step: ListingJobStep): boolean {
       return _exhaustive;
     }
   }
+}
+
+export function listingJobCanMarkPosted(
+  step: ListingJobStep,
+  closetChecked: boolean
+): boolean {
+  return step === "mark_posted" && !closetChecked;
 }
 
 export function listingJobBusyLabel(

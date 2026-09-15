@@ -20,6 +20,14 @@ export type WhatsNewItem = {
  */
 export const WHATS_NEW: WhatsNewItem[] = [
   {
+    id: "posted-from-store",
+    date: "2026-09-15",
+    title: "Check listings confirms Posted",
+    helper: true,
+    body:
+      "After Check listings, drafts that match a Mercari or Poshmark closet card show as Posted on All listings. Mark as posted is only if you have not checked that store yet.",
+  },
+  {
     id: "listing-status-jobs-vs-closet",
     date: "2026-09-15",
     title: "Posted drafts are not closet Active or Sold",

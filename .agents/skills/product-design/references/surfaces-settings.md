@@ -35,7 +35,7 @@ Profile mode in [AppHome.tsx](../../../../src/components/AppHome.tsx): eyebrow �
 ## Good patterns
 
 - Sign out is `BigButton variant="ghost"` at the bottom — available, not tempting.
-- Linked closets sit after seller preferences: Find my closet (Chrome helper + confirm), optional paste, Check listings, Open closet. Live marketplace listings are a Profile list, not a second home dashboard.
+- Linked closets sit after seller preferences: Find my closet (Chrome helper + confirm), optional paste, Check listings, Open closet. Live marketplace listings are a Profile list, not a second home dashboard. Check listings also confirms matching drafts as Posted on All listings.
 - Chrome helper install is on Profile: Chrome Web Store when `NEXT_PUBLIC_CHROME_WEB_STORE_ID` is set, otherwise the zip + Load unpacked steps. Privacy is linked from sign-in and the helper card. What’s new is a text link above Sign out (and on sign-in next to Privacy).
 
 ## Bad patterns

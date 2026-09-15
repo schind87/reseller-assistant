@@ -23,6 +23,7 @@ import type { Platform } from "@/lib/types";
 type ClosetResponse = {
   shopLinks?: AdminUserShopLink[];
   listings?: MarketplaceClosetItem[];
+  matchedDraftCount?: number;
   error?: string;
 };
 
@@ -119,6 +120,7 @@ export function AdminUserShopLinks({
     poshmark: linkFor(shopLinks, "poshmark")?.username ?? "",
   }));
   const [error, setError] = useState<string | null>(null);
+  const [checkMessage, setCheckMessage] = useState<string | null>(null);
   const [linking, setLinking] = useState<Platform | null>(null);
   const [unlinking, setUnlinking] = useState<Platform | null>(null);
   const [checking, setChecking] = useState<Platform | null>(null);
@@ -138,6 +140,7 @@ export function AdminUserShopLinks({
 
     setLinking(platform);
     setError(null);
+    setCheckMessage(null);
     try {
       const res = await fetch(`/api/admin/users/${userId}/closet`, {
         method: "PUT",
@@ -170,6 +173,7 @@ export function AdminUserShopLinks({
 
     setUnlinking(platform);
     setError(null);
+    setCheckMessage(null);
     try {
       const res = await fetch(
         `/api/admin/users/${userId}/closet?platform=${encodeURIComponent(platform)}`,
@@ -202,6 +206,7 @@ export function AdminUserShopLinks({
 
     setChecking(platform);
     setError(null);
+    setCheckMessage(null);
     try {
       const present = await detectExtensionPresent();
       if (!present) {
@@ -248,6 +253,11 @@ export function AdminUserShopLinks({
       }
       if (json.shopLinks) onShopLinksChange(json.shopLinks);
       if (json.listings) onClosetListingsChange(json.listings);
+      const matched =
+        typeof json.matchedDraftCount === "number" ? json.matchedDraftCount : 0;
+      setCheckMessage(
+        `Found ${matched} of this seller's drafts on ${PLATFORM_LABELS[platform]}.`
+      );
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Could not check listings"
@@ -268,6 +278,14 @@ export function AdminUserShopLinks({
           className="rounded-xl bg-red-50 px-4 py-3 text-base text-red-800"
         >
           {error}
+        </p>
+      ) : null}
+      {checkMessage ? (
+        <p
+          role="status"
+          className="rounded-xl bg-[var(--accent-soft)] px-4 py-3 text-base text-[var(--accent)]"
+        >
+          {checkMessage}
         </p>
       ) : null}
       {SUPPORTED_SELLING_WEBSITES.map((platform) => {

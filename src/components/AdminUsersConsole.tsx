@@ -6,6 +6,8 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   ADMIN_USER_JOB_FILTERS,
   adminUserFiltersToSearch,
+  applyClosetToAdminUser,
+  adminListingJob,
   filterAdminUsers,
   formatAdminUserSummary,
   listingJobLabel,
@@ -160,7 +162,7 @@ export function AdminUsersConsole({
           let photoCount = 0;
           let lastListingAt: string | null = null;
           for (const listing of listings) {
-            if (listing.status === "posted") postedCount += 1;
+            if (adminListingJob(listing) === "posted") postedCount += 1;
             photoCount += listing.photoCount;
             if (!lastListingAt || listing.updatedAt > lastListingAt) {
               lastListingAt = listing.updatedAt;
@@ -379,7 +381,9 @@ export function AdminUsersConsole({
                         onShopLinksChange={(shopLinks) =>
                           setUsers((prev) =>
                             prev.map((row) =>
-                              row.id === user.id ? { ...row, shopLinks } : row
+                              row.id === user.id
+                                ? applyClosetToAdminUser(row, { shopLinks })
+                                : row
                             )
                           )
                         }
@@ -387,7 +391,7 @@ export function AdminUsersConsole({
                           setUsers((prev) =>
                             prev.map((row) =>
                               row.id === user.id
-                                ? { ...row, closetListings }
+                                ? applyClosetToAdminUser(row, { closetListings })
                                 : row
                             )
                           )

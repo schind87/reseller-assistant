@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { confirmPostedFromCloset } from "@/lib/listing-closet";
 import {
   MARKETPLACE_CLOSET_STATUS,
   type MarketplaceAccount,
@@ -40,6 +41,7 @@ export type MarketplaceClosetCheckBody = z.infer<
 export type MarketplaceClosetCheckResult = {
   accounts: MarketplaceAccount[];
   listings: MarketplaceClosetItem[];
+  matchedDraftCount?: number;
   error?: string;
 };
 
@@ -142,6 +144,11 @@ export async function applyMarketplaceClosetCheck(
     body.platform,
     items
   );
+  const matchedDraftCount = await confirmPostedFromCloset(
+    userId,
+    body.platform,
+    listings
+  );
   const accounts = await listMarketplaceAccounts(userId);
-  return { accounts, listings };
+  return { accounts, listings, matchedDraftCount };
 }
