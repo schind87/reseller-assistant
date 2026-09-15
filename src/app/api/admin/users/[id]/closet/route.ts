@@ -1,18 +1,16 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { requireAdmin } from "@/lib/admin";
-import type { AdminUserShopLink } from "@/lib/admin-users";
 import {
-  applyMarketplaceClosetCheck,
-  marketplaceClosetCheckBodySchema,
-  marketplacePlatformSchema,
-} from "@/lib/marketplace-closet-check";
+  adminClosetCheckResponse,
+  profileExists,
+  shopLinksPayload,
+} from "@/lib/admin-closet-api";
+import { requireAdmin } from "@/lib/admin";
+import { marketplacePlatformSchema } from "@/lib/marketplace-closet-check";
 import {
   closetUsernameParseError,
   parseMarketplaceUsername,
-  type MarketplaceAccount,
 } from "@/lib/marketplace-profiles";
-import { createAdminClient } from "@/lib/supabase/admin";
 import {
   deleteMarketplaceAccount,
   listMarketplaceAccounts,
@@ -26,28 +24,6 @@ const linkBody = z.object({
   platform: marketplacePlatformSchema,
   username: z.string().min(1).max(120),
 });
-
-async function profileExists(userId: string): Promise<boolean> {
-  const supabase = createAdminClient();
-  const { data, error } = await supabase
-    .from("profiles")
-    .select("id")
-    .eq("id", userId)
-    .maybeSingle();
-  if (error) throw new Error(`admin closet profile: ${error.message}`);
-  return Boolean(data);
-}
-
-function shopLinksPayload(
-  accounts: MarketplaceAccount[]
-): AdminUserShopLink[] {
-  return accounts.map((account) => ({
-    platform: account.platform,
-    username: account.username,
-    lastCheckedAt: account.lastCheckedAt,
-    lastCheckError: account.lastCheckError,
-  }));
-}
 
 export async function PUT(request: Request, context: RouteContext) {
   const auth = await requireAdmin();
@@ -162,32 +138,8 @@ export async function POST(request: Request, context: RouteContext) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    const json = await request.json();
-    const parsed = marketplaceClosetCheckBodySchema.safeParse(json);
-    if (!parsed.success) {
-      return NextResponse.json(
-        { error: "Could not save closet listings" },
-        { status: 400 }
-      );
-    }
-
-    const linked = await listMarketplaceAccounts(id);
-    const hasPlatform = linked.some(
-      (account) => account.platform === parsed.data.platform
-    );
-    if (!hasPlatform) {
-      return NextResponse.json(
-        { error: "Link this closet first" },
-        { status: 400 }
-      );
-    }
-
-    const result = await applyMarketplaceClosetCheck(id, parsed.data);
-    return NextResponse.json({
-      ...result,
-      shopLinks: shopLinksPayload(result.accounts),
-      listings: result.listings,
-    });
+    const json = await request.json().catch(() => null);
+    return await adminClosetCheckResponse(id, json);
   } catch (err) {
     console.error("admin check closet error:", err);
     return NextResponse.json(

@@ -20,6 +20,14 @@ export type WhatsNewItem = {
  */
 export const WHATS_NEW: WhatsNewItem[] = [
   {
+    id: "admin-check-listings-helper-rpc",
+    date: "2026-09-15",
+    title: "Check listings from Users keeps talking to the helper",
+    helper: true,
+    body:
+      "Check listings from Users could stop if the Chrome helper lost its connection mid-check. The helper now answers even when that happens, and closet cards still save on that seller.",
+  },
+  {
     id: "admin-check-listings-seller",
     date: "2026-09-15",
     title: "Check listings on Users saves that seller’s closet",

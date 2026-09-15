@@ -26,8 +26,11 @@ export const marketplaceClosetCheckItemSchema = z.object({
 
 export const marketplaceClosetCheckBodySchema = z.object({
   platform: marketplacePlatformSchema,
-  listings: z.array(z.unknown()).max(200),
-  error: z.string().max(240).optional(),
+  listings: z.array(z.unknown()).transform((listings) => listings.slice(0, 200)),
+  error: z
+    .string()
+    .optional()
+    .transform((value) => (value ? value.slice(0, 240) : value)),
 });
 
 export type MarketplaceClosetCheckBody = z.infer<
@@ -113,16 +116,17 @@ export async function applyMarketplaceClosetCheck(
     return { accounts, listings, error: body.error };
   }
 
-  const items: ClosetCheckItemInput[] = [];
+  const itemsById = new Map<string, ClosetCheckItemInput>();
   for (const raw of body.listings) {
     const item = normalizeClosetCheckItem(raw);
     if (!item) continue;
+    if (itemsById.has(item.externalId)) continue;
     const url = sanitizeHttpsUrl(item.url, body.platform);
     if (!url) continue;
     const thumbnailUrl = item.thumbnailUrl
       ? sanitizeHttpsUrl(item.thumbnailUrl)
       : null;
-    items.push({
+    itemsById.set(item.externalId, {
       externalId: item.externalId,
       title: item.title?.trim() || null,
       price: item.price,
@@ -131,6 +135,7 @@ export async function applyMarketplaceClosetCheck(
       thumbnailUrl,
     });
   }
+  const items = [...itemsById.values()];
 
   const listings = await replaceMarketplaceClosetItems(
     userId,
