@@ -378,20 +378,11 @@ export function AdminUsersConsole({
                         userLabel={label}
                         shopLinks={user.shopLinks}
                         closetListings={user.closetListings}
-                        onShopLinksChange={(shopLinks) =>
+                        onClosetChange={(patch) =>
                           setUsers((prev) =>
                             prev.map((row) =>
                               row.id === user.id
-                                ? applyClosetToAdminUser(row, { shopLinks })
-                                : row
-                            )
-                          )
-                        }
-                        onClosetListingsChange={(closetListings) =>
-                          setUsers((prev) =>
-                            prev.map((row) =>
-                              row.id === user.id
-                                ? applyClosetToAdminUser(row, { closetListings })
+                                ? applyClosetToAdminUser(row, patch)
                                 : row
                             )
                           )

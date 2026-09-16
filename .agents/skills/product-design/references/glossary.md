@@ -53,7 +53,7 @@ Do not invent a second word for a listed concept. Code identifiers may differ (e
 
 `ListingStatus`: `drafting_photos`, `processing`, `ready`, `posting`, `posted`.
 
-Seller-facing job states (not raw status slugs): Needs photos, Review draft, Ready to post, Confirm posted, Posted. **Posted** means Check listings found a matching closet card, or the seller marked it posted before that store was checked. **Mark as posted** is the fallback when the closet has not been checked yet.
+Seller-facing job states (not raw status slugs): Needs photos, Review draft, Ready to post, Confirm posted, Posted. **Posted** means Check listings found a matching closet card (same store, same title; price only if two pieces share a title), or the seller marked it posted before that store was checked. **Mark as posted** is the fallback when the closet has not been checked yet. Missing closet prices do not block a unique title match. Untitled drafts never match.
 
 Untitled home rows use `{Platform} draft` as the title and the job state alone as the subtitle so the marketplace is not repeated. Home groups **Posted** under its own heading. After Check listings, Posted subtitles can include closet Active, Sold, and other closet labels.
 

@@ -42,9 +42,11 @@ export function AdminBar({ initialAdmin }: AdminBarProps) {
     if (!nav) return;
 
     function syncHeight() {
+      const node = navRef.current;
+      if (!node) return;
       document.documentElement.style.setProperty(
         "--admin-bar-height",
-        `${nav.offsetHeight}px`
+        `${node.offsetHeight}px`
       );
     }
 

@@ -18,17 +18,27 @@ export function normalizeMatchTitle(
   title: string | null | undefined
 ): string | null {
   if (!title) return null;
-  const normalized = title.trim().toLowerCase().replace(/\s+/g, " ");
+  const normalized = title
+    .replace(/[\u2018\u2019\u201A\u201B]/g, "'")
+    .replace(/[\u201C\u201D\u201E\u201F]/g, '"')
+    .replace(/[\u2010-\u2015\u2212]/g, "-")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ");
   return normalized || null;
 }
 
-export function pricesMatch(
-  a: number | null | undefined,
-  b: number | null | undefined
-): boolean {
-  if (a == null || b == null) return false;
-  if (!Number.isFinite(a) || !Number.isFinite(b)) return false;
-  return Math.round(a * 100) === Math.round(b * 100);
+export function coerceMatchPrice(value: unknown): number | null {
+  if (value == null || value === "") return null;
+  const price = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(price) ? price : null;
+}
+
+export function pricesMatch(a: unknown, b: unknown): boolean {
+  const left = coerceMatchPrice(a);
+  const right = coerceMatchPrice(b);
+  if (left == null || right == null) return false;
+  return Math.round(left * 100) === Math.round(right * 100);
 }
 
 function listingMatchPriority(status: ListingStatus): number {
@@ -82,7 +92,11 @@ export function listingClosetState(
   };
 }
 
-/** Unique greedy match: same store, normalized title, price when it distinguishes. */
+function closetItemKey(item: MarketplaceClosetItem): string {
+  return item.id || item.externalId || item.url;
+}
+
+/** Same store, titled drafts only. Title first; price only splits duplicate titles. */
 export function matchListingsToClosetItems(
   listings: ClosetMatchableListing[],
   items: MarketplaceClosetItem[]
@@ -119,35 +133,37 @@ function matchPlatform(
   ): void {
     matches.set(listing.id, item);
     usedListingIds.add(listing.id);
-    usedItemIds.add(item.id);
+    usedItemIds.add(closetItemKey(item));
   }
 
-  for (const listing of titledListings) {
-    const title = normalizeMatchTitle(listing.title);
-    if (!title) continue;
-    const candidates = titledItems.filter(
-      (item) =>
-        !usedItemIds.has(item.id) &&
-        normalizeMatchTitle(item.title) === title &&
-        pricesMatch(listing.price, item.price)
-    );
-    if (candidates.length > 0) {
-      take(listing, candidates[0]!);
+  const listingsByTitle = groupListingsByTitle(titledListings);
+  const itemsByTitle = groupItemsByTitle(titledItems);
+
+  for (const groupListings of listingsByTitle.values()) {
+    const title = normalizeMatchTitle(groupListings[0]?.title);
+    const groupItems = title ? (itemsByTitle.get(title) ?? []) : [];
+
+    for (const listing of groupListings) {
+      if (usedListingIds.has(listing.id)) continue;
+      const priced = groupItems.filter(
+        (item) =>
+          !usedItemIds.has(closetItemKey(item)) &&
+          pricesMatch(listing.price, item.price)
+      );
+      if (priced.length > 0) {
+        take(listing, priced[0]!);
+      }
     }
-  }
 
-  const remainingListings = titledListings.filter(
-    (row) => !usedListingIds.has(row.id)
-  );
-  const remainingItems = titledItems.filter((item) => !usedItemIds.has(item.id));
-  const listingsByTitle = groupListingsByTitle(remainingListings);
-  const itemsByTitle = groupItemsByTitle(remainingItems);
-
-  for (const [title, groupListings] of listingsByTitle) {
-    const groupItems = itemsByTitle.get(title) ?? [];
-    const count = Math.min(groupListings.length, groupItems.length);
+    const leftoverListings = groupListings.filter(
+      (row) => !usedListingIds.has(row.id)
+    );
+    const leftoverItems = groupItems.filter(
+      (item) => !usedItemIds.has(closetItemKey(item))
+    );
+    const count = Math.min(leftoverListings.length, leftoverItems.length);
     for (let index = 0; index < count; index += 1) {
-      take(groupListings[index]!, groupItems[index]!);
+      take(leftoverListings[index]!, leftoverItems[index]!);
     }
   }
 }

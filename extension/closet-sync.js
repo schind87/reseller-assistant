@@ -132,7 +132,23 @@ function raParsePrice(raw) {
   if (raw && typeof raw === "object") {
     if (raw.val != null) return raParsePrice(raw.val);
     if (raw.amount != null) return raParsePrice(raw.amount);
+    if (raw.price_amount != null) return raParsePrice(raw.price_amount);
     if (typeof raw.cents === "number") return raParsePrice(raw.cents / 100);
+  }
+  return null;
+}
+
+function raRecordPrice(record) {
+  const candidates = [
+    record.price_amount,
+    record.asking_price,
+    record.original_price,
+    record.price,
+    record.amount,
+  ];
+  for (const candidate of candidates) {
+    const parsed = raParsePrice(candidate);
+    if (parsed != null) return parsed;
   }
   return null;
 }
@@ -231,11 +247,7 @@ function raWalkJsonListings(value, seen, listings, depth, visiting) {
     raPushListing(seen, listings, {
       externalId: id,
       title,
-      price:
-        record.price ||
-        record.price_amount ||
-        record.original_price ||
-        record.asking_price,
+      price: raRecordPrice(record),
       status:
         record.status ||
         record.inventory?.status ||

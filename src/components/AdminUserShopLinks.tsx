@@ -44,8 +44,10 @@ type AdminUserShopLinksProps = {
   userLabel: string;
   shopLinks: AdminUserShopLink[];
   closetListings: MarketplaceClosetItem[];
-  onShopLinksChange: (shopLinks: AdminUserShopLink[]) => void;
-  onClosetListingsChange: (listings: MarketplaceClosetItem[]) => void;
+  onClosetChange: (patch: {
+    shopLinks?: AdminUserShopLink[];
+    closetListings?: MarketplaceClosetItem[];
+  }) => void;
 };
 
 function linkFor(
@@ -112,8 +114,7 @@ export function AdminUserShopLinks({
   userLabel,
   shopLinks,
   closetListings,
-  onShopLinksChange,
-  onClosetListingsChange,
+  onClosetChange,
 }: AdminUserShopLinksProps) {
   const [drafts, setDrafts] = useState<Record<Platform, string>>(() => ({
     mercari: linkFor(shopLinks, "mercari")?.username ?? "",
@@ -126,8 +127,10 @@ export function AdminUserShopLinks({
   const [checking, setChecking] = useState<Platform | null>(null);
 
   function applyPayload(json: ClosetResponse, fallbackShopLinks: AdminUserShopLink[]) {
-    onShopLinksChange(json.shopLinks ?? fallbackShopLinks);
-    if (json.listings) onClosetListingsChange(json.listings);
+    onClosetChange({
+      shopLinks: json.shopLinks ?? fallbackShopLinks,
+      closetListings: json.listings,
+    });
   }
 
   async function handleLink(platform: Platform, event: FormEvent) {
@@ -183,15 +186,12 @@ export function AdminUserShopLinks({
       if (!res.ok) {
         throw new Error(json.error ?? "Could not unlink closet");
       }
-      applyPayload(
-        json,
-        shopLinks.filter((link) => link.platform !== platform)
-      );
-      if (!json.listings) {
-        onClosetListingsChange(
-          closetListings.filter((item) => item.platform !== platform)
-        );
-      }
+      onClosetChange({
+        shopLinks: json.shopLinks ?? shopLinks.filter((link) => link.platform !== platform),
+        closetListings:
+          json.listings ??
+          closetListings.filter((item) => item.platform !== platform),
+      });
       setDrafts((prev) => ({ ...prev, [platform]: "" }));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not unlink closet");
@@ -251,8 +251,10 @@ export function AdminUserShopLinks({
       if (!res.ok) {
         throw new Error(json.error ?? "Could not save closet listings");
       }
-      if (json.shopLinks) onShopLinksChange(json.shopLinks);
-      if (json.listings) onClosetListingsChange(json.listings);
+      onClosetChange({
+        shopLinks: json.shopLinks,
+        closetListings: json.listings,
+      });
       const matched =
         typeof json.matchedDraftCount === "number" ? json.matchedDraftCount : 0;
       setCheckMessage(

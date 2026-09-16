@@ -20,6 +20,14 @@ export type WhatsNewItem = {
  */
 export const WHATS_NEW: WhatsNewItem[] = [
   {
+    id: "check-listings-title-posted",
+    date: "2026-09-16",
+    title: "Check listings marks matching drafts Posted",
+    helper: true,
+    body:
+      "After Check listings on Profile or Users, a clothing listing whose title is on Mercari or Poshmark shows as Posted. Price is only used when two pieces share a title. Untitled drafts stay unconfirmed.",
+  },
+  {
     id: "posted-from-store",
     date: "2026-09-15",
     title: "Check listings confirms Posted",
