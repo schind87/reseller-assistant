@@ -122,6 +122,14 @@ function isAlreadyInFlight(message) {
   );
 }
 
+const UPLOAD_OK = new Set([
+  "",
+  "SUCCESS",
+  "SUCCEEDED",
+  "UPLOAD_SUCCESS",
+  "UPLOAD_SUCCEEDED",
+]);
+
 function uploadState(resource) {
   return resource.uploadState ?? resource.lastAsyncUploadState ?? "";
 }

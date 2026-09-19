@@ -20,6 +20,14 @@ export type WhatsNewItem = {
  */
 export const WHATS_NEW: WhatsNewItem[] = [
   {
+    id: "helper-store-check-listings-poshmark",
+    date: "2026-09-19",
+    title: "Chrome helper Store update for Check listings",
+    helper: true,
+    body:
+      "This Chrome helper update includes Check listings matching, saving a seller closet from Users, and filling Poshmark price. Chrome updates the helper from the Store.",
+  },
+  {
     id: "check-listings-title-posted",
     date: "2026-09-16",
     title: "Check listings marks matching drafts Posted",
