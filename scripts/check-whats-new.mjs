@@ -39,6 +39,7 @@ const USER_FACING_IGNORE_PREFIXES = [
   "src/app/api/cron/",
   "src/lib/supabase/keepalive.ts",
 ];
+// /api/cron/* is allowlisted in src/proxy.ts (hosted Supabase keep-alive).
 
 const { values } = parseArgs({
   options: {

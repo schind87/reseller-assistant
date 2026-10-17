@@ -41,7 +41,8 @@ export async function proxy(request: NextRequest) {
     pathname.startsWith("/api/auth/") ||
     pathname === "/api/join" ||
     pathname === "/api/extension/pair" ||
-    pathname === "/api/extension/download";
+    pathname === "/api/extension/download" ||
+    pathname.startsWith("/api/cron/");
 
   if (isPublic) {
     return NextResponse.next();

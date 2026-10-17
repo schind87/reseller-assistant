@@ -120,7 +120,7 @@ The production project `reseller-assistant` (`gcmbimhkpcilnccrkzlj`) is on the *
 Paid compute would not pause, but this repo keeps the project awake without a plan change:
 
 1. **GitHub Action** `.github/workflows/supabase-keepalive.yml` every 6 hours (and **Run workflow**) runs `npm run supabase:keepalive`.
-2. **Vercel cron** (Hobby: once per day, `14:00` UTC) `GET /api/cron/supabase-keepalive`, which PATCHes the same row through the production app.
+2. **Vercel cron** (Hobby: once per day, `14:00` UTC) `GET /api/cron/supabase-keepalive`, which PATCHes the same row through the production app. That path is public in `src/proxy.ts` (optional `CRON_SECRET`).
 
 Both paths **write** `public.project_keepalive` (id `1`) via PostgREST, then read it back. `/auth/v1/health` is not used — that can return 200 without touching Postgres.
 
