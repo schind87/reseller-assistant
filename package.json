@@ -13,7 +13,8 @@
     "chrome-store:status": "node scripts/fetch-chrome-store-status.mjs",
     "extension:store-images": "node scripts/generate-extension-icons.mjs",
     "photos:migrate-r2": "node scripts/migrate-photos-to-r2.mjs",
-    "whats-new:check": "node scripts/check-whats-new.mjs"
+    "whats-new:check": "node scripts/check-whats-new.mjs",
+    "supabase:keepalive": "node scripts/supabase-keepalive.mjs"
   },
   "dependencies": {
     "@ai-sdk/openai": "^3.0.91",

@@ -1,0 +1,53 @@
+# Pings hosted Supabase so the Free-plan project does not pause from inactivity.
+# Direct REST write when NEXT_PUBLIC_SUPABASE_ANON_KEY is set; otherwise (and
+# also, when KEEPALIVE_APP_URL is set) hits production /api/cron/supabase-keepalive.
+# Refuses localhost. Does not print keys.
+name: Supabase keep-alive
+
+on:
+  schedule:
+    - cron: "15 */6 * * *"
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/supabase-keepalive.yml"
+      - "scripts/supabase-keepalive.mjs"
+      - "src/app/api/cron/supabase-keepalive/**"
+      - "src/lib/supabase/keepalive.ts"
+      - "supabase/migrations/20261017154935_project_keepalive.sql"
+
+concurrency:
+  group: supabase-keepalive
+  cancel-in-progress: false
+
+jobs:
+  ping:
+    name: Ping hosted Supabase
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: https://gcmbimhkpcilnccrkzlj.supabase.co
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+      KEEPALIVE_APP_URL: https://reseller.mvfeed.us
+      CRON_SECRET: ${{ secrets.CRON_SECRET }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+
+      - name: Write keepalive row on hosted project
+        run: |
+          set +e
+          for i in 1 2 3 4 5 6 7 8 9 10; do
+            node scripts/supabase-keepalive.mjs
+            code=$?
+            if [ "$code" -eq 0 ]; then
+              exit 0
+            fi
+            echo "Attempt $i failed (exit $code); retrying in 20s..."
+            sleep 20
+          done
+          exit 1

@@ -111,3 +111,17 @@ Bump `extension/manifest.json` `version` before shipping helper changes, or the 
 - `npm run extension:publish` — pack, then upload/submit to the Chrome Web Store (skips upload if GitHub/CI secrets are missing; `--require` fails instead)
 - `npm run chrome-store:status` — write `src/content/chrome-store-status.json` from Chrome Web Store `fetchStatus` (skips if secrets are missing)
 - `npm run whats-new:check` — fail if this git range changed seller-facing files without updating `/whats-new`
+- `npm run supabase:keepalive` — write `project_keepalive.last_ping` on the **hosted** Supabase project (`gcmbimhkpcilnccrkzlj`). Refuses localhost. Used by GitHub Actions and as a manual check.
+
+## Hosted Supabase keep-alive
+
+The production project `reseller-assistant` (`gcmbimhkpcilnccrkzlj`) is on the **Free** plan. Free projects pause after about a week of too little database activity (that paused production on 2026-10-10; the Vercel site stayed up and OTP writes got Cloudflare 521).
+
+Paid compute would not pause, but this repo keeps the project awake without a plan change:
+
+1. **GitHub Action** `.github/workflows/supabase-keepalive.yml` every 6 hours (and **Run workflow**) runs `npm run supabase:keepalive`.
+2. **Vercel cron** (Hobby: once per day, `14:00` UTC) `GET /api/cron/supabase-keepalive`, which PATCHes the same row through the production app.
+
+Both paths **write** `public.project_keepalive` (id `1`) via PostgREST, then read it back. `/auth/v1/health` is not used — that can return 200 without touching Postgres.
+
+Set GitHub Actions secret `NEXT_PUBLIC_SUPABASE_ANON_KEY` (same publishable/anon value as Vercel) so the Action can hit `https://gcmbimhkpcilnccrkzlj.supabase.co` even if Vercel is down. If that secret is missing, the Action calls `https://reseller.mvfeed.us/api/cron/supabase-keepalive` instead. Optional `CRON_SECRET` on Vercel and GitHub, if set, must match.

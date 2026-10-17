@@ -36,6 +36,8 @@ const USER_FACING_IGNORE_PREFIXES = [
   "extension/STORE.md",
   "extension/store-assets/",
   "src/content/chrome-store-status.json",
+  "src/app/api/cron/",
+  "src/lib/supabase/keepalive.ts",
 ];
 
 const { values } = parseArgs({
